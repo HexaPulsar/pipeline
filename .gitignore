@@ -5,7 +5,11 @@ __pycache__/
 
 # C extensions
 *.so
-data_preprocessing/
+data_preprocessing/aos/
+data_preprocessing/out_directory/
+data_preprocessing/h5file/
+
+
 data_exploration/
 h5file/
 # Distribution / packaging

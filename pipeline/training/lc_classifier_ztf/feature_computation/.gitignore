@@ -1,0 +1,8 @@
+*.pkl
+*.parquet
+
+alercereaduser_v4.json
+config.py
+
+/ztf_classifier_model*
+models/

@@ -7,6 +7,7 @@ __pycache__/
 *.so
 data_preprocessing/
 data_exploration/
+h5file/
 # Distribution / packaging
 .Python
 build/
@@ -151,3 +152,21 @@ terraform.tfvars
 
 */.build_state.json
 */.deploy_state.json
+
+pipeline/mhps/mhps/mhps_wrapper.c
+pipeline/P4J/P4J/algorithms/analysis_of_variance.c
+pipeline/P4J/P4J/algorithms/analysis_of_variance.html
+pipeline/P4J/P4J/algorithms/multiharmonic_aov.c
+pipeline/P4J/P4J/algorithms/multiharmonic_aov.html
+pipeline/P4J/P4J/algorithms/mutual_information.c
+pipeline/P4J/P4J/algorithms/mutual_information.html
+pipeline/P4J/P4J/algorithms/phase_dispersion_minimization.c
+pipeline/P4J/P4J/algorithms/phase_dispersion_minimization.html
+pipeline/P4J/P4J/algorithms/string_length.c
+pipeline/P4J/P4J/algorithms/string_length.html
+pipeline/P4J/P4J/algorithms/utilities.c
+pipeline/P4J/P4J/algorithms/utilities.html
+pipeline/mhps/mhps/mhps_wrapper.c 
+pipeline/P4J/P4J/algorithms/analysis_of_variance.c
+pipeline/mhps/mhps/mhps_wrapper.c
+pipeline/P4J/P4J/algorithms/utilities.html

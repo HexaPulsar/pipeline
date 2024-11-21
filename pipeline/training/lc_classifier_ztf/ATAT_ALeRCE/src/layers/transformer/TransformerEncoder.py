@@ -14,9 +14,13 @@ class TransformerEncoder(nn.Module):
         self.feed_forward = FeedForward(**kwargs)
 
     def forward(self, x, mask, **kwargs):
-        x = self.attn_forward(**{"query": x, "key": x, "value": x, "mask": mask}) + x
-        x = self.layer_norm[0](x)
-        x = self.feed_forward(x) + x
-        x = self.layer_norm[1](x)
-
+        norm_x = self.layer_norm[0](x)
+        mha = self.attn_forward(**{"query": norm_x , 
+                                 "key": norm_x , 
+                                 "value": norm_x , 
+                                 "mask": mask}) 
+        x_ = x  + mha
+        norm_x = self.layer_norm[1](x_)       
+        x = self.feed_forward(norm_x) + x_ 
         return x
+ 

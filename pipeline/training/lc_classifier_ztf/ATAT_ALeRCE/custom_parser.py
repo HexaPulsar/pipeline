@@ -43,10 +43,12 @@ def parse_model_args(arg_dict=None):
     parser.add_argument("--cnn_kernel", type=int, default=5)
 
     # TRAINING PARAMS
-    parser.add_argument("--batch_size_general", type=int, default=256)
+    parser.add_argument("--use_sampler_general", type=int, default=1)
+    
+    parser.add_argument("--batch_size_general", type=int, default=64)
     parser.add_argument("--num_epochs_general", type=int, default=10000)
-    parser.add_argument("--patience_general", type=int, default=40)
-    parser.add_argument("--lr_general", type=float, default=1e-4)
+    parser.add_argument("--patience_general", type=int, default=30)
+    parser.add_argument("--lr_general", type=float, default=1e-5)
     parser.add_argument(
         "--use_cosine_decay_general", action="store_true", default=False
     )
@@ -95,10 +97,13 @@ def handler_parser(
     parser_dict, extra_args_general=None, extra_args_lc=None, extra_args_tab=None
 ):
 
+    #with open(
+    #    "./{}/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
+    #) as yaml_file:
     with open(
-        "./{}/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
+        "/home/mdelafuente/batch_processing/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
     ) as yaml_file:
-        dict_info = yaml.safe_load(yaml_file)
+            dict_info = yaml.safe_load(yaml_file)
 
     parser_dict.update(
         {
@@ -146,3 +151,4 @@ def handler_parser(
         output["ft"].update(extra_args_tab)
 
     return output
+

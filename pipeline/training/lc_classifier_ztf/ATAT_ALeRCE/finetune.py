@@ -11,9 +11,9 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitData import LitData
+from src.models.LitFinetune import LitFinetune
 from src.models.LitATAT import LitATAT
-from src.models.LitLC import LitLC
-from src.layers import ATAT
+#from src.layers import ATAT
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -43,24 +43,7 @@ logging.basicConfig(
 import torch
 from collections import OrderedDict
 
-
-def handler_checkpoint(path, args):
-    od_ = OrderedDict()
-    logging.info("Loading model from checkpoint ...")
-
-    checkpoint_ = torch.load(path, map_location=torch.device("cuda"))
-    for key in checkpoint_["state_dict"].keys():
-        od_[key.replace("atat.", "")] = checkpoint_["state_dict"][key]
-    logging.info("New keys formated ...")
-    model = ATAT(**args)
-    logging.info("Build ATAT  model")
-    try:
-        model.load_state_dict(od_, strict=False)
-        logging.info("All keys matched")
-    except RuntimeError as e:
-        logging.error(f"Error loading model state dict: {e}")
-
-    return model
+ 
 
 
 def get_path_results(exp_path, args):
@@ -148,7 +131,7 @@ if __name__ == "__main__":
     all_callbacks = []
     all_callbacks += [
         ModelCheckpoint(
-            monitor="mix/f1s_valid",  # "F1Score_MLPMix/val"
+            monitor="mix/f1s_valid",  # "F1Score_MLPloss/val"
             dirpath=path,
             save_top_k=1,
             mode="max",  # )]
@@ -176,15 +159,10 @@ if __name__ == "__main__":
     # load from checkpoint if there is one
 
     ############################  MODEL  ############################
-    pl_model = LitLC(**args)
-
-    if args_general["load_pretrained_model"]:
-        pl_model.atat = handler_checkpoint(
-            handler_ckpt_path(args_general["src_checkpoint"]), args=args
-        )
+    pl_model = LitFinetune(**args)
 
     if args_general["change_clf"]:
-        pl_model.atat.change_clf(args_general["num_classes"])
+        pl_model.model.change_clf(args_general["num_classes"])
 
     ############################  TRAINING  ############################
 
@@ -194,9 +172,10 @@ if __name__ == "__main__":
         val_check_interval=0.5,
         log_every_n_steps=100,
         accelerator="gpu",
+        #devices=[],
         min_epochs=1,
         max_epochs=args_general["num_epochs"],
-        gradient_clip_val=1.0 if pl_model.gradient_clip_val else 0.0,
+        #check_val_every_n_epoch=5,
         num_sanity_val_steps=0,
     )
 

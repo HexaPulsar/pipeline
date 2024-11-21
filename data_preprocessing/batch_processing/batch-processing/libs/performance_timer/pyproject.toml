@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "performance-timer"
+version = "0.1.0"
+description = "Context class to encapsulate and time code"
+authors = ["Edison Pizarro <edison.pizarro.godoy@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9 || ^3.10"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

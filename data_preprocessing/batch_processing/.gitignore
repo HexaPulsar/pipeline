@@ -1,0 +1,20 @@
+/.idea
+dist/
+dist/**/*
+checkpoint/
+checkpoint/**/*
+data/
+data/**/*
+
+__pycache__/
+__pycache__
+
+# Data directory
+data/
+data
+
+# Configuration files
+*.json
+*.python-version
+
+/.idea

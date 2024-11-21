@@ -1,0 +1,19 @@
+{
+    "UrlSourceBase": "https://ztf.uw.edu/alerts/public/",
+    "UrlSourceFilePrefix": "ztf_public_",
+    "UrlSourceFilePostfix": ".tar.gz",
+    "DataFolder": "/home/edipizarro/alerce/batch_processing/batch_processing/data",
+    "S3Bucket": "batch-processing-test-data-1",
+    "SubDataFolder": {
+        "CompressedAvros": "compressed_avros",
+        "UncompressedAvros": "uncompressed_avros",
+        "RawParquet": "raw_parquet",
+    },
+    "BatchSize": 3250,
+    "ParquetCompression": "snappy",
+    "DeleteData": "false",
+    "OverwriteData": "false",
+    "StartDate": "2023/12/01",
+    "EndDate": "2023/12/15",
+    "DateFormat": "%Y/%m/%d"
+}

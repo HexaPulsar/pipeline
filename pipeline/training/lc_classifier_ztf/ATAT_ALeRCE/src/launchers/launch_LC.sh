@@ -1,7 +1,6 @@
 #!/bin/bash
 
-cd ../
-
+cd ../../
 export CUDA_VISIBLE_DEVICES=1,2 
 
 # Define variables
@@ -20,4 +19,4 @@ for seed in {0..0}; do
     --data_root_general "$DATA_ROOT" \
     --patience_general 10 \
     --lr_general 2e-04
-done
+done 

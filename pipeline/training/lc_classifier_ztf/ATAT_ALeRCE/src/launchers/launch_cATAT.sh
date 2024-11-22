@@ -1,4 +1,5 @@
-cd ../
+
+cd ../../
 export CUDA_VISIBLE_DEVICES=1,2 
 pwd
 # Define variables

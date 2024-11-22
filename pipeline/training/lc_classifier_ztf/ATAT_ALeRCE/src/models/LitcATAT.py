@@ -12,6 +12,7 @@ import pytorch_lightning as pl
 
 from torch.optim.lr_scheduler import LambdaLR
 from src.training.schedulers import cosine_decay_ireyes
+from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR
 
 from src.layers import cATAT  
 class LitcATAT(pl.LightningModule):
@@ -19,7 +20,7 @@ class LitcATAT(pl.LightningModule):
         super().__init__()
         self.gradients_ = None   
         print(kwargs)
-        self.catat = cATAT(**kwargs)
+        self.model = cATAT(**kwargs)
         self.general_ = kwargs["general"]
         self.lightcv_ = kwargs["lc"]
         self.feature_ = kwargs["ft"]
@@ -143,34 +144,19 @@ class LitcATAT(pl.LightningModule):
     def configure_optimizers(self):
         #params = filter(lambda p: p.requires_grad, self.parameters())
 
+        self.learning_rate = self.general_['lr']
+        
+        optimizer = optim.AdamW(self.parameters(), 
+                                lr = self.learning_rate)      
+        constant = ConstantLR(optimizer,1)                                                                                           
+        scheduler = SequentialLR(
+                    optimizer,
+                    schedulers=[constant,constant],
+                    milestones=[self.warmup]
+                )
 
-        weight_decay_parameters = []
-        no_weight_decay_parameters = []
-        no_weight_decay_param_names = []  
-        for name, parameter in self.catat.named_parameters():
-            if(all(key not in name for key in ["bn", "layer_norm","batch_norm","norm", "bias", "logit_scale"]) and parameter.requires_grad):
-                weight_decay_parameters.append(parameter)
-                
-            if(any(key in name for key in ["bn","layer_norm", "batch_norm", "norm", "bias", "logit_scale"]) and parameter.requires_grad):
-                no_weight_decay_parameters.append(parameter)
-                no_weight_decay_param_names.append(name) 
-        optimizer = optim.AdamW([{"params": no_weight_decay_parameters, 
-                                        "weight_decay": 0}, 
+        return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
 
-                                        {"params": weight_decay_parameters, 
-                                        "weight_decay":0.1}], 
-                                        lr = self.general_["lr"],
-                                         )      
-        if self.use_cosine_decay:
-            scheduler = LambdaLR(
-                optimizer,
-                lambda epoch: cosine_decay_ireyes(
-                    epoch, warm_up_epochs=10, decay_steps=150, alpha=0.05
-                ),
-            )
-            return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler}}
-        else:
-            return optimizer
 
     def get_input_data(self, batch_data):
         input_dict = {}

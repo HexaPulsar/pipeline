@@ -144,44 +144,55 @@ class LitPreTrainVICREG(pl.LightningModule):
         
         batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
         aug_batch_data = {k: aug_batch_data[k].float() for k in  aug_batch_data.keys()} 
-        
+
+
         input_dict = {key: torch.cat([batch_data[key], aug_batch_data[key]], dim=0) for key in batch_data.keys()}
         x_emb = self.model(**input_dict)
-
         x_emb,aug_x_emb = torch.chunk(x_emb,2, dim = 0) 
-        
         contrastive_loss = self.loss(x_emb,aug_x_emb)    
 
         loss_dict = contrastive_loss  
-        #if self.global_step % 100 == 0:
-        #    self.logger.experiment.add_histogram('correlation/train_corr_a',loss_dict['mean_correlation_a'],self.global_step)
-        #    self.logger.experiment.add_histogram('correlation/train_corr_b',loss_dict['mean_correlation_b'],self.global_step)
-        #del loss_dict['mean_correlation_a'],loss_dict['mean_correlation_b']
-        #self.log('loss_train', loss_dict['loss'],on_step=True,on_epoch=False)
         loss_dict = {f'loss_train/{key}': value for key, value in loss_dict.items()}
         self.log_dict(loss_dict,on_epoch=False,on_step=True)
         
         return loss_dict['loss_train/loss']
- 
+    
+    def on_train_epoch_end(self):
+        # At the end of each epoch, calculate the loss without dropout
+        self.model.eval()  # Disable dropout layers
+        
+        total_loss = 0.0
+        total_samples = 0
+        dataloader = self.trainer.datamodule.train_dataloader()  # or any other DataLoader
+        
+        with torch.no_grad():  # Don't compute gradients
+            for batch in dataloader:
+                x, y = batch
+                logits = self(x)
+                loss = self.loss_fn(logits, y)
+                total_loss += loss.item() * len(y)  # accumulate loss * batch size
+                total_samples += len(y)
+        
+        avg_loss = total_loss / total_samples  # Calculate average loss over the dataset
+        self.log('train_loss_no_dropout', avg_loss, on_epoch=True, prog_bar=True)
+
+        # Switch back to training mode
+        self.model.train()
+
     def validation_step(self, batch, batch_idx):
         batch_data,aug_batch_data= batch
+
         batch_data = self.transforms_data_lc(batch_data)
         aug_batch_data = self.transforms_aug_lc(aug_batch_data) 
+
         batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
-        
         aug_batch_data = {k: aug_batch_data[k].float() for k in  aug_batch_data.keys()} 
+
         input_dict = {key: torch.cat([batch_data[key], aug_batch_data[key]], dim=0) for key in batch_data.keys()}
         x_emb = self.model(**input_dict)
-
         x_emb,aug_x_emb = torch.chunk(x_emb,2, dim = 0) 
         
-        
         loss_dict = self.loss(x_emb,aug_x_emb)  
- 
-        #self.logger.experiment.add_histogram('correlation/val_corr_a',loss_dict['mean_correlation_a'],global_step=self.global_step)
-        #self.logger.experiment.add_histogram('correlation/val_corr_b',loss_dict['mean_correlation_b'],global_step=self.global_step)
-        #del loss_dict['mean_correlation_a'],loss_dict['mean_correlation_b']  
-        #self.log('loss_validation',loss_dict['loss'],on_step=False,on_epoch=True)
         loss_dict = {f'loss_validation/{key}': value for key, value in loss_dict.items()}
 
         self.log_dict(loss_dict,on_epoch=True,on_step=False)

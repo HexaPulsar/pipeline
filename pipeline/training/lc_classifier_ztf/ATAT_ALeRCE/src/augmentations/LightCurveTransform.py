@@ -471,9 +471,6 @@ class Scale:
         return sample
 
 class RandomPointDrop:
-    def __init__(self):
-        pass
-
     def __call__(self, sample):
         x = sample['data']  # Shape: [bs, seqlen, channels]
         t = sample['time']  # Shape: [bs, seqlen, channels]
@@ -508,92 +505,3 @@ class TimeWarp:
         sample['time'] = x *factor
         return sample
     
- 
-class LowpassFilterTransform:
-    """
-    Custom transform to apply a lowpass filter to a tensor of shape [bs, seqlen, channels]
-    
-    Args:
-        cutoff_freq (float): Cutoff frequency for the lowpass filter
-        sample_rate (float): Sampling rate of the signal
-        filter_order (int, optional): Order of the Butterworth filter. Defaults to 6.
-    """
-    def __init__(self, cutoff_freq, sample_rate, filter_order=6):
-        self.cutoff_freq = cutoff_freq
-        self.sample_rate = sample_rate
-        self.filter_order = filter_order
-        
-        # Design Butterworth lowpass filter
-        self.b, self.a = signal.butter(
-            N=filter_order, 
-            Wn=cutoff_freq / (sample_rate / 2), 
-            btype='low', 
-            analog=False
-        )
-    
-    
-    def __call__(self, sample):
-
-        x = sample['data']
-        zero_mask = x!= 0
-        # Apply filter along sequence length dimension
-        filtered_data = np.zeros_like(x.cpu())
-        for b in range(x.shape[0]):  # batch dimension
-            for c in range(x.shape[2]):  # channel dimension
-                filtered_data[b, :, c] = signal.filtfilt(
-                    self.b, 
-                    self.a, 
-                    x.cpu()[b, :, c]
-                )
-        
-        sample['data'] = zero_mask *torch.from_numpy(filtered_data).float().to(device=x.device)
-        return sample
-
-
-class HighpassFilterTransform:
-    """
-    Custom transform to apply a highpass filter to a tensor of shape [bs, seqlen, channels]
-    
-    Args:
-        cutoff_freq (float): Cutoff frequency for the highpass filter
-        sample_rate (float): Sampling rate of the signal
-        filter_order (int, optional): Order of the Butterworth filter. Defaults to 6.
-    """
-    def __init__(self, cutoff_freq, sample_rate, filter_order=6):
-        self.cutoff_freq = cutoff_freq
-        self.sample_rate = sample_rate
-        self.filter_order = filter_order
-        
-        # Design Butterworth highpass filter
-        self.b, self.a = signal.butter(
-            N=filter_order, 
-            Wn=cutoff_freq / (sample_rate / 2), 
-            btype='high', 
-            analog=False
-        )
-    
-    def __call__(self, sample):
-        """
-        Apply highpass filter to input tensor
-        
-        Args:
-            x (torch.Tensor): Input tensor of shape [bs, seqlen, channels]
-        
-        Returns:
-            torch.Tensor: Filtered tensor with same shape as input
-        """
-        x = sample['data']
-        zero_mask = x !=0
-        # Apply filter along sequence length dimension
-        filtered_data = np.zeros_like(x.cpu())
-       
-        for b in range(x.shape[0]):  # batch dimension
-            for c in range(x.shape[2]):  # channel dimension
-                filtered_data[b, :, c] = signal.filtfilt(
-                    self.b, 
-                    self.a, 
-                    x.cpu()[b, :, c]
-                )
-        
-        sample['data'] =  zero_mask *torch.from_numpy(filtered_data).float().to(device=x.device)
-        return sample

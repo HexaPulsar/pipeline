@@ -4,8 +4,8 @@ import numba
 import numpy as np
 import pandas as pd
 
-from lc_classifier.features.core.base import AstroObject
-from lc_classifier.features.core.base import query_ao_table
+
+from .features.core.base import AstroObject, query_ao_table
 import matplotlib.pyplot as plt
 
 

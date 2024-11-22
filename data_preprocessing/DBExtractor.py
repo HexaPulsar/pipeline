@@ -10,21 +10,20 @@ import sqlalchemy as sa
 import requests
 import pandas as pd
 import os
-
+import sys
+from pipeline.lc_classifier.lc_classifier.features.core.base import AstroObject
+from data_preprocessing.utils import clear_export_directory
 import shutil
 from tqdm import tqdm
 
-#from pipeline.lc_classifier.lc_classifier.features.composites.core.base import AstroObject
-from lc_classifier.lc_classifier.features.core.base import AstroObject
 from pipeline.lc_classifier.lc_classifier.utils import create_astro_object 
 
 class DBExtractor():
 
-    def __init__(self) -> None:
+    def __init__(self, path_oids_to_pull:str,path_to_save_dir:str,chunk_size:int = 100) -> None:
     
-        data_folder = "/home/mdelafuente/SSL/pulled_data/"
         script_path = os.path.dirname(os.path.abspath(__file__))
-        data_folder_full_path = os.path.join(script_path, data_folder)
+        data_folder_full_path = os.path.join(script_path, path_to_save_dir)
 
         if not os.path.exists(data_folder_full_path):
             os.makedirs(data_folder_full_path)
@@ -37,36 +36,22 @@ class DBExtractor():
         )
         engine.begin()
         
-        oids = pd.read_parquet("/home/mdelafuente/SSL/2020_oids.parquet")
+        oids = pd.read_parquet(f"{path_oids_to_pull}")
         oids = oids.index.tolist()
 
         self.clear_export_directory(data_folder_full_path)
-        chunk_size = 1000  
-        #count = 0
-        for chunk in tqdm(self.chunk_list(oids, chunk_size), 
-                        desc=f'Pulling data by oid chunks',
+        for i, chunk in tqdm(enumerate(self.chunk_list(oids, chunk_size)), 
+                        desc=f'Pulling data by oid chunks of size {chunk_size}',
                         total = len(oids)//chunk_size):
 
-            self.process_chunk(chunk, data_folder_full_path, engine)
-            pass
-    
-    def clear_export_directory(self,directory):
-        """Clear the export directory after user confirmation."""
-        if os.path.exists(directory):
-            confirm = input(f"The directory '{directory}' already exists. Do you want to delete it? (y/n): ")
-            if confirm.lower() == 'y':
-                shutil.rmtree(directory)
-                print(f"Directory '{directory}' deleted.")
-                os.makedirs(directory)
-                print(f"New directory '{directory}' created.")
-            else:
-                print("Directory deletion canceled. Continuing without deletion.")
-        else:
-            os.makedirs(directory)
-            print(f"Directory '{directory}' created.")
+            # Create a subdirectory for each chunk
+            chunk_dir = os.path.join(data_folder_full_path, f"chunk_{i}")
+            os.makedirs(chunk_dir)
+
+            self.process_chunk(chunk, chunk_dir, engine)
 
 
-    def process_chunk(self,chunk, data_folder_full_path, engine):
+    def process_chunk(self,chunk, chunk_dir, engine):
         # Format oids for SQL query
         oids_chunk = [f"'{oid}'" for oid in chunk]
 
@@ -76,12 +61,7 @@ class DBExtractor():
         WHERE oid in ({','.join(oids_chunk)});
         """
         detections = pd.read_sql_query(query_detections, con=engine)
-
-        # Handle Parquet writing (check for existing file)
-        detections_path = os.path.join(data_folder_full_path, "detections.parquet")
-        if os.path.exists(detections_path):
-            existing_detections = pd.read_parquet(detections_path)
-            detections = pd.concat([existing_detections, detections], ignore_index=True)
+        detections_path = os.path.join(chunk_dir, "detections.parquet")
         detections.to_parquet(detections_path)
 
         # Query for forced photometry
@@ -90,12 +70,7 @@ class DBExtractor():
         WHERE oid in ({','.join(oids_chunk)});
         """
         forced_photometry = pd.read_sql_query(query_forced_photometry, con=engine)
-
-        # Handle Parquet writing for forced photometry
-        forced_photometry_path = os.path.join(data_folder_full_path, "forced_photometry.parquet")
-        if os.path.exists(forced_photometry_path):
-            existing_forced_photometry = pd.read_parquet(forced_photometry_path)
-            forced_photometry = pd.concat([existing_forced_photometry, forced_photometry], ignore_index=True)
+        forced_photometry_path = os.path.join(chunk_dir, "forced_photometry.parquet")
         forced_photometry.to_parquet(forced_photometry_path)
 
         # Query for xmatch
@@ -126,88 +101,14 @@ class DBExtractor():
 
         # Merge xmatch and PS1 data
         xmatch = pd.concat([wise, ps], axis=1).reset_index()
-
-        # Handle Parquet writing for xmatch
-        xmatch_path = os.path.join(data_folder_full_path, "xmatch.parquet")
-        if os.path.exists(xmatch_path):
-            existing_xmatch = pd.read_parquet(xmatch_path)
-            xmatch = pd.concat([existing_xmatch, xmatch], ignore_index=True)
+        xmatch_path = os.path.join(chunk_dir, "xmatch.parquet")
         xmatch.to_parquet(xmatch_path)
     
     def chunk_list(self,lst, chunk_size):
         """Yield successive chunks of size chunk_size from list."""
         for i in range(0, len(lst), chunk_size):
             yield lst[i:i + chunk_size]
-#----###
 
-
-
-class CreateAstroObjectPKL():
-    def __init__(self)-> None:
-        self.script_path = '/home/magdalena/Desktop/magister/SSL_DATASET/ZTF_SSL_Dataset/batch_processing/features/tests/data/'
-        detections = pd.read_parquet(os.path.join(self.script_path, "detections.parquet"))
-        forced_photometry = pd.read_parquet(
-            os.path.join(self.script_path, "forced_photometry.parquet")
-        )
-        xmatch = pd.read_parquet(os.path.join(self.script_path, "xmatch.parquet"))
-        self.dataframes_to_astro_object_pkl(detections, forced_photometry, xmatch)
-        
-
-
-    def dataframes_to_astro_object_pkl(self, detections, forced_photometry, xmatch):
-        oids = detections["oid"].unique()
-        print(f"Processing {len(oids)} unique objects")
-        
-        # Create output directory if it doesn't exist
-        output_dir = '/home/magdalena/Desktop/magister/SSL_DATASET/ZTF_SSL_Dataset/aos'
-        os.makedirs(output_dir, exist_ok=True)
-        
-        def save_single(astro_objects: AstroObject, filename: str):
-            with open(filename, "wb") as f:
-                pickle.dump(astro_objects, f)
-                
-        def process_oid(oid, detections, forced_photometry, xmatch):
-            output_path = os.path.join(output_dir, f'ao_{oid}')
-            
-            # Skip if file already exists
-            if os.path.exists(output_path):
-                return
-            
-            try:
-                xmatch_oid = xmatch[xmatch["oid"] == oid]
-            
-                assert len(xmatch_oid) == 1
-                 
-                xmatch_oid = xmatch_oid.iloc[0]
-                
-                ao = create_astro_object(
-                    data_origin="database",
-                    detections=detections[detections["oid"] == oid],
-                    forced_photometry=forced_photometry[forced_photometry["oid"] == oid],
-                    xmatch=xmatch_oid,
-                    non_detections=None,
-                )
-                save_single(ao, output_path)
-            except Exception as e:
-                print(f'skipped {oid}: assertion error no xmatch for {oid}')
-                print(e)
-                return
-        
-        # Get list of already processed oids
-        existing_files = set(f.replace('ao_', '') for f in os.listdir(output_dir) if f.startswith('ao_'))
-        
-        # Filter out already processed oids
-        remaining_oids = [oid for oid in oids if str(oid) not in existing_files]
-        print(f"Found {len(existing_files)} existing objects")
-        print(f"Remaining objects to process: {len(remaining_oids)}")
-        
-        ## Process remaining oids
-        for oid in tqdm(remaining_oids, desc="Creating astro objects", unit="object"):
-            process_oid(oid, detections, forced_photometry, xmatch)
-            
-            
-            
-         
 
 class PreprocessByPKL():
     def __init__(self)-> None:

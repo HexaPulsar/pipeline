@@ -30,6 +30,10 @@ import glob
 from sqlalchemy.exc import SQLAlchemyError  
 import time
 
+class OIDMiner:
+    def __init__():
+        pass
+
 def calculate_mjd(date_string):
     # Parse the input string
     day = int(date_string[:2])

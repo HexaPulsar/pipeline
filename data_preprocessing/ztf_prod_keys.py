@@ -98,7 +98,7 @@ ZTF_ff_columns_to_PROD = {
     "IAR_phi_r": "IAR_phi_2",
     "LinearTrend_r": "LinearTrend_2",
     "sgscore1": "sgscore1",
-    "dist_nr": "dist_nr",
+    "distpsnr1": "dist_nr",
     "ps_g-r": "ps_g_r",
     "SPM_A_g": "SPM_A_1",
     "SPM_t0_g": "SPM_t0_1",

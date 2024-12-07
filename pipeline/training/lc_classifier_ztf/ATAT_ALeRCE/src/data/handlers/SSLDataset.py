@@ -8,7 +8,7 @@ import torch
 
 from torch.utils.data import Dataset
 from joblib import load
-
+import pandas as pd
 
 class SSLDataset(Dataset):
     def __init__(
@@ -42,7 +42,7 @@ class SSLDataset(Dataset):
         # only using partition 0
         assert partition_used == 0
 
-        h5_ = h5py.File("{}/dataset.h5".format(data_root))
+        h5_ = h5py.File("{}/no_contamination.h5".format(data_root))
         print(h5_.keys())
         self.these_idx = (
             h5_.get("test")[:]
@@ -82,8 +82,8 @@ class SSLDataset(Dataset):
 
         logging.info(f"Partition : {partition_used} Set Type : {set_type}")
         if self.use_metadata:
-            metadata_feat = h5_.get("metadata_feat")[:][self.these_idx]
-            path_QT = "./{}/quantiles/metadata/fold_{}.joblib".format(
+            metadata_feat = h5_.get("md_cols")[:][self.these_idx]
+            path_QT = "{}/quantiles/metadata/md_qt-fold-{}.joblib".format(
                 data_root, partition_used
             )
             self.metadata_feat = self.get_tabular_data(
@@ -104,8 +104,7 @@ class SSLDataset(Dataset):
                         )
                     }
                 )
-        print('made it to md and feat')
-
+                
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -135,20 +134,35 @@ class SSLDataset(Dataset):
             aug_data_dict.update({
                 "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][idx].clone()
             })
+        tabular_features = []
+        #print(data_dict['metadata_feat'].shape)
+        if self.use_metadata:
+            tabular_features.append(data_dict["metadata_feat"].float() )
+            #print('post',data_dict['metadata_feat'].unsqueeze(1).shape)
 
+        if self.use_features:
+            tabular_features.append(data_dict["extracted_feat"].float())
+
+        if tabular_features:
+            data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+
+            aug_data_dict['tabular_feat'] = data_dict['tabular_feat'].clone()
         return data_dict, aug_data_dict
 
     def __len__(self):
         """length of the dataset, is necessary for consistent getitem values"""
         return len(self.data)
-
+    
     def get_tabular_data(self, tabular_data, path_QT, type_data):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")
         if self.use_QT:
             QT = load(path_QT)
-            tabular_data = QT.transform(tabular_data)
-
-        return torch.from_numpy(tabular_data)
+            df = pd.DataFrame(tabular_data.reshape(tabular_data.shape[0],tabular_data.shape[1]))
+            df = QT.transform(df.fillna(12345)) + 0.1
+            df = pd.DataFrame(df.reshape(df.shape[0],df.shape[1]) )
+            df = df.fillna(0)
+            df = df.values.reshape(df.shape[0],df.shape[1],1) 
+        return torch.from_numpy(df)
  
 
     def update_mask(self, sample: dict, timeat: int):

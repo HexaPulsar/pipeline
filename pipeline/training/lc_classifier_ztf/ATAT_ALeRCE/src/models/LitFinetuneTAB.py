@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import os
 from typing import Dict, Optional
 import torch.nn.functional as F
@@ -8,10 +9,12 @@ import torchmetrics
 
 import pytorch_lightning as pl
 from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR
-from tqdm import tqdm 
-from src.layers.cATAT import LightCurveClassifier, TabularClassifier
 
-class LitLC(pl.LightningModule):
+from src.layers.cATAT import LightCurveClassifier,TabularClassifier
+import glob
+
+
+class LitFinetuneTAB(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__()
         self.gradients_ = None
@@ -19,11 +22,9 @@ class LitLC(pl.LightningModule):
         self.general_ = kwargs["general"]
         self.lightcv_ = kwargs["lc"]
         self.feature_ = kwargs["ft"]
-        #self.model = LightCurveClassifier(**kwargs)
         self.model = TabularClassifier(**kwargs)
            
         self.warmup = 0
-
         self.use_lightcurves = self.general_["use_lightcurves"]
         self.use_lightcurves_err = self.general_["use_lightcurves_err"]
         self.use_metadata = self.general_["use_metadata"]
@@ -54,7 +55,18 @@ class LitLC(pl.LightningModule):
             1.0 if kwargs["general"]["use_gradient_clipping"] else 0
         )
 
-        
+        lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/MD/no_contamination/' #
+        print(f'loading model {lc_out_path}')
+        lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
+        checkpoint_ = torch.load(lc_out_path)
+        weights = OrderedDict()
+        for key in checkpoint_["state_dict"].keys():
+            if 'projection' in key:
+                continue
+            else:    
+                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key] 
+        self.model.TAB.load_state_dict(weights, strict=True)
+
     def gradfilter_ema(self,
         m: nn.Module,
         grads: Optional[Dict[str, torch.Tensor]] = None,
@@ -76,10 +88,9 @@ class LitLC(pl.LightningModule):
                                         grads = self.gradients_)
 
     def training_step(self, batch_data, batch_idx):
-        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
-        print(batch_data['tabular_feat'].shape)
-        
-        pred = self.model(**batch_data)
+        input_dict = self.get_input_data(batch_data)
+
+        pred = self.model(**input_dict)
         
 
         if pred is None:
@@ -95,7 +106,7 @@ class LitLC(pl.LightningModule):
         loss = 0
 
         loss_dic = {}
-        for y, y_type in zip([pred], ["lc"]):
+        for y, y_type in zip([pred], ["tab"]):
             if y is not None:
                 partial_loss = F.cross_entropy(y, y_true)
                 loss += partial_loss
@@ -111,11 +122,11 @@ class LitLC(pl.LightningModule):
         self.log(f"loss_train/total", loss)
 
         return loss
-     
-    def validation_step(self, batch_data, batch_idx):
-        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
 
-        pred = self.model(**batch_data)
+    def validation_step(self, batch_data, batch_idx):
+        input_dict = self.get_input_data(batch_data)
+
+        pred = self.model(**input_dict)
         
 
         if pred is None:
@@ -130,7 +141,7 @@ class LitLC(pl.LightningModule):
 
         loss = 0
         loss_dic = {}
-        for y, y_type in zip([pred], ["lc"]):
+        for y, y_type in zip([pred], ["tab"]):
             if y is not None:
                 partial_loss = F.cross_entropy(y, y_true)
                 loss += partial_loss

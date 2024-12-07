@@ -27,9 +27,9 @@ class CreateAstroObjectPKL():
         os.makedirs(output_dir, exist_ok=True)
         
         # Process chunks in parallel
-        Parallel(n_jobs=n_jobs, verbose=10)(
+        Parallel(n_jobs=n_jobs)(
             delayed(self.process_single_chunk)(chunk_dir, chunks_dir, output_dir)
-            for chunk_dir in chunk_dirs
+            for chunk_dir in tqdm(chunk_dirs, desc = 'Creating AstroObjects', total = len(chunk_dirs),unit='chunks')
         )
     
     def process_single_chunk(self,chunk_dir, chunks_dir, output_dir):
@@ -64,7 +64,7 @@ class CreateAstroObjectPKL():
         @staticmethod
         def save_single(astro_objects: AstroObject, filename: str):
             with open(filename, "wb") as f:
-                pickle.dump(astro_objects, f)
+                pickle.dump(astro_objects, f,protocol=pickle.HIGHEST_PROTOCOL)
         @staticmethod
         def process_oid(oid, detections, forced_photometry, xmatch):
             output_path = os.path.join(output_dir, f'ao_{oid}')
@@ -87,11 +87,11 @@ class CreateAstroObjectPKL():
                 )
                 save_single(ao, output_path)
             except Exception as e:
-                print(f'Skipped {oid}: assertion error no xmatch for {oid}')
-                print(e)
+                #print(f'Skipped {oid}: assertion error no xmatch for {oid}')
+                
                 return
 
         # Process remaining oids
-        for oid in tqdm(oids, desc="Creating astro objects", unit="object"):
+        for oid in oids:
             process_oid(oid, detections, forced_photometry, xmatch)
          

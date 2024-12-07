@@ -1,40 +1,61 @@
+import glob
+from collections import OrderedDict
 from copy import deepcopy
 import os 
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 import torch
-import torchmetrics
-from collections import OrderedDict
 from typing import Dict, Optional, Literal
 
 import pytorch_lightning as pl
-
-from torch.optim.lr_scheduler import LambdaLR
-from src.training.schedulers import cosine_decay_ireyes
 from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR
+from src.losses.CYCLIP import CyCLIP
+from src.layers.cATAT import cATAT
+from torchvision.transforms import Compose, RandomApply
+from src.augmentations import TabularTransformations as TAB
 
-from src.layers import cATAT  
+from src.augmentations import LightCurveTransform as LC
+
+
+
 class LitcATAT(pl.LightningModule):
-    def __init__(self, **kwargs):
+    def __init__(self, lc_ckpt,ft_ckpt,**kwargs):
         super().__init__()
         self.gradients_ = None   
-        print(kwargs)
         self.model = cATAT(**kwargs)
         self.general_ = kwargs["general"]
         self.lightcv_ = kwargs["lc"]
         self.feature_ = kwargs["ft"]
 
-        self.cyclip_dict = {'inmodal':True,
-                              'cylambda1':0.25,
-                              'cylambda2':0.25,}    # TODO: make into arguments    
-        self.loss = CyCLIP(criterion='',**self.cyclip_dict)
+        
+        self.loss = CyCLIP(
+            config_dict= {'cross_modal':True,
+               'in_modal':True,
+               'cylambda_1': 0.25,
+               'cylambda_2':0.25},
+            config_logger = {
+                 
+                'cross_contrastive_lc':False,
+                'cross_contrastive_ft':False,
+                "cross_contrastive_loss":  False,
+                "cross_cyclic_loss_l2": True,
+                
+                'inmodal_contrastive_lc':False,
+                'inmodal_contrastive_ft':False,
+                "inmodal_contrastive_loss":  False,
+                "inmodal_cyclic_loss_l1": True,
+
+                "total_cyclic_loss": False,  
+                "total_contrastive_loss": False,
+                "total_loss": True,
+                })
 
         self.use_lightcurves = self.general_["use_lightcurves"]
         self.use_lightcurves_err = self.general_["use_lightcurves_err"]
         self.use_metadata = self.general_["use_metadata"]
         self.use_features = self.general_["use_features"]
- 
+        self.warmup = 0
 
         self.use_cosine_decay = kwargs["general"]["use_cosine_decay"]
         self.gradient_clip_val = (
@@ -43,6 +64,38 @@ class LitcATAT(pl.LightningModule):
             
         # TODO: correct transformation pipeline and augs
          
+        self.transforms = Compose([RandomApply([TAB.GaussianNoise()],p = 0.5),
+                                    RandomApply([TAB.GaussianNoise()],p = 0.5),
+                                    LC.OnlyMaskPadding(),
+                                    RandomApply([LC.Scale(0.5,1.5),],p =0.5),
+                                    RandomApply([LC.GaussianNoise(),],p =0.5),
+                                    RandomApply([LC.TimeWarp(0.9,1.2),],p =0.5),
+                                    RandomApply([LC.SequenceShift((-5,0)),],p =0.5),
+                                    ])
+
+############LC LOAD CKPT##
+        lc_out_path = glob.glob(lc_ckpt+ "*.ckpt")[0]
+        checkpoint_ = torch.load(lc_out_path)
+        weights = OrderedDict()
+        for key in checkpoint_["state_dict"].keys():
+            if 'projection' in key:
+                continue
+            else:    
+                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key] 
+        self.model.LC.load_state_dict(weights, strict=True)
+
+
+############FT LOAD CKPT##
+        ft_out_path = glob.glob(ft_ckpt+ "*.ckpt")[0]
+        checkpoint_ = torch.load(ft_out_path)
+        weights = OrderedDict()
+        for key in checkpoint_["state_dict"].keys():
+            if 'projection' in key:
+                continue
+            else:    
+                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key] 
+        self.model.TAB.load_state_dict(weights, strict=True)
+
     def gradfilter_ema(self,
         m: nn.Module,
         grads: Optional[Dict[str, torch.Tensor]] = None,
@@ -58,86 +111,66 @@ class LitcATAT(pl.LightningModule):
                 p.grad.data = p.grad.data + grads[n] * lamb
 
         return grads
+    
     def on_after_backward(self) -> None:
-        self.gradients = self.gradfilter_ema(m=self.atat,
+        self.gradients = self.gradfilter_ema(m=self.model,
                                         grads = self.gradients_)
     
     def get_gradients(self):
         grads = []
-        for param in self.catat.parameters():
+        for param in self.model.parameters():
             if param.grad is not None:
                 grads.append(param.grad.view(-1))
         grads = torch.cat(grads)
         return grads
     
-    def align_loss(self,x, y, alpha=2):
-        return (x - y).norm(p=2, dim=1).pow(alpha).mean()
-
-    def uniform_loss(self,x, t=2):
-        return torch.pdist(x, p=2).pow(2).mul(-t).exp().mean().log()
-    
-    
     def training_step(self, batch_data, batch_idx):
-        input_dict = self.get_input_data(batch_data)
-         
-        if self.cyclip_dict['inmodal']:
-           # print('entered inmodal')
-
-            aug_input_dict = deepcopy(input_dict) 
-            input_dict = {key: torch.cat([input_dict[key], aug_input_dict[key]], dim=0) for key in input_dict}
-
-        x_emb,f_emb = self.catat(**input_dict)
-        #print(x_emb.shape)
-        cyclip_dict = self.loss(x_emb,f_emb,self.catat)
-        loss = cyclip_dict['loss']
+        batch_data,aug_batch_data = batch_data
+        aug_batch_data = self.transforms(aug_batch_data) 
         
-         
-        self.catat.logit_scale.data = torch.clamp(self.catat.logit_scale.data,0,4.605) 
-         
+        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
+        aug_batch_data = {k: aug_batch_data[k].float() for k in  aug_batch_data.keys()} 
+        input_dict = {key: torch.cat([batch_data[key], aug_batch_data[key]], dim=0) for key in batch_data.keys()}
+        #print(input_dict.keys())
+        x_emb,f_emb = self.model(**input_dict)
+
+        cyclip_dict = self.loss(x_emb,f_emb,self.model)
+        loss = cyclip_dict['total_loss']
+        self.model.logit_scale.data = torch.clamp(self.model.logit_scale.data,0,4.605) 
         
 
         # Create the cyclip_dict as before
-        cyclip_dict = {f'pretrain/loss_train/{key}': value for key, value in cyclip_dict.items()}
-        cyclip_dict.update({"pretrain/other/temp_value": self.catat.logit_scale.item()})
-        cyclip_dict.update({"pretrain/other/alignment": self.align_loss(x_emb, f_emb)})
-
+        cyclip_dict = {f'alignment/loss_train/{key}': value for key, value in cyclip_dict.items()}
+        cyclip_dict.update({"alignment/temp_value": self.model.logit_scale.item()})
+       
         # Log all metrics in cyclip_dict
         self.log_dict(cyclip_dict, on_step=True, on_epoch=True)
  
-        self.log('loss_train_epoch', cyclip_dict['pretrain/loss_train/loss'], 
-                    on_step=False, on_epoch=True)
-
-        
-
         return loss
 
     def validation_step(self, batch_data, batch_idx):
-        input_dict = self.get_input_data(batch_data)
- 
+        batch_data,aug_batch_data = batch_data
+        aug_batch_data = self.transforms(aug_batch_data) 
+        
+        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
+        aug_batch_data = {k: aug_batch_data[k].float() for k in  aug_batch_data.keys()} 
+        input_dict = {key: torch.cat([batch_data[key], aug_batch_data[key]], dim=0) for key in batch_data.keys()}
 
-        if self.cyclip_dict['inmodal']:
-            aug_input_dict = deepcopy(input_dict) 
+        x_emb,f_emb = self.model(**input_dict)
 
-            input_dict = {key: torch.cat([input_dict[key], aug_input_dict[key]], dim=0) for key in input_dict}
+        cyclip_dict = self.loss(x_emb,f_emb,self.model)
+        loss = cyclip_dict['total_loss']
+        self.model.logit_scale.data = torch.clamp(self.model.logit_scale.data,0,4.605) 
+        
 
-        x_emb,f_emb = self.catat(**input_dict)
-
-        cyclip_dict = self.loss(x_emb,f_emb,self.catat)
-        loss = cyclip_dict['loss']
-
-        self.catat.logit_scale.data = torch.clamp(self.catat.logit_scale.data,0,4.605) 
-        cyclip_dict = {f'pretrain/loss_validation/{key}': value for key, value in cyclip_dict.items()}
+        # Create the cyclip_dict as before
+        cyclip_dict = {f'alignment/loss_validation/{key}': value for key, value in cyclip_dict.items()}
 
         # Log all metrics in cyclip_dict
         self.log_dict(cyclip_dict, on_step=False, on_epoch=True)
-
-        # Optionally, log the main validation loss separately if you want it in the progress bar
-        if 'pretrain/loss_validation/loss' in cyclip_dict:
-            self.log('val_loss', cyclip_dict['pretrain/loss_validation/loss'], 
-                    on_step=False, on_epoch=True, prog_bar=True)
-            
+ 
         return loss
-
+    
     def test_step(self, batch_data, batch_idx):
         pass
 

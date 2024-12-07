@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../SSL"
+		},
+		{
+			"path": "../../forced_photometry_oids"
+		}
+	],
+	"settings": {}
+}

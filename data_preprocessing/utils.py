@@ -1,7 +1,7 @@
 import os
 import shutil
 
-def clear_export_directory(self,directory):
+def clear_export_directory(directory):
     """Clear the export directory after user confirmation."""
     if os.path.exists(directory):
         confirm = input(f"The directory '{directory}' already exists. Do you want to delete it? (y/n): ")

@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWar
 from tqdm import tqdm 
 from src.layers.cATAT import LightCurveClassifier, TabularClassifier
 
-class LitLC(pl.LightningModule):
+class LitTAB(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__()
         self.gradients_ = None
@@ -76,10 +76,9 @@ class LitLC(pl.LightningModule):
                                         grads = self.gradients_)
 
     def training_step(self, batch_data, batch_idx):
-        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
-        print(batch_data['tabular_feat'].shape)
+        input_dict = self.get_input_data(batch_data)
         
-        pred = self.model(**batch_data)
+        pred = self.model(**input_dict)
         
 
         if pred is None:
@@ -113,9 +112,10 @@ class LitLC(pl.LightningModule):
         return loss
      
     def validation_step(self, batch_data, batch_idx):
-        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
+        input_dict = self.get_input_data(batch_data)
 
-        pred = self.model(**batch_data)
+
+        pred = self.model(**input_dict)
         
 
         if pred is None:

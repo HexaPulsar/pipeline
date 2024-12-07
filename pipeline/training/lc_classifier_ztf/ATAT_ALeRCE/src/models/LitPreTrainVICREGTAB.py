@@ -4,7 +4,8 @@ import logging
 import os
 import random
 import numpy as np
-from src.augmentations import LightCurveTransform as LC
+from src.augmentations import TabularTransformations as TAB
+
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
@@ -62,7 +63,7 @@ def save_transforms_to_file(transform_dict, filepath: str) -> None:
             f.write("\n")
 
 
-class LitPreTrainVICREGLC(pl.LightningModule):
+class LitPreTrainVICREGTAB(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__() 
         
@@ -74,30 +75,21 @@ class LitPreTrainVICREGLC(pl.LightningModule):
 
         self.loss = VICReg()  
         self.kwargs = kwargs
-        self.model = SingleBranch(type = 'lc',**self.lightcv_) 
+        self.model = SingleBranch(type = 'tab',**self.feature_) 
  
         self.warmup = 0
- 
-        self.transforms_aug_lc = Compose([   LC.OnlyMaskPadding(),
-                                            RandomApply([LC.Scale(0.5,3),],p =0.5),
-                                            RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            RandomApply([LC.TimeWarp(0.9,1.2),],p =0.5),
-                                            RandomApply([LC.SequenceShift((-5,0)),],p =0.5), 
-                                            #RandomApply([LC.InverseCurve(),],p =0.5), 
-                                            #RandomApply([LC.FlipLC(),],p =0.5), 
+        
+        self.transforms_aug_tab = Compose([
+            RandomApply([TAB.GaussianNoise()],p = 0.5),
+            RandomApply([TAB.GaussianNoise()],p = 0.5)
                                             ])
-        self.transforms_data_lc = Compose([LC.OnlyMaskPadding(),
-                                            RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            RandomApply([LC.Scale(0.1,1.5),],p =0.5),
-                                            RandomApply([LC.TimeWarp(0.5,3),],p =0.5), 
-                                            RandomApply([LC.SequenceShift((-15,0)),],p =0.5),
-                                            RandomApply([LC.GaussianNoise(),],p =0.5),
+        self.transforms_data_tab =  Compose([
+            RandomApply([TAB.GaussianNoise()],p = 0.5),
+            RandomApply([TAB.GaussianNoise()],p = 0.5)
                                             ])
-
-
         transform_sets = {
-            '1': self.transforms_data_lc,
-            '2': self.transforms_aug_lc
+            '1': self.transforms_data_tab,
+            '2': self.transforms_aug_tab
         }
 
         # Save both transform sets to file
@@ -135,14 +127,15 @@ class LitPreTrainVICREGLC(pl.LightningModule):
         #print(f"Model device: {self.device}") 
         batch_data,aug_batch_data= batch
         #print(batch_data['data'].shape)
-        batch_data = self.transforms_data_lc(batch_data)
-        aug_batch_data = self.transforms_aug_lc(aug_batch_data) 
+        batch_data = self.transforms_data_tab(batch_data)
+        aug_batch_data = self.transforms_aug_tab(aug_batch_data) 
         
         batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
         aug_batch_data = {k: aug_batch_data[k].float() for k in  aug_batch_data.keys()} 
 
 
         input_dict = {key: torch.cat([batch_data[key], aug_batch_data[key]], dim=0) for key in batch_data.keys()}
+        
         x_emb = self.model(**input_dict)
         x_emb,aug_x_emb = torch.chunk(x_emb,2, dim = 0) 
         contrastive_loss = self.loss(x_emb,aug_x_emb)    
@@ -156,8 +149,8 @@ class LitPreTrainVICREGLC(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         batch_data,aug_batch_data= batch
 
-        batch_data = self.transforms_data_lc(batch_data)
-        aug_batch_data = self.transforms_aug_lc(aug_batch_data) 
+        batch_data = self.transforms_data_tab(batch_data)
+        aug_batch_data = self.transforms_aug_tab(aug_batch_data) 
 
         batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
         aug_batch_data = {k: aug_batch_data[k].float() for k in  aug_batch_data.keys()} 

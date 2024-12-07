@@ -6,8 +6,8 @@ export CUDA_VISIBLE_DEVICES=1,2
 # Define variables
 
 for seed in {0..0}; do
-  EXPERIMENT_TYPE="lc_mta"
-  EXPERIMENT_NAME=test_${seed}
+  EXPERIMENT_TYPE="md"
+  EXPERIMENT_NAME=debugmd_${seed}
   DATASET_NAME="ztf_ff"
   DATA_ROOT="data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12"
 

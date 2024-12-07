@@ -1,5 +1,6 @@
+from pipeline.lc_classifier.lc_classifier.utils import is_sorted
 from ..core.base import FeatureExtractor, AstroObject
-from lc_classifier.utils import is_sorted
+
 import numpy as np
 import pandas as pd
 import logging

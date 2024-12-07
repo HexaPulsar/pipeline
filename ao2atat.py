@@ -7,9 +7,9 @@ import pickle
 import glob
 import numpy as np
 import yaml
-from typing import Dict, List
-from pipeline.lc_classifier.lc_classifier.features.composites.core.base import AstroObject
+from typing import Dict, List 
 from pipeline.lc_classifier.lc_classifier.features.composites.ztf import ZTFFeatureExtractor
+from pipeline.lc_classifier.lc_classifier.features.core.base import AstroObject
 from pipeline.lc_classifier.lc_classifier.features.preprocess.ztf import (
     ZTFLightcurvePreprocessor,
     ShortenPreprocessor,
@@ -21,7 +21,8 @@ from scipy.optimize import OptimizeWarning
 from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.data.src.processing import normalizing_time
 print('SUPRESSING WARNINGS') 
 
-from ztf_prod_keys import ZTF_ff_columns_to_PROD
+from data_preprocessing.ztf_prod_keys import ZTF_ff_columns_to_PROD
+
 
 class AO2ATAT():
     def __init__(self, output_dir: str, config_dict: dict):
@@ -154,11 +155,12 @@ def chunk_list(lst, chunk_size):
 
 ### RUNTIME
 from data_preprocessing.utils import clear_export_directory
-with open("/home/mdelafuente/batch_processing/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dict_info.yaml", 'r') as stream:
+with open("/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dict_info.yaml", 'r') as stream:
     config = yaml.safe_load(stream)
-aos_paths = glob.glob('/home/mdelafuente/SSL/ao_2020/*')  # [3:]
+aos_paths = glob.glob('/home/mdelafuente/SSL/aos/*/*',recursive=True)  # [3:]
+print(len(aos_paths))
 out_directory = '/home/mdelafuente/SSL/out_directory/'
-n_jobs = 8
+n_jobs = 10
 
 # Pre-instantiate a pipe for each process
 pipes = [AO2ATAT(out_directory, config) for _ in range(n_jobs)]

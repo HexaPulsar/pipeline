@@ -1,0 +1,57 @@
+experiment:
+  experiment_type_general: "lc"
+  experiment_name_general: "lc_tm"
+  name_dataset_general: "ztf"
+  data_root_general: "data/final/ZTF_ff/LC_MD_FEAT_v2"
+
+lightcurves:
+  use_lightcurves_general: false
+  use_lightcurves_err_general: false
+  input_size: 1
+  embedding_size: 192
+  embedding_size_sub: 384
+  num_heads: 4
+  num_encoders: 3
+  Tmax: 1500.0
+  num_harmonics: 64
+  pe_type: "tm"
+
+metadata_and_features:
+  use_metadata_general: false
+  use_features_general: false
+  embedding_size_tab: 128
+  embedding_size_tab_sub: 256
+  num_heads_tab: 4
+  num_encoders_tab: 3
+
+cnn_params:
+  encoder_type: "Linear"
+  encoder_type_tab: "Linear"
+  max_pool_kernel: 5
+  cnn_kernel: 5
+
+training_params:
+  use_sampler_general: 1
+  batch_size_general: 64
+  num_epochs_general: 10000
+  patience_general: 30
+  lr_general: 1e-5
+  use_cosine_decay_general: false
+  use_gradient_clipping_general: false
+
+augmentation:
+  use_mask_detection_general: false
+  use_time_nondetection_general: false
+  force_online_opt_general: false
+  online_opt_tt_general: false
+
+ablation:
+  use_QT_general: false
+
+load_model:
+  load_pretrained_model_general: false
+  src_checkpoint_general: "."
+
+dataset:
+  use_augmented_dataset_general: false
+  change_clf_general: false

@@ -55,7 +55,7 @@ class LitFinetune(pl.LightningModule):
             1.0 if kwargs["general"]["use_gradient_clipping"] else 0
         )
 
-        lc_out_path = f'/home/mdelafuente/batch_processing/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/gaussian-scale/' #
+        lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/no_contamination/' #
         print(f'loading model {lc_out_path}')
         lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
         checkpoint_ = torch.load(lc_out_path)

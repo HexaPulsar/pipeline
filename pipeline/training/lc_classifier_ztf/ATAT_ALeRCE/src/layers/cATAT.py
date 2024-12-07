@@ -11,11 +11,10 @@ from .classifiers import TokenClassifier, MixedClassifier
 from .tokenEmbeddings import Token 
 
 class AlignProjector(nn.Module):
-    def __init__(self,input_size,output_size, loss_type = 'CyCLIP',**kwargs):
+    def __init__(self,input_size,output_size,**kwargs):
         super(AlignProjector,self).__init__()
         self.kwargs  = kwargs
         self.projection = nn.Sequential(nn.Linear(input_size,output_size,bias=False))
-             
              
     def forward(self,embedding):
         embedding =   embedding / embedding.norm(dim=1, keepdim=True)
@@ -33,7 +32,6 @@ class Projector(nn.Module):
                                 nn.GELU(),
                                 nn.Linear(hidden_size,output_size,bias = False),
                                 )
-            
     def forward(self,embedding):
         if self.l2norm:
             embedding =   embedding / embedding.norm(dim=1, keepdim=True)
@@ -42,8 +40,6 @@ class Projector(nn.Module):
         else:
             embedding = self.projection(embedding)
         return embedding
-
-
 
 class LightCurveTransformer(nn.Module):
     def __init__(self, **kwargs):
@@ -62,7 +58,6 @@ class LightCurveTransformer(nn.Module):
         return x_mod, m_mod, t_mod
 
     def forward(self, data, time, mask, **kwargs):
-
         x_mod, m_mod, _ = self.embedding_light_curve(**{"x": data, "t": time, "mask": mask})
         x_emb = self.transformer_lc(**{"x": x_mod, "mask": m_mod}) # m_mod.squeeze(-1)
         x_emb =x_emb[:,0,:]  
@@ -74,23 +69,18 @@ class TabularTransformer(nn.Module):
         super(TabularTransformer, self).__init__()
         self.embedding_ft =   Embedding(**kwargs) #nn.Linear(kwargs['TAB_ARGS']['length_size'],kwargs['TAB_ARGS']['embedding_size']) #
         self.transformer_ft = Transformer(**kwargs) #TabTransformer() #
- 
         self.token_ft = Token(**kwargs) 
         
-
     def embedding_feats(self, f):
         batch_size = f.shape[0] 
         f_mod = self.embedding_ft(**{"f": f}) 
         f_mod = torch.cat([self.token_ft(batch_size), f_mod], axis=1) 
-        
         return f_mod 
     
-    def forward(self,f, **kwargs): 
-        f_mod = self.embedding_feats(**{"f": f})
+    def forward(self,tabular_feat, **kwargs): 
+        f_mod = self.embedding_feats(**{"f": tabular_feat})
         f_emb = self.transformer_ft(**{"x": f_mod, 'mask':None}) 
-        f_emb = f_emb / f_emb.norm(dim=1, keepdim=True)
         f_emb = f_emb[:,0,:]  
-
         return f_emb
 
 class LightCurveClassifier(nn.Module):
@@ -99,13 +89,14 @@ class LightCurveClassifier(nn.Module):
         self.LC = LightCurveTransformer(**kwargs['lc'])
         self.classifier_lc = MixedClassifier(input_dim=kwargs['lc']['embedding_size'],
                                              num_classes=kwargs['general']['num_classes'],
-                                             )   
+                                             )  
+        self.init_model()
         
     def init_model(self):
             for p in self.classifier_lc.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_normal_(p)
-            for p in self.LC.parameteself.init_model():
+            for p in self.LC.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_normal_(p)
                      
@@ -117,15 +108,23 @@ class LightCurveClassifier(nn.Module):
 class TabularClassifier(nn.Module):
     def __init__(self, **kwargs):
         super(TabularClassifier, self).__init__()
-        self.TAB = TabularTransformer(**kwargs)
-        self.classifier_tab = MixedClassifier(128,**kwargs)   
-
-    def forward(self, data,  time, mask=None, **kwargs):
-        tab_emb = self.TAB(data,time,mask)
+        self.TAB = TabularTransformer(**kwargs['ft'])
+        self.classifier_tab = MixedClassifier(input_dim=kwargs['ft']['embedding_size'],
+                                             num_classes=kwargs['general']['num_classes'],
+                                             )  
+        self.init_model()
+    def init_model(self):
+                for p in self.classifier_tab.parameters():
+                    if p.dim() > 1:
+                        nn.init.xavier_normal_(p)
+                for p in self.TAB.parameters():
+                    if p.dim() > 1:
+                        nn.init.xavier_normal_(p)
+    def forward(self, tabular_feat, **kwargs):
+        tab_emb = self.TAB(tabular_feat)
         class_emb = self.classifier_tab(tab_emb)
         return class_emb
     
-
 
 class SingleBranch(nn.Module):
     def __init__(self,type:str, **kwargs):
@@ -144,8 +143,8 @@ class SingleBranch(nn.Module):
                 self.transformer = TabularTransformer(**kwargs) 
                 if not self.finetune:
                     self.project = Projector(128,
-                                             512,
-                                             128,
+                                             48,
+                                             48,
                                              l2norm = False) 
             self.init_model()   
             
@@ -159,10 +158,8 @@ class SingleBranch(nn.Module):
                 #nn.init.normal_(p, 0, 0.02)
                 nn.init.xavier_normal_(p)
 
-
     def forward(self,**kwargs):
-        emb = self.transformer(**kwargs)
-        #emb = emb.view(emb.size(0), -1)
+        emb = self.transformer(**kwargs) 
         emb = self.project(emb)
         return emb
     
@@ -187,19 +184,27 @@ class cATAT(nn.Module):
         
         # pretraining parameters
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1/0.07)) # np.log(kwargs['CYCLIP']['initial_temperature'])
-        self.project_lc = Projector(self.lightcv_['embedding_size'],128) #TODO: add tu custom_parser arguments
-        self.project_ft = Projector(self.feature_['embedding_size'],128)
- 
+        self.project_lc = AlignProjector(self.lightcv_['embedding_size'],128) #TODO: add tu custom_parser arguments
+        self.project_ft = AlignProjector(self.feature_['embedding_size'],128)
 
         self.init_model()
         
-    def init_model(self): #TODO corregir init por partes para tmfs y projectors
-        for p in self.parameters():
+    def init_model(self):
+        for p in self.LC.parameters():
             if p.dim() > 1:
-                nn.init.normal_(p, 0, 0.02)
-                #nn.init.xavier_normal_(p)
-
-
+                #nn.init.normal_(p, 0, 0.02)
+                nn.init.xavier_normal_(p)
+        for p in self.TAB.parameters():
+            if p.dim() > 1:
+                #nn.init.normal_(p, 0, 0.02)
+                nn.init.xavier_normal_(p)
+        for p in self.project_ft.parameters():
+            if p.dim() > 1:
+                #nn.init.normal_(p, 0, 0.02)
+                nn.init.xavier_normal_(p)
+        for p in self.project_lc.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_normal_(p)
 
     def forward(
         self,
@@ -211,17 +216,16 @@ class cATAT(nn.Module):
         **kwargs
     ):
          
-
         if self.general_["use_lightcurves"]:
             if self.general_["use_lightcurves_err"]:
                 data = torch.stack((data, data_err), dim=data.dim() - 1)
  
-            x_emb = self.LC(**{"x": data, "t": time, "mask": mask})
+            x_emb = self.LC(**{"data": data, "time": time, "mask": mask})
            
 
         if self.general_["use_metadata"] or self.general_["use_features"]:
             
-            f_emb = self.TAB(**{"f": tabular_feat})
+            f_emb = self.TAB(**{"tabular_feat": tabular_feat})
               
         x_emb = self.project_lc(x_emb)
         f_emb = self.project_ft(f_emb)

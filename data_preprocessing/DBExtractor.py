@@ -109,7 +109,7 @@ class DBExtractor():
         for i in range(0, len(lst), chunk_size):
             yield lst[i:i + chunk_size]
 
-
+    
 class PreprocessByPKL():
     def __init__(self)-> None:
         from pipeline.lc_classifier.lc_classifier.features.composites.ztf import ZTFFeatureExtractor  

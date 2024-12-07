@@ -140,7 +140,20 @@ class ATATDataset(Dataset):
                 data_dict = self.sc_augmenation(data_dict, idx)
             if self.online_opt_tt:
                 data_dict = self.three_time_mask(data_dict, idx)
+        #'''
+        tabular_features = []
+        #print(data_dict['metadata_feat'].shape)
+        if self.use_metadata:
+            tabular_features.append(data_dict["metadata_feat"].float().unsqueeze(1))
+            #print('post',data_dict['metadata_feat'].unsqueeze(1).shape)
 
+        if self.use_features:
+            tabular_features.append(data_dict["extracted_feat"].float().unsqueeze(1))
+
+        if tabular_features:
+            data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+        #print(data_dict['tabular_feat'].shape)    
+        #'''
         return data_dict
 
     def __len__(self):

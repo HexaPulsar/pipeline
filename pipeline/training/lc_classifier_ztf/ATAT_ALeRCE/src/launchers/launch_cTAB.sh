@@ -3,14 +3,14 @@ cd ../../
 export CUDA_VISIBLE_DEVICES=1,2 
 pwd
 # Define variables
-EXPERIMENT_TYPE="lc"
-EXPERIMENT_NAME="gaussian-scale"
+EXPERIMENT_TYPE="md"
+EXPERIMENT_NAME="no_contamination"
 DATASET_NAME="ztf_ff"
 
-DATA_ROOT="/home/mdelafuente/batch_processing/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file"
+DATA_ROOT="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/"
  
 # Run the Python script with variables
-python SSL_training.py \
+python SSL_training_tab.py \
   --experiment_type_general "$EXPERIMENT_TYPE" \
   --experiment_name_general "$EXPERIMENT_NAME" \
   --name_dataset_general "$DATASET_NAME" \

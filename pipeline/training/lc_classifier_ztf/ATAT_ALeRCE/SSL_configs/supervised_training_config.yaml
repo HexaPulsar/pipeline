@@ -1,0 +1,36 @@
+
+GENERAL:
+  experiment_type: lc
+  experiment_name: lc_tm
+  name_dataset: ztf
+  
+  use_lightcurves: false
+  use_lightcurves_err: false
+  use_metadata: false
+  use_features: false
+  data_root: data/final/ZTF_ff/LC_MD_FEAT_v2
+
+
+TRAINING:
+  use_sampler: True
+  batch_size: 64
+  num_epochs: 10000
+  patience: 30
+  lr: 0.00001
+  use_cosine_decay: false
+  use_gradient_clipping: false
+  use_mask_detection: false
+  use_time_nondetection: false
+
+AUGMENTATIONS:
+    force_online_opt: false
+    online_opt_tt: false
+
+ABLATION:
+  use_QT: false
+
+LOAD_CHECKPOINT:
+  load_pretrained_model: false
+  src_checkpoint: "."
+  use_augmented_dataset: false
+  change_clf: false

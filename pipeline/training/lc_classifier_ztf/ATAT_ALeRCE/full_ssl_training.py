@@ -4,18 +4,17 @@ import colorlog
 import pickle
 import yaml
 import glob
-import os
-
+import os 
 warnings.filterwarnings("ignore")
 
 from custom_parser import parse_model_args, handler_parser
 
-from src.data.modules.LitData import LitData
-from src.models.LitATAT import LitATAT
-from src.models.LitLC import LitLC
-from src.models.LitTAB import LitTAB
+from src.data.modules.LitPretrain import LitPretrain
+from src.models.LitPreTrainVICREGLC import LitPreTrainVICREGLC
+from src.models.LitPreTrainVICREGTAB import LitPreTrainVICREGTAB
+from src.models.LitcATAT import LitcATAT
 
-from src.layers import ATAT
+from src.layers import cATAT
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -42,27 +41,6 @@ logging.basicConfig(
     handlers=[logging.FileHandler(LOG_FILENAME, encoding="utf-8"), handler,],
 )
 
-import torch
-from collections import OrderedDict
-
-
-def handler_checkpoint(path, args):
-    od_ = OrderedDict()
-    logging.info("Loading model from checkpoint ...")
-
-    checkpoint_ = torch.load(path, map_location=torch.device("cuda"))
-    for key in checkpoint_["state_dict"].keys():
-        od_[key.replace("atat.", "")] = checkpoint_["state_dict"][key]
-    logging.info("New keys formated ...")
-    model = ATAT(**args)
-    logging.info("Build ATAT  model")
-    try:
-        model.load_state_dict(od_, strict=False)
-        logging.info("All keys matched")
-    except RuntimeError as e:
-        logging.error(f"Error loading model state dict: {e}")
-
-    return model
 
 
 def get_path_results(exp_path, args):
@@ -143,65 +121,76 @@ if __name__ == "__main__":
     # general updates
     args_general = args["general"]
 
+    pipeline_steps = ['pretrain_lc','pretrain_ft', 'align','finetune_classification']:
+    for pipeline_step in pipeline_steps:
     ############################  DATALOADERS  ############################
-    pl_datal = LitData(**args_general)
+        if 'pretrain' in pipeline_step:
+            pl_datal = LitPretrain(**args_general)
+        elif 'align' in pipeline_step:
+            pl_datal = LitPretrain(**args_general)
+        else:
+            pl_datal = 0
 
-    ############################  CALLBACKS  ############################
-    all_callbacks = []
-    all_callbacks += [
-        ModelCheckpoint(
-            monitor="mix/f1s_valid",  # "F1Score_MLPMix/val"
-            dirpath=path,
-            save_top_k=1,
-            mode="max",  # )]
-            every_n_train_steps=1,
-            filename="my_best_checkpoint-{step}",
+        ############################  CALLBACKS  ############################
+        all_callbacks = []
+        all_loggers = []
+
+        all_callbacks += [
+            ModelCheckpoint(
+                monitor=f"{pipeline_step}/loss_validation/loss",  # "F1Score_MLPloss/val"
+                dirpath=path,
+                save_top_k=1,
+                mode='max' if 'classification' in pipeline_step else 'min',  
+                every_n_train_steps=1,
+                filename="my_best_checkpoint-{step}",
+            )
+        ]
+
+        all_callbacks += [
+            EarlyStopping(
+                monitor=f"{pipeline_step}/loss_validation/loss",
+                min_delta=0.00,
+                patience=args_general["patience"],
+                verbose=False,
+                mode='max' if 'classification' in pipeline_step else 'min',
+            )
+        ]
+
+        all_callbacks += [LearningRateMonitor(logging_interval="step")]
+        all_loggers += [TensorBoardLogger(save_dir=path, name="tensorboard", version=".")]
+        all_loggers += [CSVLogger(save_dir=path, name=".", version=".")]
+
+        # load from checkpoint if there is one
+
+        ############################  MODEL  ############################
+        if 'pretrain_lc' in pipeline_step:
+            pl_model = LitPreTrainVICREGLC(**args) 
+        elif 'pretrain_ft' in pipeline_step:
+            pl_model = LitPreTrainVICREGTAB(**args) 
+        elif 'align' in pipeline_step:
+            pl_model = LitcATAT(**args)
+        else:
+            #pl_model = LitFinetuneMix(**args)
+            pass
+
+        if args_general["change_clf"]:
+            pl_model.model.change_clf(args_general["num_classes"])
+
+        ############################  TRAINING  ############################
+
+        trainer = Trainer(
+            callbacks=all_callbacks,
+            logger=all_loggers,
+            val_check_interval=0.5,
+            log_every_n_steps=100,
+            accelerator="gpu",
+            #devices=[],
+            min_epochs=1,
+            max_epochs=args_general["num_epochs"],
+            #check_val_every_n_epoch=5,
+            #accumulate_grad_batches = 5,
+            num_sanity_val_steps=0,
         )
-    ]
 
-    all_callbacks += [
-        EarlyStopping(
-            monitor="mix/f1s_valid",
-            min_delta=0.00,
-            patience=args_general["patience"],
-            verbose=False,
-            mode="max",
-        )
-    ]
-
-    all_callbacks += [LearningRateMonitor(logging_interval="step")]
-
-    all_loggers = []
-    all_loggers += [TensorBoardLogger(save_dir=path, name="tensorboard", version=".")]
-    all_loggers += [CSVLogger(save_dir=path, name=".", version=".")]
-
-    # load from checkpoint if there is one
-
-    ############################  MODEL  ############################
-    pl_model = LitTAB(**args)
-
-    if args_general["load_pretrained_model"]:
-        pl_model.atat = handler_checkpoint(
-            handler_ckpt_path(args_general["src_checkpoint"]), args=args
-        )
-
-    if args_general["change_clf"]:
-        pl_model.atat.change_clf(args_general["num_classes"])
-
-    ############################  TRAINING  ############################
-
-    trainer = Trainer(
-        callbacks=all_callbacks,
-        logger=all_loggers,
-        val_check_interval=0.5,
-        log_every_n_steps=100,
-        accelerator="gpu",
-        min_epochs=1,
-        max_epochs=args_general["num_epochs"],
-        gradient_clip_val=1.0 if pl_model.gradient_clip_val else 0.0,
-        num_sanity_val_steps=0,
-    )
-
-    # Trainer model pl routine # trsainer fit models
-    trainer.fit(pl_model, pl_datal)
-
+        # Trainer model pl routine # trsainer fit models
+        trainer.fit(pl_model, pl_datal)

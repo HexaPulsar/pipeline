@@ -55,7 +55,7 @@ class LitFinetune(pl.LightningModule):
             1.0 if kwargs["general"]["use_gradient_clipping"] else 0
         )
 
-        lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/no_contamination/' #
+        lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/standardaugs/' #
         print(f'loading model {lc_out_path}')
         lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
         checkpoint_ = torch.load(lc_out_path)
@@ -64,7 +64,7 @@ class LitFinetune(pl.LightningModule):
             if 'projection' in key:
                 continue
             else:    
-                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key] 
+                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
         self.model.LC.load_state_dict(weights, strict=True)
 
     def gradfilter_ema(self,
@@ -88,6 +88,7 @@ class LitFinetune(pl.LightningModule):
                                         grads = self.gradients_)
 
     def training_step(self, batch_data, batch_idx):
+        #print(batch_data.keys())
         input_dict = self.get_input_data(batch_data)
 
         pred = self.model(**input_dict)

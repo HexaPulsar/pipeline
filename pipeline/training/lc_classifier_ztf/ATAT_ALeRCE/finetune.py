@@ -12,6 +12,7 @@ from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitData import LitData
 from src.models.LitFinetuneTAB import LitFinetuneTAB
+from src.models.LitFinetune import LitFinetune
 from src.models.LitATAT import LitATAT
 #from src.layers import ATAT
 
@@ -159,7 +160,7 @@ if __name__ == "__main__":
     # load from checkpoint if there is one
 
     ############################  MODEL  ############################
-    pl_model = LitFinetuneTAB(**args)
+    pl_model = LitFinetune(**args)
 
     if args_general["change_clf"]:
         pl_model.model.change_clf(args_general["num_classes"])

@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitPretrain import LitPretrain
-from src.models.LitPreTrainVICREGLC import LitPreTrainVICREG
+from src.models.LitPreTrainVICREGLC import LitPreTrainVICREGLC
 from src.layers import cATAT
 
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     # load from checkpoint if there is one
 
     ############################  MODEL  ############################
-    pl_model = LitPreTrainVICREG(**args)
+    pl_model = LitPreTrainVICREGLC(**args)
  
 
     if args_general["change_clf"]:

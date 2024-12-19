@@ -116,13 +116,10 @@ class SplitCurveTransform:
         selected_data, selected_time = (data_stacked_a, time_stacked_a) if np.random.rand() > 0.5 else (data_stacked_b, time_stacked_b)
         data_dict['data'] = selected_data
         data_dict['time'] = selected_time
-        data_dict['mask'] = (selected_time>1).int()
+        data_dict['mask'] = (selected_time>1)
 
         # Return the modified dictionary
         return data_dict
-    
-import torch
-import random
 
 
 class InverseCurve:
@@ -132,6 +129,7 @@ class InverseCurve:
         data[:, :, :] *= -1 
         sample['data'] = data
         return sample
+    
 class FlipLC:
     def __call__(self,sample):
         data = sample['data']
@@ -144,7 +142,7 @@ class FlipLC:
 
         sample['data'] = data
         sample['time'] = time
-        sample['mask'] = mask
+        sample['mask'] = mask.bool()
 
         return sample
     
@@ -152,13 +150,13 @@ class PermuteChannels:
     
     def __call__(self, sample):
             
-        bs,seqlength, channels = sample['data'].shape
+        seqlength, channels = sample['data'].shape
         
         permuted_channels = torch.randperm(channels)  # Generate a random permutation of channels
 
         sample['data'] = sample['data'][:,:, permuted_channels]
         sample['time'] = sample['time'][:,:, permuted_channels]
-        sample['mask'] = sample['mask'][:,:, permuted_channels]
+        sample['mask'] = sample['mask'][:,:, permuted_channels].bool()
          
         return sample
 
@@ -166,20 +164,11 @@ class SequenceShift:
     def __init__(self,shift_range:tuple):
         self.shift_range = shift_range
     def __call__(self, sample_dict):
-        """
-        Shift the sequence in the 'data' key of the input dictionary
         
-        Args:
-            sample_dict (dict): Dictionary containing 'data' key with tensor
-                               of shape [batch_size, seq_len, channels]
-        
-        Returns:
-            dict: Dictionary with shifted data
-        """
         
         data = sample_dict['data']
         time = sample_dict['time']
-        batch_size, seq_len, channels = data.shape
+        
         self.shift_amount = random.randint(self.shift_range[0],self.shift_range[1])
         # Create output tensor of same shape
         result_data = torch.zeros_like(data)
@@ -187,19 +176,19 @@ class SequenceShift:
         
         if self.shift_amount > 0:
             # Shift forward (left)
-            result_data[:, :-self.shift_amount, :] = data[:, self.shift_amount:, :]
-            result_data[:, -self.shift_amount:, :] = 0
+            result_data[:, :-self.shift_amount] = data[:, self.shift_amount:]
+            result_data[:, -self.shift_amount:] = 0
             
-            result_time[:, :-self.shift_amount, :] = time[:, self.shift_amount:, :]
-            result_time[:, -self.shift_amount:, :] = 0
+            result_time[:, :-self.shift_amount] = time[:, self.shift_amount:]
+            result_time[:, -self.shift_amount:] = 0
             
         elif self.shift_amount < 0:
             # Shift backward (right)
-            result_data[:, -self.shift_amount:, :] = data[:, :self.shift_amount, :]
-            result_data[:, :-self.shift_amount, :] = 0
+            result_data[:, -self.shift_amount:] = data[:, :self.shift_amount]
+            result_data[:, :-self.shift_amount] = 0
 
-            result_time[:, -self.shift_amount:, :] = time[:, :self.shift_amount, :]
-            result_time[:, :-self.shift_amount, :] = 0
+            result_time[:, -self.shift_amount:] = time[:, :self.shift_amount]
+            result_time[:, :-self.shift_amount] = 0
             
         else:
             # No shift
@@ -208,91 +197,8 @@ class SequenceShift:
         # Update the dictionary with shifted data
         sample_dict['data'] = result_data
         sample_dict['time'] = result_time
-        sample_dict['mask'] = (result_data!=0).float()
+        sample_dict['mask'] = (result_data!=0).bool()
         return sample_dict
-        
-class SCAugmentation:
-    def __init__(self, per_init_time, use_lightcurves=True, use_features=True, add_feat_col_list=None, time_eval_time=None):
-        self.per_init_time = per_init_time
-        self.use_lightcurves = use_lightcurves
-        self.use_features = use_features
-        self.add_feat_col_list = add_feat_col_list
-        self.time_eval_time = time_eval_time
-
-    def __call__(self, sample: dict):
-        # Assuming sample["mask"] and sample["time_alert"] are of shape [bs, seqlen, channels]
-        mask, time_alert = sample["mask"], sample["time_alert"]
-
-        # Compute max_time for each batch element
-        max_time = (time_alert * mask).max(dim=1, keepdim=True)[0]  # [bs, 1, channels]
-        init_time = self.per_init_time * max_time  # [bs, 1, channels]
-        
-        # Select a single random value for eval_time across the entire batch
-        random_value = random.uniform(0, 1)
-        eval_time = (init_time + (max_time - init_time) * random_value).squeeze(1)  # [bs, channels]
-
-        if self.use_lightcurves:
-            # Create mask_time for the entire batch based on the same eval_time
-            mask_time = (time_alert <= eval_time)  # [bs, seqlen, channels]
-
-        if self.use_features:
-            # Update tabular features for the batch
-            sample["add_tabular_feat"] = torch.stack([
-                torch.from_numpy(
-                    self.add_feat_col_list[
-                        "time_%s" % self.time_eval_time[
-                            (eval_time[i].numpy() <= self.time_eval_time).argmax()
-                        ]
-                    ][i, :]
-                ) for i in range(mask.size(0))
-            ], dim=0)  # [bs, feature_dim]
-
-        if self.use_lightcurves:
-            sample["mask"] = mask * mask_time  # [bs, seqlen, channels]
-
-        return sample
- 
-import numpy as np
-
-class ThreeTimeMask:
-    def __init__(self, use_lightcurves=True, use_features=True, add_feat_col_list=None, time_eval_time=None):
-        self.use_lightcurves = use_lightcurves
-        self.use_features = use_features
-        self.add_feat_col_list = add_feat_col_list
-        self.time_eval_time = time_eval_time
-
-    def __call__(self, sample: dict):
-        # Select one eval_time for the entire batch
-        #eval_time = np.random.choice([8, 16, 32, 64, 128, 256, 512, 1024, 2048])
-        eval_time = np.random.choice([8, 128, 2048])
-        if self.use_lightcurves:
-            mask, time_alert = sample["mask"], sample["time_alert"]
-
-            # Create mask_time for the entire batch based on the same eval_time
-            mask_time = (time_alert <= eval_time)  # [bs, seqlen, channels]
-
-        if self.use_features:
-            # Update tabular features for the batch
-            sample["add_tabular_feat"] = torch.stack([
-                torch.from_numpy(
-                    self.add_feat_col_list[
-                        "time_%s" % self.time_eval_time[
-                            (eval_time <= self.time_eval_time).argmax()
-                        ]
-                    ][i, :]
-                ) for i in range(mask.size(0))
-            ], dim=0)  # [bs, feature_dim]
-
-        if self.use_lightcurves:
-            sample["mask"] = mask * mask_time  # [bs, seqlen, channels]
-
-        return sample
-
-
-import torch
-import torch.nn.functional as F
-import numpy as np
-from copy import deepcopy
 
 
 class Jitter: 
@@ -300,14 +206,14 @@ class Jitter:
         x = sample['data']  # Shape: [bs, seqlen, channels]
 
         # Create a mask for non-zero values
-        mask = (x != 0)  # Mask with the same shape as x
-        self.max_jitter = torch.rand(1).to(device = x.device).item()
+        
+        max_jitter = torch.rand(1).to(device = x.device).item()
 
         # Generate random jitter for each channel independently within the range [-max_jitter, max_jitter]
-        jitter = (torch.rand_like(x, device=x.device) * 2 - 1) * self.max_jitter  # Shape: [bs, seqlen, channels]
+        jitter = (torch.rand_like(x, device=x.device) * 2 - 1) * max_jitter  # Shape: [bs, seqlen, channels]
 
         # Apply jitter only to the non-zero values
-        x_with_jitter = x + jitter * mask
+        x_with_jitter = (x + jitter).masked_fill_(x == 0,0)
 
         sample['data'] = x_with_jitter
         return sample
@@ -316,14 +222,14 @@ class Jitter:
 class GaussianNoise: 
     def __call__(self, sample):
         x = sample['data']  # Shape: [bs, seqlen, channels]
-        mask = (x != 0)  # Mask for non-zero values
+        
         self.mean = 0 #torch.rand(1).to(device = x.device).item()
         self.std =  torch.rand(1).to(device = x.device).item()
         # Generate Gaussian noise for each channel independently
         noise = torch.normal(self.mean, self.std, size=x.shape).to(device = x.device)
         noise = torch.clip(noise,0,0.5)
         # Apply noise only to the non-zero values
-        x_with_noise = x + noise * mask
+        x_with_noise = (x + noise).masked_fill_(x == 0, 0)
         sample['data'] = x_with_noise
         return sample
     
@@ -339,7 +245,7 @@ class CutLC:
         eval_time = random.choice(self.eval_times)
         
         # Get the batch size, sequence length, and channels
-        bs, seqlen, channels = sample['data'].shape
+        seqlen, channels = sample['data'].shape
         
         # Create a mask to zero out elements after eval_time
         mask = torch.arange(seqlen).expand(bs, seqlen).unsqueeze(-1).to(sample['data'].device)
@@ -353,9 +259,8 @@ class CutLC:
         return sample
 
 class OnlyMaskPadding:
-    def __call__(self,sample:dict):
-        mask = sample['data'] != 0
-        sample['mask'] = mask.float()
+    def __call__(self,sample:dict): 
+        sample['mask'] = (sample['data'] != 0)
         return sample
     
 class SobelFilterTransform:
@@ -363,7 +268,7 @@ class SobelFilterTransform:
         self.thr = thr
     def __call__(self, sample):
         input_tensor = sample['data']
-        bs, seqlen, channels = input_tensor.shape
+        seqlen, channels = input_tensor.shape
         sobel_filter = torch.tensor([-1, 0, 1], dtype=input_tensor.dtype, device=input_tensor.device).view(1, 1, 3)
         output = torch.zeros_like(input_tensor)
 
@@ -428,7 +333,7 @@ class SobelFilterMask:
         input_tensor = sample['data']
         #time = sample['time']
         og_mask = sample['mask']
-        bs, seqlen, channels = input_tensor.shape
+        seqlen, channels = input_tensor.shape
         sobel_filter = torch.tensor([-1, 0, 1], dtype=input_tensor.dtype, device=input_tensor.device).view(1, 1, 3)
         output = torch.zeros_like(input_tensor)
 

@@ -22,6 +22,7 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger
 from pytorch_lightning import Trainer
+from pytorch_lightning.profilers import AdvancedProfiler
 
 
 LOG_FILENAME = "atatRefactory.log"
@@ -154,7 +155,8 @@ if __name__ == "__main__":
             dirpath=path,
             save_top_k=1,
             mode="max",  # )]
-            every_n_train_steps=1,
+            #every_n_train_steps=1,
+            every_n_epochs = 1,
             filename="my_best_checkpoint-{step}",
         )
     ]
@@ -178,7 +180,7 @@ if __name__ == "__main__":
     # load from checkpoint if there is one
 
     ############################  MODEL  ############################
-    pl_model = LitTAB(**args)
+    pl_model = LitLC(**args)
 
     if args_general["load_pretrained_model"]:
         pl_model.atat = handler_checkpoint(
@@ -189,7 +191,7 @@ if __name__ == "__main__":
         pl_model.atat.change_clf(args_general["num_classes"])
 
     ############################  TRAINING  ############################
-
+    #profiler = AdvancedProfiler()
     trainer = Trainer(
         callbacks=all_callbacks,
         logger=all_loggers,

@@ -69,7 +69,7 @@ def chunkify(lst, chunk_size):
         yield lst[i:i + chunk_size]
 
 # Define the chunk size (you can adjust this based on your system's capabilities)
-chunk_size = 100 
+chunk_size = 100
 n_jobs =8
 out_dir = '/home/mdelafuente/SSL/corrected_md/'
 

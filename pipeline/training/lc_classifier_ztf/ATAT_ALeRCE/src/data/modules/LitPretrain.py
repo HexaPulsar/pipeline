@@ -5,11 +5,11 @@ from src.data.handlers.SSLDataset import SSLDataset
 
 
 class LitPretrain(pl.LightningDataModule):
-    def __init__(self, data_root: str = "path/to/dir", batch_size: int = 32, **kwargs):
+    def __init__(self, data_root: str = "path/to/dir", batch_size: int = 128, **kwargs):
         super().__init__()
 
         self.data_root = data_root
-        self.batch_size = batch_size
+        self.batch_size = 256 #batch_size
         self.kwargs = kwargs
 
     def train_dataloader(self):

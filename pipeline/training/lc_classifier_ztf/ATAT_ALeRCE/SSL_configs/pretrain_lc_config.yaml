@@ -37,7 +37,4 @@ LOAD_CHECKPOINT:
   use_augmented_dataset: false
   change_clf: false
 
-LP_TRAINER:
-
-LP_EARLYSTOPPING:
 

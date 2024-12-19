@@ -25,3 +25,4 @@ class LitDataAugmented(pl.LightningDataModule):
             ),
             set_type="validation",
         )
+    

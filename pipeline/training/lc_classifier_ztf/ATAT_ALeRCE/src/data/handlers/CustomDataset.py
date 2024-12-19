@@ -8,6 +8,8 @@ import torch
 from torch.utils.data import Dataset
 from joblib import load
 
+from torchvision.transforms import Compose, RandomApply
+from .augmentations import SCAugmentation, ThreeTimeMask
 
 class ATATDataset(Dataset):
     def __init__(
@@ -55,22 +57,15 @@ class ATATDataset(Dataset):
                     use MTA {online_opt_tt}"
         )
 
-        self.data = torch.from_numpy(h5_.get("flux")[:][self.these_idx])  # flux
-        self.data_err = torch.from_numpy(
-            h5_.get("flux_err")[:][self.these_idx]
-        )  # data-var # flux_err
-        self.mask = torch.from_numpy(
-            h5_.get("mask")[:][self.these_idx]
-        )  # mask_alert # mask
-        self.time = torch.from_numpy(
-            h5_.get("time")[:][self.these_idx]
-        )  # time_phot # time
-        self.time_alert = torch.from_numpy(h5_.get("time_detection")[:][self.these_idx])
-        self.time_phot = torch.from_numpy(h5_.get("time_photometry")[:][self.these_idx])
-        self.labels = h5_.get("labels")[:][self.these_idx].astype(int)
+        self.data = h5_.get("flux")
+        self.data_err = h5_.get("flux_err")
+        self.mask = h5_.get("mask")
+        self.time = h5_.get("time")
+        self.time_alert = h5_.get("time_detection")
+        #self.time_phot = h5_.get("time_photometry")).float()
+        self.labels = h5_.get("labels")#.astype(int)
 
-        self.eval_time = eval_metric  # must be a number
-        self.max_time = 1500
+        self.eval_time = eval_metric  # must be a number 
         self.use_lightcurves = use_lightcurves
         self.use_lightcurves_err = use_lightcurves_err
         self.use_metadata = use_metadata
@@ -97,7 +92,7 @@ class ATATDataset(Dataset):
             )
 
         if self.use_features:
-            self.extracted_feat = dict()
+            self.extracted_feat = {}
             for time_eval in self.list_time_to_eval:
                 path_QT = f"./{data_root}/quantiles/features/fold_{partition_used}.joblib"
                 extracted_feat = h5_.get("extracted_feat_{}".format(time_eval))[:][
@@ -110,50 +105,49 @@ class ATATDataset(Dataset):
                         )
                     }
                 )
-
+        self.transforms = Compose([ThreeTimeMask(self.use_features,self.extracted_feat if self.use_features else None),
+                                    SCAugmentation(self.per_init_time,
+                                                list_time_to_eval,self.use_features,self.extracted_feat if self.use_features else None)])
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
 
         data_dict = {
-            "time": self.time[idx],
-            "mask": self.mask[idx],
-            "labels": self.labels[idx],
+            "time": torch.from_numpy(self.time[idx,:,:]).float(),
+            "mask": torch.from_numpy(self.mask[idx,:,:]).mask(),
+            "labels":  torch.from_numpy(self.labels[idx,:,:]).long()
+            
         }
-
+        data_dict.update({'idx':idx} if any([self.online_opt_tt,self.force_online_opt])else None) 
         if self.use_lightcurves:
-            data_dict.update({"data": self.data[idx]})
+            data_dict.update({"data":  torch.from_numpy(self.data[idx,:,:]).float()})
 
         if self.use_lightcurves_err:
-            data_dict.update({"data_err": self.data_err[idx]})
+            data_dict.update({"data_err":  torch.from_numpy(self.data_err[idx,:,:]).float()})
 
         if self.use_metadata:
-            data_dict.update({"metadata_feat": self.metadata_feat[idx]})
+            data_dict.update({"metadata_feat":   torch.from_numpy(self.metadata_feat[idx,:,:]).float()})
 
         if self.use_features:
             data_dict.update(
-                {"extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][idx]}
+                {"extracted_feat": torch.from_numpy(self.extracted_feat[self.list_time_to_eval[-1]][idx,:,:]).float()}
             )
 
         if self.set_type == "train":
-            if self.force_online_opt:
-                data_dict = self.sc_augmenation(data_dict, idx)
-            if self.online_opt_tt:
-                data_dict = self.three_time_mask(data_dict, idx)
-        #'''
+            data_dict = self.transforms(data_dict)
+         
         tabular_features = []
-        #print(data_dict['metadata_feat'].shape)
+         
         if self.use_metadata:
-            tabular_features.append(data_dict["metadata_feat"].float().unsqueeze(1))
+            tabular_features.append(data_dict["metadata_feat"].unsqueeze(1))
             #print('post',data_dict['metadata_feat'].unsqueeze(1).shape)
 
         if self.use_features:
-            tabular_features.append(data_dict["extracted_feat"].float().unsqueeze(1))
+            tabular_features.append(data_dict["extracted_feat"].unsqueeze(1))
 
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
-        #print(data_dict['tabular_feat'].shape)    
-        #'''
+        
         return data_dict
 
     def __len__(self):
@@ -166,51 +160,7 @@ class ATATDataset(Dataset):
             QT = load(path_QT)
             tabular_data = QT.transform(tabular_data)
 
-        return torch.from_numpy(tabular_data)
-
-    def sc_augmenation(self, sample: dict, index: int):
-        """sample is a dictionary obj"""
-        mask, time_alert = sample["mask"], sample["time"]
-        """ random value to asing new light curve """
-
-        random_value = random.uniform(0, 1)
-        max_time = (time_alert * mask).max()
-        init_time = self.per_init_time * max_time
-        eval_time = init_time + (max_time - init_time) * random_value
-        mask_time = (time_alert <= eval_time).float()
-
-        """ if lc features are using in training tabular feeat is updated to specific time (near to)"""
-
-        if self.use_features:
-            """tabular features is updated to acording time span"""
-            sample["extracted_feat"] = torch.from_numpy(
-                self.add_feat_col_list[
-                    "time_%s"
-                    % self.list_time_to_eval[
-                        (eval_time.numpy() <= self.list_time_to_eval).argmax()
-                    ]
-                ][index, :]
-            )
-
-        """ multiplication of mask, where are both enabled is the final mask """
-
-        sample["mask"] = mask * mask_time
-        return sample
-
-    def three_time_mask(self, sample: dict, idx: int):
-        """sample is update to a fixed length between the values"""
-        mask, time = sample["mask"], sample["time"]
-        time_eval = np.random.choice(
-            [16, 128, 2048]
-        )  # 16, 32, 64, 128, 256, 512, 1024, 2048])
-        mask_time = (time <= time_eval).float()
-
-        if self.use_features:
-            sample["extracted_feat"] = self.extracted_feat[time_eval][idx]
-
-        sample["mask"] = mask * mask_time
-
-        return sample
+        return torch.from_numpy(tabular_data).float()
 
     def update_mask(self, sample: dict, timeat: int):
         sample.update(

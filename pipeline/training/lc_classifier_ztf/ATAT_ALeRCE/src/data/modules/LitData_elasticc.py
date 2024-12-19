@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 from src.data.handlers.datasetHandlers import get_dataloader
-from src.data.handlers.ElasticcDataset import ElasticcDataset
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.data.handlers.legacy.ElasticcDataset import ElasticcDataset
 
 
 class LitData(pl.LightningDataModule):

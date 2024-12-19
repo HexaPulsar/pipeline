@@ -1,26 +1,22 @@
-
 import os
 from typing import Dict
 
-import numpy as np
-from pipeline.lc_classifier.lc_classifier.utils import create_astro_object
-from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.data.src.processing import normalizing_time
-
-from data_preprocessing.ztf_prod_keys import ZTF_ff_columns_to_PROD
-from pipeline.lc_classifier.lc_classifier.features.composites.ztf import ZTFFeatureExtractor
-
-from pipeline.lc_classifier.lc_classifier.features.preprocess.ztf import (
-    ZTFLightcurvePreprocessor,
-    ShortenPreprocessor,
-)
-
-from scipy.optimize import OptimizeWarning
-
 import warnings
+from scipy.optimize import OptimizeWarning
+import numpy as np
+
 ###WARNING SUPRESSION
 warnings.filterwarnings("ignore", category=OptimizeWarning, message="Covariance of the parameters could not be estimated")
 warnings.filterwarnings("ignore", category=np.RankWarning)
 ####
+import pandas as pd
+import pickle
+from numba import jit
+from data_preprocessing.ztf_prod_keys import ZTF_ff_columns_to_PROD 
+
+from pipeline.lc_classifier.lc_classifier.utils import create_astro_object
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.data.src.processing import normalizing_time
+ 
 def extract_from_db(oids_list,engine):
     oids_chunk = [f"'{oid}'" for oid in oids_list]
 
@@ -73,7 +69,7 @@ def extract_from_db(oids_list,engine):
     #xmatch_path = os.path.join(chunk_dir, "xmatch.parquet")
     #xmatch.to_parquet(xmatch_path)
     return detections, forced_photometry,xmatch
-
+ 
 def create_astro_objects(detections,forced_photometry,xmatch):
     oids = detections["oid"].unique()
     aos_list = []
@@ -94,9 +90,10 @@ def create_astro_objects(detections,forced_photometry,xmatch):
         except Exception as e:
             #print(f'Skipped {oid}: assertion error no xmatch for {oid}')
             
-            return
+            continue
     return aos_list
 
+@jit
 def extract_diff_flux_per_band(detections)-> Dict:
         detections_per_band = {}
         for band in detections['fid'].unique():
@@ -105,6 +102,7 @@ def extract_diff_flux_per_band(detections)-> Dict:
             detections_per_band.update({f'{band}': ith_band})
         return detections_per_band
 
+@jit
 def band_list_to_time_flux_mask_arrays(band_detection_dict: Dict, seq_len: int = 200):
         """
         Convert band detection dictionary to flux, time, and mask arrays with improved efficiency.
@@ -151,7 +149,7 @@ def band_list_to_time_flux_mask_arrays(band_detection_dict: Dict, seq_len: int =
         
         return flux_arr, time_arr, mask_arr
 
-
+@jit
 def transform2arrays(aos_list,config_dict,ft_ex, lc_ex):
     lc_ex.preprocess_batch(aos_list)
     ft_ex.compute_features_batch(aos_list)
@@ -164,13 +162,11 @@ def transform2arrays(aos_list,config_dict,ft_ex, lc_ex):
         flux, time, mask = band_list_to_time_flux_mask_arrays(
             det_per_band)
         time = normalizing_time(time)
-        ao.features['fid'] = ao.features['fid'].fillna('')
-        ao.features["name_fid"] = ao.features.apply(
-            lambda row: f"{row['name']}_{row['fid']}" if row['fid'] != '' else row['name'], axis=1
-        )
+        ao.features['fid'].fillna('', inplace=True)
+        ao.features["name_fid"] = ao.features['name'] + ao.features['fid'].where(ao.features['fid'] != '', '')
         ao.features['prod'] = ao.features['name_fid'].map(
             ZTF_ff_columns_to_PROD)
-        ao.features = ao.features.dropna(subset='prod')
+        ao.features.dropna(subset=['prod'], inplace=True)
         features = ao.features[~ao.features['prod'].isin(
             config_dict["md_cols"])]
         metadata = ao.features[ao.features['prod'].isin(
@@ -179,8 +175,6 @@ def transform2arrays(aos_list,config_dict,ft_ex, lc_ex):
     return aos_dict_arrays
 
 
-import pandas as pd
-import pickle
 def save_arrays(array_dict, out_dir_path):
     # Convert the dictionary to a DataFrame
     df = pd.DataFrame(array_dict)

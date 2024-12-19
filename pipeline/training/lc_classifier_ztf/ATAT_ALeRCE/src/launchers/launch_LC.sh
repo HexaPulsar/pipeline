@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=1,2
 
 for seed in {0..0}; do
   EXPERIMENT_TYPE="lc_mta"
-  EXPERIMENT_NAME=test_${seed}
+  EXPERIMENT_NAME=debug_einsum_${seed}
   DATASET_NAME="ztf_ff"
   DATA_ROOT="data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12"
 
@@ -18,5 +18,6 @@ for seed in {0..0}; do
     --name_dataset_general "$DATASET_NAME" \
     --data_root_general "$DATA_ROOT" \
     --patience_general 10 \
+    --num_encoders 3 \
     --lr_general 2e-04
 done 

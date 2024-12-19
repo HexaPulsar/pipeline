@@ -20,7 +20,7 @@ class LitLC(pl.LightningModule):
         self.lightcv_ = kwargs["lc"]
         self.feature_ = kwargs["ft"]
         #self.model = LightCurveClassifier(**kwargs)
-        self.model = TabularClassifier(**kwargs)
+        self.model = LightCurveClassifier(**kwargs)
            
         self.warmup = 0
 
@@ -76,44 +76,38 @@ class LitLC(pl.LightningModule):
                                         grads = self.gradients_)
 
     def training_step(self, batch_data, batch_idx):
-        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
-        print(batch_data['tabular_feat'].shape)
         
         pred = self.model(**batch_data)
         
 
         if pred is None:
             raise ValueError("Invalid prediction.")
+ 
 
-        """ labels """
-        y_true = batch_data["labels"].long()
-
-        self.train_acc(pred, y_true)
-        self.train_f1s(pred, y_true)
-        self.train_rcl(pred, y_true)
+        self.train_acc(pred, batch_data["labels"].long())
+        self.train_f1s(pred, batch_data["labels"].long())
+        self.train_rcl(pred, batch_data["labels"].long())
 
         loss = 0
 
         loss_dic = {}
         for y, y_type in zip([pred], ["lc"]):
             if y is not None:
-                partial_loss = F.cross_entropy(y, y_true)
+                partial_loss = F.cross_entropy(y,  batch_data["labels"].long())
                 loss += partial_loss
                 loss_dic.update({f"loss_train/{y_type}": partial_loss})
 
-        loss_dic.update({f"loss_train/total": loss})
+        loss_dic.update({f"loss_train/total": loss},sync_dist=True)
         self.log_dict(loss_dic)
 
-        self.log("mix/acc_train", self.train_acc, on_step=True, on_epoch=True)
-        self.log("mix/f1s_train", self.train_f1s, on_step=True, on_epoch=True)
-        self.log("mix/rcl_train", self.train_rcl, on_step=True, on_epoch=True)
-
-        self.log(f"loss_train/total", loss)
+        self.log("mix/acc_train", self.train_acc, on_step=True, on_epoch=True,sync_dist=True)
+        self.log("mix/f1s_train", self.train_f1s, on_step=True, on_epoch=True,sync_dist=True)
+        self.log("mix/rcl_train", self.train_rcl, on_step=True, on_epoch=True,sync_dist=True)
 
         return loss
      
     def validation_step(self, batch_data, batch_idx):
-        batch_data = {k: batch_data[k].float() for k in  batch_data.keys()} 
+
 
         pred = self.model(**batch_data)
         
@@ -121,29 +115,28 @@ class LitLC(pl.LightningModule):
         if pred is None:
             raise ValueError("Invalid prediction.")
 
-        """ labels """
-        y_true = batch_data["labels"].long()
 
-        self.valid_acc(pred, y_true)
-        self.valid_f1s(pred, y_true)
-        self.valid_rcl(pred, y_true)
+        self.valid_acc(pred, batch_data["labels"].long())
+        self.valid_f1s(pred, batch_data["labels"].long())
+        self.valid_rcl(pred, batch_data["labels"].long())
 
         loss = 0
         loss_dic = {}
         for y, y_type in zip([pred], ["lc"]):
-            if y is not None:
-                partial_loss = F.cross_entropy(y, y_true)
-                loss += partial_loss
-                loss_dic.update({f"loss_validation/{y_type}": partial_loss})
+            
+            partial_loss = F.cross_entropy(y,  batch_data["labels"].long())
+            loss += partial_loss
+            loss_dic.update({f"loss_validation/{y_type}": partial_loss})
 
         loss_dic.update({f"loss_validation/total": loss})
         self.log_dict(loss_dic)
 
-        self.log("mix/acc_valid", self.valid_acc, on_epoch=True)
-        self.log("mix/f1s_valid", self.valid_f1s, on_epoch=True)
-        self.log("mix/rcl_valid", self.valid_rcl, on_epoch=True)
 
-        return loss_dic
+        self.log("mix/acc_valid", self.valid_acc, on_epoch=True,sync_dist=True)
+        self.log("mix/f1s_valid", self.valid_f1s, on_epoch=True,sync_dist=True)
+        self.log("mix/rcl_valid", self.valid_rcl, on_epoch=True,sync_dist=True)
+
+        return 0
 
     def test_step(self, batch_data, batch_idx):
         input_dict = self.get_input_data(batch_data)
@@ -165,16 +158,14 @@ class LitLC(pl.LightningModule):
             loss_dic.update({f"loss_test/{y_type}": partial_loss})
 
         loss_dic.update({f"loss_test/total": loss})
-        self.log_dict(loss_dic)
+        self.log_dict(loss_dic,sync_dist=True)
 
         return loss_dic
 
     def configure_optimizers(self):
-       
-        self.learning_rate = self.general_['lr']
-        
-        optimizer = optim.AdamW(self.parameters(), 
-                                lr = self.learning_rate)      
+    
+        optimizer = optim.AdamW(self.parameters(),
+                                lr = self.general_['lr'])  
         constant = ConstantLR(optimizer,1)                                                                                           
         scheduler = SequentialLR(
                     optimizer,

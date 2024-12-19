@@ -4,11 +4,11 @@ import torch.nn as nn
 
 from .timeEncoders import TimeHandler
 from .embeddings import Embedding
-from .transformer import Transformer
+#from .transformer import Transformer
+from .transformer.torchimpl import Transformer
 from .classifiers import TokenClassifier, MixedClassifier
 from .tokenEmbeddings import Token
-
-import copy
+ 
 
 
 class ATAT(nn.Module):
@@ -27,7 +27,7 @@ class ATAT(nn.Module):
                 num_classes=self.general_["num_classes"], **kwargs["lc"]
             )
             self.token_lc = Token(**kwargs["lc"])
-
+            self.register_buffer('m_token', torch.ones(1, 1, 1).float())
         # Tabular Transformer
         if self.general_["use_metadata"] or self.general_["use_features"]:
             self.embedding_ft = Embedding(**kwargs["ft"])
@@ -53,20 +53,18 @@ class ATAT(nn.Module):
     def init_model(self):
         for p in self.parameters():
             if p.dim() > 1:
-                nn.init.normal_(p, 0, 0.02)
+                #nn.init.normal_(p, 0, 0.02)
+                nn.init.xavier_normal(p)
 
-    def embedding_feats(self, f):
-        batch_size = f.size(0)
+    def embedding_feats(self, f): 
         f_mod = self.embedding_ft(**{"f": f})
-        token_ft = self.token_ft(batch_size)
+        token_ft = self.token_ft(f.shape[0])
         return torch.cat([token_ft, f_mod], dim=1)
 
     def embedding_light_curve(self, x, t, mask=None, **kwargs):
-        batch_size = x.size(0)
-        m_token = torch.ones(batch_size, 1, 1).float().to(x.device)
         x_mod, m_mod, t_mod = self.time_encoder(**{"x": x, "t": t, "mask": mask})
-        x_mod = torch.cat([self.token_lc(batch_size), x_mod], axis=1)
-        m_mod = torch.cat([m_token, m_mod], axis=1)
+        x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)
+        m_mod = torch.cat([self.m_token.repeat(x.shape[0],1,1), m_mod], axis=1)
         return x_mod, m_mod, t_mod
 
     def forward(
@@ -87,7 +85,7 @@ class ATAT(nn.Module):
             x_mod, m_mod, _ = self.embedding_light_curve(
                 **{"x": data, "t": time, "mask": mask}
             )
-            x_emb = self.transformer_lc(**{"x": x_mod, "mask": m_mod})
+            x_emb = self.transformer_lc(**{"x": x_mod, "mask": ~(m_mod).unsqueeze(-1).bool()})
             x_cls = self.classifier_lc(x_emb[:, 0, :])
 
         if self.general_["use_metadata"] or self.general_["use_features"]:
@@ -105,6 +103,7 @@ class ATAT(nn.Module):
         return x_cls, f_cls, m_cls
 
     def predict_mix(self, data, time, tabular_feat, mask, **kwargs):
+        return
         x_mod, m_mod, _ = self.embedding_light_curve(
             **{"x": data, "t": time, "mask": mask}
         )
@@ -118,6 +117,7 @@ class ATAT(nn.Module):
         return m_cls
 
     def predict_lc(self, data, time, mask, **kwargs):
+        return
         x_mod, m_mod, _ = self.embedding_light_curve(
             **{"x": data, "t": time, "mask": mask}
         )
@@ -127,6 +127,7 @@ class ATAT(nn.Module):
         return x_cls
 
     def predict_tab(self, tabular_feat, **kwargs):
+        return
         f_mod = self.embedding_feats(**{"f": tabular_feat})
         f_emb = self.transformer_ft(**{"x": f_mod, "mask": None})
         f_cls = self.classifier_ft(f_emb[:, 0, :])

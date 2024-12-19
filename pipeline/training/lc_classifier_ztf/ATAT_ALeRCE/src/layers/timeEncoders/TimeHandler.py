@@ -1,16 +1,13 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from .TimeFilm import TimeFilm
-from .TimeFilmModified import TimeFilmModified
+import torch.nn as nn 
+from .TimeFilmModified import TimeFilmModified, TimeFilmModifiedMOD
 from .PosEmbedding import PosEmbedding
 from .PosEmbeddingMLP import PosEmbeddingMLP
 from .PosEmbeddingRNN import PosEmbeddingRNN
 from .PosConcatEmbedding import PosConcatEmbedding
 from .PosEmbeddingCadence import PosEmbeddingCadence
 from .tAPE import tAPE
-
-from .LinearProj import LinearProj
+ 
 from ..utils import clones
 
 
@@ -80,4 +77,30 @@ class TimeHandler(nn.Module):
             x_mod.gather(1, indexes.repeat(1, 1, x_mod.shape[-1])),
             m_mod.gather(1, indexes),
             t_mod.gather(1, indexes),
+        )
+
+
+
+class TimeHandlerMOD(nn.Module):
+    def __init__(self, num_bands=2, embedding_size=64, Tmax=1000.0, num_harmonics = 16,**kwargs):
+        super().__init__()
+        # general params
+        self.num_bands = num_bands
+        self.time_encoders = nn.ModuleList([TimeFilmModifiedMOD(n_harmonics=num_harmonics,embedding_size=embedding_size, Tmax=Tmax) for _ in range(num_bands)])
+        self.embedding_size = embedding_size
+        
+    def forward(self, x, t, mask, **kwargs):
+        batch_size, seqlen, channels = x.shape
+            
+        x_mod = torch.empty(batch_size,seqlen*channels,self.embedding_size,device = x.device)
+        for i in range(self.num_bands):
+            x_mod[:,seqlen*i:seqlen*(i+1),:] = self.time_encoders[i](x[:, :,  i].unsqueeze(-1), t[:, :, i].unsqueeze(-1))
+
+        t = t.transpose(2,1).reshape(batch_size,-1,1)
+        mask = mask.transpose(2,1).reshape(batch_size,-1,1)
+        indexes = ( t.clone().masked_fill_(mask  == 0,float('inf'))).argsort(axis=1,descending = False)
+        return (
+            x_mod.gather(1, indexes.repeat(1, 1, self.embedding_size)),
+            mask.gather(1, indexes),
+            t.gather(1, indexes),
         )

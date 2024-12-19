@@ -8,8 +8,6 @@ from joblib import load
 from sklearn.model_selection import train_test_split
 import logging
 import sys
-
-
 class ElasticcDataset(Dataset):
     def __init__(
         self,
@@ -130,75 +128,8 @@ class ElasticcDataset(Dataset):
                         :
                     ]  # h5_.get("feats_%s" % c_)[:]
                 )
-
-    """ data augmentation methods """
-
-    def sc_augmenation(self, sample: dict, index: int):
-        """sample is a dictionary objg"""
-        mask, time_alert = sample["mask"], sample["time_alert"]
-        """ random value to asing new light curvee """
-
-        random_value = random.uniform(0, 1)
-        max_time = (time_alert * mask).max()
-        init_time = self.per_init_time * max_time
-        eval_time = init_time + (max_time - init_time) * random_value
-        mask_time = (time_alert <= eval_time).float()
-
-        """ if lc features are using in training tablular feeat is updated to especifict time (near to)"""
-
-        if self.use_features:
-            """tabular features is updated to acording time span"""
-            sample["add_tabular_feat"] = torch.from_numpy(
-                self.add_feat_col_list[
-                    "time_%s"
-                    % self.time_eval_time[
-                        (eval_time.numpy() <= self.time_eval_time).argmax()
-                    ]
-                ][index, :]
-            )
-
-        """ multiplication of mask, where are both enabled is the final mask """
-
-        sample["mask"] = mask * mask_time
-        return sample
-
-    """ data augmentation method """
-
-    def three_time_mask(self, sample: dict, index: int):
-        """sample is update to a fixed lenght betwent thre values"""
-
-        mask, time_alert = sample["mask"], sample["time_alert"]
-        eval_time = np.random.choice([8, 128, 2048])
-        mask_time = (time_alert <= eval_time).float()
-
-        if self.use_features:
-            sample["add_tabular_feat"] = torch.from_numpy(
-                self.add_feat_col_list[
-                    "time_%s"
-                    % self.time_eval_time[(eval_time <= self.time_eval_time).argmax()]
-                ][index, :]
-            )
-
-        sample["mask"] = mask * mask_time
-
-        return sample
-
-    """ obtain validad mask for evaluation prupouses"""
-
-    def obtain_valid_mask(self, sample, mask, time_alert, index):
-        mask_time = (time_alert <= self.eval_time).float()
-        sample["mask"] = mask * mask_time
-        if self.use_features:
-            sample["add_tabular_feat"] = torch.from_numpy(
-                self.add_feat_col_list[
-                    "time_%s"
-                    % self.list_eval_time[
-                        (self.eval_time <= self.list_eval_time).argmax()
-                    ]
-                ][index, :]
-            )
-        return sample
-
+ 
+        
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construc its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -265,10 +196,7 @@ class ElasticcDataset(Dataset):
 
         """ for training propoused two augmentation modes can be enabled """
         if self.set_type == "train":
-            if self.force_online_opt:
-                data_dict = self.sc_augmenation(data_dict, idx_)
-            if self.online_opt_tt:
-                data_dict = self.three_time_mask(data_dict, idx_)
+            data_dict = self.transforms(data_dict)
 
         return (
             data_dict,

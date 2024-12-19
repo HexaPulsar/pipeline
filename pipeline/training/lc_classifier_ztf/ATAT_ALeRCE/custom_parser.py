@@ -45,7 +45,7 @@ def parse_model_args(arg_dict=None):
     # TRAINING PARAMS
     parser.add_argument("--use_sampler_general", type=int, default=1)
     
-    parser.add_argument("--batch_size_general", type=int, default=64)
+    parser.add_argument("--batch_size_general", type=int, default=512)
     parser.add_argument("--num_epochs_general", type=int, default=10000)
     parser.add_argument("--patience_general", type=int, default=30)
     parser.add_argument("--lr_general", type=float, default=1e-5)

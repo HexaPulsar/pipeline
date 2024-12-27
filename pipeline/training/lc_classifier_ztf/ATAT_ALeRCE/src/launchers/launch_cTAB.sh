@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=1,2
 pwd
 # Define variables
 EXPERIMENT_TYPE="md"
-EXPERIMENT_NAME="no_contamination"
+EXPERIMENT_NAME="pretrain_tab"
 DATASET_NAME="ztf_ff"
 
 DATA_ROOT="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/"
@@ -16,6 +16,6 @@ python SSL_training_tab.py \
   --name_dataset_general "$DATASET_NAME" \
   --data_root_general "$DATA_ROOT" \
   --batch_size_general 128 \
-  --patience_general 25 \
+  --patience_general 10 \
   --lr_general 1e-03 \
   --use_sampler_general 0 

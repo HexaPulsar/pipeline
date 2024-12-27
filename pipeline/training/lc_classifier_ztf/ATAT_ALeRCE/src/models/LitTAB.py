@@ -96,7 +96,7 @@ class LitTAB(pl.LightningModule):
         loss_dic = {}
         for y, y_type in zip([pred], ["lc"]):
             if y is not None:
-                partial_loss = F.cross_entropy(y, y_true)
+                partial_loss = F.cross_entropy(y,  batch_data["labels"].long())
                 loss += partial_loss
                 loss_dic.update({f"loss_train/{y_type}": partial_loss})
 
@@ -108,14 +108,14 @@ class LitTAB(pl.LightningModule):
         self.log("mix/rcl_train", self.train_rcl, on_step=True, on_epoch=True)
 
         self.log(f"loss_train/total", loss)
-
+        
         return loss
      
     def validation_step(self, batch_data, batch_idx):
-        input_dict = self.get_input_data(batch_data)
+        #input_dict = self.get_input_data(batch_data)
 
 
-        pred = self.model(**input_dict)
+        pred = self.model(**batch_data)
         
 
         if pred is None:
@@ -131,17 +131,18 @@ class LitTAB(pl.LightningModule):
         loss = 0
         loss_dic = {}
         for y, y_type in zip([pred], ["lc"]):
-            if y is not None:
-                partial_loss = F.cross_entropy(y, y_true)
-                loss += partial_loss
-                loss_dic.update({f"loss_validation/{y_type}": partial_loss})
+            
+            partial_loss = F.cross_entropy(y,  batch_data["labels"].long())
+            loss += partial_loss
+            loss_dic.update({f"loss_validation/{y_type}": partial_loss})
 
         loss_dic.update({f"loss_validation/total": loss})
-        self.log_dict(loss_dic)
+        self.log_dict(loss_dic,sync_dist= True)
 
-        self.log("mix/acc_valid", self.valid_acc, on_epoch=True)
-        self.log("mix/f1s_valid", self.valid_f1s, on_epoch=True)
-        self.log("mix/rcl_valid", self.valid_rcl, on_epoch=True)
+
+        self.log("mix/acc_valid", self.valid_acc, on_epoch=True,sync_dist=True)
+        self.log("mix/f1s_valid", self.valid_f1s, on_epoch=True,sync_dist=True)
+        self.log("mix/rcl_valid", self.valid_rcl, on_epoch=True,sync_dist=True)
 
         return loss_dic
 

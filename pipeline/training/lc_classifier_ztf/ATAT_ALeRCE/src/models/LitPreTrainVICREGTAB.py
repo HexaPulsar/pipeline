@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWar
 from src.losses.VICReg import VICReg 
 
 
-class LitPreTrainVICREGLC(pl.LightningModule):
+class LitPreTrainVICREG(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__()
         
@@ -22,7 +22,7 @@ class LitPreTrainVICREGLC(pl.LightningModule):
         self.feature_ = kwargs["ft"]
 
         self.loss = VICReg()
-        self.model = SingleBranch(type = 'lc',**self.lightcv_)
+        self.model = SingleBranch(type = 'tab',**self.feature_)
  
         self.warmup = 0
 

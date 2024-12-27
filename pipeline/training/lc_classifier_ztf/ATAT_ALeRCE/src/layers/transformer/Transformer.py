@@ -10,7 +10,7 @@ class Transformer(nn.Module):
             if encoder_type == "Linear"
             else TransformerEncoderCnn(**kwargs) for _ in range(kwargs["num_encoders"])])
 
-    def forward(self, x, src_key_padding_mask, **kwargs):
+    def forward(self, x, mask = None, **kwargs):
         for l in self.stacked_transformers:
-            x = l(x, src_key_padding_mask)
+            x = l(x, mask)
         return x

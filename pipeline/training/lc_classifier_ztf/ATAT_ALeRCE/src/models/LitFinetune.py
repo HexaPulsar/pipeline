@@ -29,33 +29,22 @@ class LitFinetune(pl.LightningModule):
         self.use_lightcurves_err = self.general_["use_lightcurves_err"]
         self.use_metadata = self.general_["use_metadata"]
         self.use_features = self.general_["use_features"]
+        metrics = torchmetrics.MetricCollection({
+            'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.general_["num_classes"]),
+            'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
+            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+        })
 
-        self.train_acc = torchmetrics.classification.Accuracy(
-            task="multiclass", num_classes=self.general_["num_classes"]
-        )
-        self.train_f1s = torchmetrics.classification.F1Score(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
-        self.train_rcl = torchmetrics.classification.Recall(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
+        self.train_metrics = metrics.clone(prefix='train/')
+        self.valid_metrics = metrics.clone(prefix='validation/')
 
-        self.valid_acc = torchmetrics.classification.Accuracy(
-            task="multiclass", num_classes=self.general_["num_classes"]
-        )
-        self.valid_f1s = torchmetrics.classification.F1Score(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
-        self.valid_rcl = torchmetrics.classification.Recall(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
 
         self.use_cosine_decay = kwargs["general"]["use_cosine_decay"]
         self.gradient_clip_val = (
             1.0 if kwargs["general"]["use_gradient_clipping"] else 0
         )
 
-        lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/standardaugs/' #
+        lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/v3/' #
         print(f'loading model {lc_out_path}')
         lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
         checkpoint_ = torch.load(lc_out_path)
@@ -89,9 +78,9 @@ class LitFinetune(pl.LightningModule):
 
     def training_step(self, batch_data, batch_idx):
         #print(batch_data.keys())
-        input_dict = self.get_input_data(batch_data)
+        #input_dict = self.get_input_data(batch_data)
 
-        pred = self.model(**input_dict)
+        pred = self.model(**batch_data)
         
 
         if pred is None:
@@ -99,10 +88,8 @@ class LitFinetune(pl.LightningModule):
 
         """ labels """
         y_true = batch_data["labels"].long()
-
-        self.train_acc(pred, y_true)
-        self.train_f1s(pred, y_true)
-        self.train_rcl(pred, y_true)
+        self.train_metrics(pred, y_true)
+        self.log_dict(self.train_metrics, on_step=True, on_epoch=True)
 
         loss = 0
 
@@ -115,19 +102,16 @@ class LitFinetune(pl.LightningModule):
 
         loss_dic.update({f"loss_train/total": loss})
         self.log_dict(loss_dic)
-
-        self.log("mix/acc_train", self.train_acc, on_step=True, on_epoch=True)
-        self.log("mix/f1s_train", self.train_f1s, on_step=True, on_epoch=True)
-        self.log("mix/rcl_train", self.train_rcl, on_step=True, on_epoch=True)
-
+ 
         self.log(f"loss_train/total", loss)
+        self.log_dict(loss_dic)
 
         return loss
 
     def validation_step(self, batch_data, batch_idx):
-        input_dict = self.get_input_data(batch_data)
+        #input_dict = self.get_input_data(batch_data)
 
-        pred = self.model(**input_dict)
+        pred = self.model(**batch_data)
         
 
         if pred is None:
@@ -135,10 +119,9 @@ class LitFinetune(pl.LightningModule):
 
         """ labels """
         y_true = batch_data["labels"].long()
+        self.valid_metrics(pred, y_true)
+        self.log_dict(self.valid_metrics, on_epoch=True)
 
-        self.valid_acc(pred, y_true)
-        self.valid_f1s(pred, y_true)
-        self.valid_rcl(pred, y_true)
 
         loss = 0
         loss_dic = {}
@@ -150,10 +133,7 @@ class LitFinetune(pl.LightningModule):
 
         loss_dic.update({f"loss_validation/total": loss})
         self.log_dict(loss_dic)
-
-        self.log("mix/acc_valid", self.valid_acc, on_epoch=True)
-        self.log("mix/f1s_valid", self.valid_f1s, on_epoch=True)
-        self.log("mix/rcl_valid", self.valid_rcl, on_epoch=True)
+        
 
         return loss_dic
 

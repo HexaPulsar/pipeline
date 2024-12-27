@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 
 from torch.optim.lr_scheduler import LambdaLR
 from src.training.schedulers import cosine_decay_ireyes
-from src.layers import ATAT
+from src.layers.cATAT import ATAT
 
 
 class LitATAT(pl.LightningModule):
@@ -26,25 +26,14 @@ class LitATAT(pl.LightningModule):
         self.use_metadata = self.general_["use_metadata"]
         self.use_features = self.general_["use_features"]
 
-        self.train_acc = torchmetrics.classification.Accuracy(
-            task="multiclass", num_classes=self.general_["num_classes"]
-        )
-        self.train_f1s = torchmetrics.classification.F1Score(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
-        self.train_rcl = torchmetrics.classification.Recall(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
+        metrics = torchmetrics.MetricCollection({
+            'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.general_["num_classes"]),
+            'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
+            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+        })
 
-        self.valid_acc = torchmetrics.classification.Accuracy(
-            task="multiclass", num_classes=self.general_["num_classes"]
-        )
-        self.valid_f1s = torchmetrics.classification.F1Score(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
-        self.valid_rcl = torchmetrics.classification.Recall(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
+        self.train_metrics = metrics.clone(prefix='train/')
+        self.valid_metrics = metrics.clone(prefix='validation/')
 
         self.use_cosine_decay = kwargs["general"]["use_cosine_decay"]
         self.gradient_clip_val = (
@@ -52,9 +41,10 @@ class LitATAT(pl.LightningModule):
         )
 
     def training_step(self, batch_data, batch_idx):
-        input_dict = self.get_input_data(batch_data)
+        #input_dict = self.get_input_data(batch_data)
 
-        pred_lc, pred_tab, pred_mix = self.atat(**input_dict)
+        pred_lc, pred_tab, pred_mix = self.atat(**batch_data)
+         
         pred = (
             pred_mix
             if pred_mix is not None
@@ -67,9 +57,8 @@ class LitATAT(pl.LightningModule):
         """ labels """
         y_true = batch_data["labels"].long()
 
-        self.train_acc(pred, y_true)
-        self.train_f1s(pred, y_true)
-        self.train_rcl(pred, y_true)
+        self.train_metrics(pred, y_true)
+        self.log_dict(self.train_metrics, on_step=True, on_epoch=True)
 
         loss = 0
 
@@ -83,18 +72,12 @@ class LitATAT(pl.LightningModule):
         loss_dic.update({f"loss_train/total": loss})
         self.log_dict(loss_dic)
 
-        self.log("mix/acc_train", self.train_acc, on_step=True, on_epoch=True)
-        self.log("mix/f1s_train", self.train_f1s, on_step=True, on_epoch=True)
-        self.log("mix/rcl_train", self.train_rcl, on_step=True, on_epoch=True)
-
-        self.log(f"loss_train/total", loss)
-
         return loss
 
     def validation_step(self, batch_data, batch_idx):
-        input_dict = self.get_input_data(batch_data)
+        #input_dict = self.get_input_data(batch_data)
 
-        pred_lc, pred_tab, pred_mix = self.atat(**input_dict)
+        pred_lc, pred_tab, pred_mix = self.atat(**batch_data)
         pred = (
             pred_mix
             if pred_mix is not None
@@ -107,9 +90,8 @@ class LitATAT(pl.LightningModule):
         """ labels """
         y_true = batch_data["labels"].long()
 
-        self.valid_acc(pred, y_true)
-        self.valid_f1s(pred, y_true)
-        self.valid_rcl(pred, y_true)
+        self.valid_metrics(pred, y_true)
+        self.log_dict(self.valid_metrics, on_epoch=True)
 
         loss = 0
         loss_dic = {}
@@ -121,10 +103,6 @@ class LitATAT(pl.LightningModule):
 
         loss_dic.update({f"loss_validation/total": loss})
         self.log_dict(loss_dic)
-
-        self.log("mix/acc_valid", self.valid_acc, on_epoch=True)
-        self.log("mix/f1s_valid", self.valid_f1s, on_epoch=True)
-        self.log("mix/rcl_valid", self.valid_rcl, on_epoch=True)
 
         return loss_dic
 

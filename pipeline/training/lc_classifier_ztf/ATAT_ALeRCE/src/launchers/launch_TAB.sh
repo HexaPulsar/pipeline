@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=1,2
 
 for seed in {0..0}; do
   EXPERIMENT_TYPE="md"
-  EXPERIMENT_NAME=debugmd_${seed}
+  EXPERIMENT_NAME=tab_3EH4_${seed}
   DATASET_NAME="ztf_ff"
   DATA_ROOT="data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12"
 
@@ -18,5 +18,10 @@ for seed in {0..0}; do
     --name_dataset_general "$DATASET_NAME" \
     --data_root_general "$DATA_ROOT" \
     --patience_general 10 \
-    --lr_general 2e-04
+    --lr_general 1e-04 \
+    --num_heads_tab 4 \
+    --embedding_size_tab 128 \
+    --embedding_size_tab_sub 128 \
+    --num_encoders_tab 3 \
+    --use_sampler_general 1
 done 

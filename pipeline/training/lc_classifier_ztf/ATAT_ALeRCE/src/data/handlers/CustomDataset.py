@@ -31,7 +31,7 @@ class ATATDataset(Dataset):
         **kwargs,
     ):
         """loading dataset from H5 file"""
-        """ dataset is composed for all samples, where self.these_idx dart to samples for each partition"""
+        """ dataset is composed for all samples, where self.these__idx dart to samples for each partition"""
 
         name = (
             "training"
@@ -63,8 +63,9 @@ class ATATDataset(Dataset):
         self.time = h5_.get("time")
         self.time_alert = h5_.get("time_detection")
         #self.time_phot = h5_.get("time_photometry")).float()
-        self.labels = h5_.get("labels")#.astype(int)
-
+        self.target = h5_.get("labels")
+        self.labels =  torch.from_numpy(self.target[:][self.these_idx]).long()
+         
         self.eval_time = eval_metric  # must be a number 
         self.use_lightcurves = use_lightcurves
         self.use_lightcurves_err = use_lightcurves_err
@@ -76,14 +77,13 @@ class ATATDataset(Dataset):
         self.force_online_opt = force_online_opt
         self.per_init_time = per_init_time
         self.online_opt_tt = online_opt_tt
-
+        self.len = len(self.these_idx)
         self.list_time_to_eval = list_time_to_eval
         print("list_time_to_eval: ", list_time_to_eval)
 
         logging.info(f"Partition : {partition_used} Set Type : {set_type}")
-
         if self.use_metadata:
-            metadata_feat = h5_.get("metadata_feat")[:][self.these_idx]
+            metadata_feat = h5_.get("metadata_feat")[:]
             path_QT = "./{}/quantiles/metadata/fold_{}.joblib".format(
                 data_root, partition_used
             )
@@ -92,12 +92,10 @@ class ATATDataset(Dataset):
             )
 
         if self.use_features:
-            self.extracted_feat = {}
+            self.extracted_feat = dict()
             for time_eval in self.list_time_to_eval:
                 path_QT = f"./{data_root}/quantiles/features/fold_{partition_used}.joblib"
-                extracted_feat = h5_.get("extracted_feat_{}".format(time_eval))[:][
-                    self.these_idx
-                ]
+                extracted_feat = h5_.get("extracted_feat_{}".format(time_eval))[:]
                 self.extracted_feat.update(
                     {
                         time_eval: self.get_tabular_data(
@@ -105,32 +103,36 @@ class ATATDataset(Dataset):
                         )
                     }
                 )
-        self.transforms = Compose([ThreeTimeMask(self.use_features,self.extracted_feat if self.use_features else None),
+        self.transforms = Compose([ThreeTimeMask(self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None),
                                     SCAugmentation(self.per_init_time,
-                                                list_time_to_eval,self.use_features,self.extracted_feat if self.use_features else None)])
+                                                list_time_to_eval,self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None)
+                                    ])
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
-
+         
+        _idx = self.these_idx[idx]
         data_dict = {
-            "time": torch.from_numpy(self.time[idx,:,:]).float(),
-            "mask": torch.from_numpy(self.mask[idx,:,:]).mask(),
-            "labels":  torch.from_numpy(self.labels[idx,:,:]).long()
-            
+            "labels":  self.target[_idx]
         }
-        data_dict.update({'idx':idx} if any([self.online_opt_tt,self.force_online_opt])else None) 
+
+        data_dict.update({'idx':_idx,
+                          "time": torch.Tensor(self.time[_idx,:,:]).float(),
+                            "mask": torch.Tensor(self.mask[_idx,:,:]).bool(),} ) #if any([self.online_opt_tt,self.force_online_opt]) else None 
         if self.use_lightcurves:
-            data_dict.update({"data":  torch.from_numpy(self.data[idx,:,:]).float()})
+            data_dict.update({"data":  torch.Tensor(self.data[_idx,:,:]).float(),
+                              })
 
         if self.use_lightcurves_err:
-            data_dict.update({"data_err":  torch.from_numpy(self.data_err[idx,:,:]).float()})
+            data_dict.update({"data_err":  torch.Tensor(self.data_err[_idx,:,:]).float()})
 
         if self.use_metadata:
-            data_dict.update({"metadata_feat":   torch.from_numpy(self.metadata_feat[idx,:,:]).float()})
+            data_dict.update({"metadata_feat":   torch.Tensor(self.metadata_feat[_idx]).float(),
+                              })
 
         if self.use_features:
             data_dict.update(
-                {"extracted_feat": torch.from_numpy(self.extracted_feat[self.list_time_to_eval[-1]][idx,:,:]).float()}
+                {"extracted_feat": torch.Tensor(self.extracted_feat[self.list_time_to_eval[-1]][_idx]).float()}
             )
 
         if self.set_type == "train":
@@ -148,18 +150,18 @@ class ATATDataset(Dataset):
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
         
+        #print(data_dict['tabular_feat'].shape)
         return data_dict
 
     def __len__(self):
         """length of the dataset, is necessary for consistent getitem values"""
-        return len(self.labels)
+        return len(self.these_idx)
 
     def get_tabular_data(self, tabular_data, path_QT, type_data):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")
         if self.use_QT:
             QT = load(path_QT)
             tabular_data = QT.transform(tabular_data)
-
         return torch.from_numpy(tabular_data).float()
 
     def update_mask(self, sample: dict, timeat: int):

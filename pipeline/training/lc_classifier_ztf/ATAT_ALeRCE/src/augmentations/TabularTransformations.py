@@ -18,7 +18,7 @@ class Jitter:
         return sample
     
 class GaussianNoise: 
-    def __init__():
+    def __init__(self):
         self.mean = 0
         self.std = 0
     def __call__(self, sample):
@@ -31,6 +31,21 @@ class GaussianNoise:
         # Apply noise only to the non-
         # zero values
         x_with_noise = (x + noise).masked_fill_(x == 0, 0)
-        x_with_noise = torch.clip(x_with_noise, 0,1.1)
+        #x_with_noise = torch.clip(x_with_noise, 0,1.1)
         sample['tabular_feat'] = x_with_noise
+        return sample
+    
+
+class RandomMask:
+    def __call__(self, sample):
+        """
+        Args:
+            sample (torch.Tensor): Input tensor of shape [bs, seqlen, channels].
+
+        Returns:
+            torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
+        """
+        mask = ( torch.rand_like(sample['tabular_feat'])>=0.5).bool()
+        
+        sample['mask'] = mask
         return sample

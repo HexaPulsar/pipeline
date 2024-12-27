@@ -19,7 +19,6 @@ class LitLC(pl.LightningModule):
         self.general_ = kwargs["general"]
         self.lightcv_ = kwargs["lc"]
         self.feature_ = kwargs["ft"]
-        #self.model = LightCurveClassifier(**kwargs)
         self.model = LightCurveClassifier(**kwargs)
            
         self.warmup = 0
@@ -28,26 +27,15 @@ class LitLC(pl.LightningModule):
         self.use_lightcurves_err = self.general_["use_lightcurves_err"]
         self.use_metadata = self.general_["use_metadata"]
         self.use_features = self.general_["use_features"]
+        metrics = torchmetrics.MetricCollection({
+            'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.general_["num_classes"]),
+            'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
+            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+        })
 
-        self.train_acc = torchmetrics.classification.Accuracy(
-            task="multiclass", num_classes=self.general_["num_classes"]
-        )
-        self.train_f1s = torchmetrics.classification.F1Score(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
-        self.train_rcl = torchmetrics.classification.Recall(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
+        self.train_metrics = metrics.clone(prefix='train/')
+        self.valid_metrics = metrics.clone(prefix='validation/')
 
-        self.valid_acc = torchmetrics.classification.Accuracy(
-            task="multiclass", num_classes=self.general_["num_classes"]
-        )
-        self.valid_f1s = torchmetrics.classification.F1Score(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
-        self.valid_rcl = torchmetrics.classification.Recall(
-            task="multiclass", num_classes=self.general_["num_classes"], average="macro"
-        )
 
         self.use_cosine_decay = kwargs["general"]["use_cosine_decay"]
         self.gradient_clip_val = (
@@ -76,17 +64,14 @@ class LitLC(pl.LightningModule):
                                         grads = self.gradients_)
 
     def training_step(self, batch_data, batch_idx):
-        
         pred = self.model(**batch_data)
-        
-
+    
         if pred is None:
             raise ValueError("Invalid prediction.")
  
 
-        self.train_acc(pred, batch_data["labels"].long())
-        self.train_f1s(pred, batch_data["labels"].long())
-        self.train_rcl(pred, batch_data["labels"].long())
+        self.train_metrics(pred, y_true)
+        self.log_dict(self.train_metrics, on_step=True, on_epoch=True)
 
         loss = 0
 
@@ -97,28 +82,19 @@ class LitLC(pl.LightningModule):
                 loss += partial_loss
                 loss_dic.update({f"loss_train/{y_type}": partial_loss})
 
-        loss_dic.update({f"loss_train/total": loss},sync_dist=True)
+        loss_dic.update({f"loss_train/total": loss})
         self.log_dict(loss_dic)
-
-        self.log("mix/acc_train", self.train_acc, on_step=True, on_epoch=True,sync_dist=True)
-        self.log("mix/f1s_train", self.train_f1s, on_step=True, on_epoch=True,sync_dist=True)
-        self.log("mix/rcl_train", self.train_rcl, on_step=True, on_epoch=True,sync_dist=True)
-
+ 
         return loss
      
     def validation_step(self, batch_data, batch_idx):
-
-
         pred = self.model(**batch_data)
-        
-
         if pred is None:
             raise ValueError("Invalid prediction.")
 
 
-        self.valid_acc(pred, batch_data["labels"].long())
-        self.valid_f1s(pred, batch_data["labels"].long())
-        self.valid_rcl(pred, batch_data["labels"].long())
+        self.valid_metrics(pred, y_true)
+        self.log_dict(self.valid_metrics, on_epoch=True)
 
         loss = 0
         loss_dic = {}
@@ -129,13 +105,7 @@ class LitLC(pl.LightningModule):
             loss_dic.update({f"loss_validation/{y_type}": partial_loss})
 
         loss_dic.update({f"loss_validation/total": loss})
-        self.log_dict(loss_dic)
-
-
-        self.log("mix/acc_valid", self.valid_acc, on_epoch=True,sync_dist=True)
-        self.log("mix/f1s_valid", self.valid_f1s, on_epoch=True,sync_dist=True)
-        self.log("mix/rcl_valid", self.valid_rcl, on_epoch=True,sync_dist=True)
-
+        self.log_dict(loss_dic,sync_dist= True)
         return 0
 
     def test_step(self, batch_data, batch_idx):
@@ -166,14 +136,14 @@ class LitLC(pl.LightningModule):
     
         optimizer = optim.AdamW(self.parameters(),
                                 lr = self.general_['lr'])  
-        constant = ConstantLR(optimizer,1)                                                                                           
-        scheduler = SequentialLR(
-                    optimizer,
-                    schedulers=[constant,constant],
-                    milestones=[self.warmup]
-                )
+        #constant = ConstantLR(optimizer,1)                                                                                           
+        #scheduler = SequentialLR(
+        #            optimizer,
+        #            schedulers=[constant,constant],
+        #            milestones=[self.warmup]
+       #         )
 
-        return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
+        return [optimizer]#, [{'scheduler': scheduler, 'interval': 'step'}]
 
 
     def get_input_data(self, batch_data):

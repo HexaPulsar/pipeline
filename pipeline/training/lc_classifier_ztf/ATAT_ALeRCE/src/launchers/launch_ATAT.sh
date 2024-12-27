@@ -1,12 +1,12 @@
 #!/bin/bash
 
 cd  ../..
-export CUDA_VISIBLE_DEVICES=2 
+export CUDA_VISIBLE_DEVICES=1,2 
 
 # Define variables
 
-EXPERIMENT_TYPE="md"
-EXPERIMENT_NAME=BASELINE_${seed}
+EXPERIMENT_TYPE="lc_md_feat"
+EXPERIMENT_NAME=feat_BASELINE_${seed}
 DATASET_NAME="ztf_ff"
 pwd
 DATA_ROOT="data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12"
@@ -17,4 +17,8 @@ python training.py \
   --experiment_name_general "$EXPERIMENT_NAME" \
   --name_dataset_general "$DATASET_NAME" \
   --data_root_general "$DATA_ROOT" \
+  --patience_general 10 \
+  --num_harmonics 4 \
+  --use_sampler_general 1 \
+  --lr_general 5e-04
    

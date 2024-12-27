@@ -11,7 +11,7 @@ from joblib import load
 import pandas as pd
 from torchvision.transforms import Compose, RandomApply
 from ...augmentations import LightCurveTransform as LC
-
+from ...augmentations import TabularTransformations as TAB
 class SSLDataset(Dataset):
     def __init__(
         self,
@@ -45,7 +45,7 @@ class SSLDataset(Dataset):
         assert partition_used == 0
 
         h5_ = h5py.File("{}/no_contamination.h5".format(data_root))
-        print(h5_.keys())
+        #print(h5_.keys())
         self.these_idx = (
             h5_.get("test")[:]
             if set_type == "test"
@@ -71,7 +71,7 @@ class SSLDataset(Dataset):
          
         self.per_init_time = per_init_time
         
-
+        self.len = self.these_idx.shape[0]
         self.list_time_to_eval = list_time_to_eval
         print("list_time_to_eval: ", list_time_to_eval)
 
@@ -101,45 +101,68 @@ class SSLDataset(Dataset):
                 )
 
         self.transforms_aug_lc = Compose([  LC.OnlyMaskPadding(),
-                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
+                                            RandomApply([LC.Scale(0.5,5),],p =0.5),
                                             RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5),
-                                            #RandomApply([LC.SequenceShift((-5,0)),],p =0.5),
+                                            RandomApply([LC.TimeWarp(0.1,1.5),],p =0.5),
+                                            #RandomApply([LC.SequenceShift((-3,3)),],p =0.5),
+                                            RandomApply([LC.RandomMask()], p =0.5),
+                                            #RandomApply([LC.GaussianNoise(),],p =0.5),
+                                            
+                                            #TAB.GaussianNoise(),
+                                            #TAB.Jitter(),
                                             ])
         self.transforms_data_lc = Compose([LC.OnlyMaskPadding(),
-                                            
-                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
+                                            RandomApply([LC.Scale(0.5,5),],p =0.5),
+                                            RandomApply([LC.RandomMask()], p =0.5),
+                                            RandomApply([LC.TimeWarp(0.5,1.5),],p =0.5), 
+                                            #RandomApply([LC.SequenceShift((-3,3)),],p =0.5),
+                                            #RandomApply([LC.GaussianNoise(),],p =0.5),
                                             RandomApply([LC.GaussianNoise(),],p =0.5),
                                             
-                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5), 
-                                            #RandomApply([LC.SequenceShift((-5,0)),],p =0.5),
-                                            #RandomApply([LC.GaussianNoise(),],p =0.5),
+                                            
+                                            #TAB.Jitter(),
+                                            #TAB.GaussianNoise(),
                                             ])
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
 
         data_dict = {}
+        aug_data_dict = {}
  
         if self.use_lightcurves:
-            data_dict.update({"data": torch.from_numpy(self.data[idx]).float(),
-                              "time": torch.from_numpy(self.time[idx]).float(),
-                                "mask": torch.from_numpy(self.mask[idx].bool())})
+            data_dict.update({"data": torch.Tensor(self.data[idx]).float(),
+                              "time": torch.Tensor(self.time[idx]).float(),
+                                "mask": torch.Tensor(self.mask[idx]).bool()})
+            aug_data_dict.update({"data": torch.Tensor(self.data[idx]).float(),
+                              "time": torch.Tensor(self.time[idx]).float(),
+                                "mask": torch.Tensor(self.mask[idx]).bool()})
 
         tabular_features = []
+        aug_tabular_features = []
         if self.use_metadata:
             data_dict.update({"metadata_feat": self.metadata_feat[idx]})
             tabular_features.append(data_dict["metadata_feat"])
-        if self.use_features:
-            tabular_features.append(data_dict["extracted_feat"])
-
-        if tabular_features:
+            
+            aug_data_dict.update({"metadata_feat": self.metadata_feat[idx].clone()})
+            aug_tabular_features.append(aug_data_dict["metadata_feat"])
+            
+        if self.use_features: 
             data_dict.update({
-                "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][idx]
-            })
+                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][idx]
+                        })
+            tabular_features.append(aug_data_dict["extracted_feat"])
+            
+            aug_data_dict.update({
+                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][idx].clone()
+                        })
+            aug_tabular_features.append(aug_data_dict["extracted_feat"])
+        
+        if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
-
-        aug_data_dict = {key:value.clone() for key,value in data_dict.items()}
+            aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
+      
+         
         data_dict = self.transforms_data_lc(data_dict)
         aug_data_dict = self.transforms_aug_lc(aug_data_dict)
         
@@ -147,7 +170,7 @@ class SSLDataset(Dataset):
 
     def __len__(self):
         """length of the dataset, is necessary for consistent getitem values"""
-        return len(self.mask[self.these_idx])
+        return  self.len
     
     def get_tabular_data(self, tabular_data, path_QT, type_data):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")
@@ -158,7 +181,7 @@ class SSLDataset(Dataset):
             df = pd.DataFrame(df.reshape(df.shape[0],df.shape[1]) )
             df = df.fillna(0)
             df = df.values.reshape(df.shape[0],df.shape[1],1)
-        return torch.from_numpy(df).float()
+        return torch.Tensor(df).float()
 
     def update_mask(self, sample: dict, timeat: int):
         sample.update(

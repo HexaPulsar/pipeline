@@ -151,7 +151,7 @@ if __name__ == "__main__":
     all_callbacks = []
     all_callbacks += [
         ModelCheckpoint(
-            monitor="mix/f1s_valid",  # "F1Score_MLPMix/val"
+            monitor="validation/f1",  # "F1Score_MLPMix/val"
             dirpath=path,
             save_top_k=1,
             mode="max",  # )]
@@ -163,7 +163,7 @@ if __name__ == "__main__":
 
     all_callbacks += [
         EarlyStopping(
-            monitor="mix/f1s_valid",
+            monitor="validation/f1",
             min_delta=0.00,
             patience=args_general["patience"],
             verbose=False,
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     # load from checkpoint if there is one
 
     ############################  MODEL  ############################
-    pl_model = LitLC(**args)
+    pl_model = LitTAB(**args)
 
     if args_general["load_pretrained_model"]:
         pl_model.atat = handler_checkpoint(

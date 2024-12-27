@@ -86,153 +86,147 @@ class ChessMask:
         # Return the modified dictionary
         return data_dict
 
-
-class SplitCurveTransform:
-    def __call__(self, data_dict):
-        
-        data_dict = data_dict #very very very important line do not remov
-        
-        data = data_dict['data']
-        time = data_dict['time']
-
-        def process_and_pad(tensor):
-            # Split the tensor into odds and evens
-            odds = tensor[:, 0::2, :]
-            evens = tensor[:, 1::2, :]
-
-            def pad_tensor(tensor):
-                # Calculate padding sizes for each dimension
-                pad_len = 99 - tensor.size(1)
-                # Apply padding (padding is applied as (left, right) for each dimension)
-                padding = (0, 0, 0, pad_len)  # Padding for (dim1, dim2)
-                return F.pad(tensor, padding, mode='constant', value=0)
-
-            return pad_tensor(odds), pad_tensor(evens)
-
-        data_stacked_a, data_stacked_b = process_and_pad(data)
-        time_stacked_a, time_stacked_b = process_and_pad(time)
-
-        # Randomly choose between the two stacked outputs
-        selected_data, selected_time = (data_stacked_a, time_stacked_a) if np.random.rand() > 0.5 else (data_stacked_b, time_stacked_b)
-        data_dict['data'] = selected_data
-        data_dict['time'] = selected_time
-        data_dict['mask'] = (selected_time>1)
-
-        # Return the modified dictionary
-        return data_dict
-
-
 class InverseCurve:
-    def __call__(self,sample):
-        
-        data = sample['data']
-        data[:, :, :] *= -1 
-        sample['data'] = data
-        return sample
-    
-class FlipLC:
-    def __call__(self,sample):
-        data = sample['data']
-        time = sample['time']
-        mask = sample['mask']
-
-        data = torch.flip(data,[1])
-        time = torch.flip(time,[1])
-        mask = torch.flip(mask,[1])
-
-        sample['data'] = data
-        sample['time'] = time
-        sample['mask'] = mask.bool()
-
-        return sample
-    
-class PermuteChannels:
-    
     def __call__(self, sample):
-            
-        seqlength, channels = sample['data'].shape
-        
-        permuted_channels = torch.randperm(channels)  # Generate a random permutation of channels
-
-        sample['data'] = sample['data'][:,:, permuted_channels]
-        sample['time'] = sample['time'][:,:, permuted_channels]
-        sample['mask'] = sample['mask'][:,:, permuted_channels].bool()
-         
+        data = sample["data"]
+        data[:, :] *= -1
+        sample["data"] = data
         return sample
 
-class SequenceShift: 
-    def __init__(self,shift_range:tuple):
+class FlipLC:
+    def __call__(self, sample):
+        data = sample["data"]
+        time = sample["time"]
+        mask = sample["mask"]
+
+        data = torch.flip(data, [0])
+        time = torch.flip(time, [0])
+        mask = torch.flip(mask, [0])
+
+        sample["data"] = data
+        sample["time"] = time
+        sample["mask"] = mask
+
+        return sample
+
+class PermuteChannels:
+    def __call__(self, sample):
+        seqlength, channels = sample["data"].shape
+
+        permuted_channels = torch.randperm(
+            channels
+        )  # Generate a random permutation of channels
+
+        sample["data"] = sample["data"][:, permuted_channels]
+        sample["time"] = sample["time"][:, permuted_channels]
+        sample["mask"] = sample["mask"][:, permuted_channels]
+
+        return sample
+
+class RandomRoll:
+    def __call__(self, sample):
+        roll_1 = torch.randint(low = 0,high = 99,size=(1,))
+        roll_2 = torch.randint(low = 0,high =6,size=(1,))
+        sample['data'] = torch.roll(sample['data'], shifts=[roll_1,roll_2],dims=[0,1])
+        sample['mask'] = torch.roll(sample['mask'], shifts=[roll_1,roll_2],dims=[0,1])
+        sample['time'] = torch.roll(sample['time'], shifts=[roll_1,roll_2],dims=[0,1])
+        return sample
+
+class SequenceShift:
+    def __init__(self, shift_range: tuple):
         self.shift_range = shift_range
-    def __call__(self, sample_dict):
-        
-        
-        data = sample_dict['data']
-        time = sample_dict['time']
-        
-        self.shift_amount = random.randint(self.shift_range[0],self.shift_range[1])
+
+    def __call__(self, sample):
+        """
+        Shift the sequence in the 'data' key of the input dictionary
+
+        Args:
+            sample_dict (dict): Dictionary containing 'data' key with tensor
+                               of shape [batch_size, seq_len, channels]
+
+        Returns:
+            dict: Dictionary with shifted data
+        """
+
+        data = sample["data"]
+        time = sample["time"]
+        shift_amount = random.randint(self.shift_range[0], self.shift_range[1])
         # Create output tensor of same shape
         result_data = torch.zeros_like(data)
         result_time = torch.zeros_like(data)
-        
-        if self.shift_amount > 0:
-            # Shift forward (left)
-            result_data[:, :-self.shift_amount] = data[:, self.shift_amount:]
-            result_data[:, -self.shift_amount:] = 0
-            
-            result_time[:, :-self.shift_amount] = time[:, self.shift_amount:]
-            result_time[:, -self.shift_amount:] = 0
-            
-        elif self.shift_amount < 0:
-            # Shift backward (right)
-            result_data[:, -self.shift_amount:] = data[:, :self.shift_amount]
-            result_data[:, :-self.shift_amount] = 0
 
-            result_time[:, -self.shift_amount:] = time[:, :self.shift_amount]
-            result_time[:, :-self.shift_amount] = 0
-            
+        if shift_amount > 0:
+            # Shift forward (left)
+            result_data[:, : -shift_amount] = data[:, shift_amount :]
+            result_data[:, -shift_amount :] = 0
+
+            result_time[:, : -shift_amount] = time[:, shift_amount :]
+            result_time[:, -shift_amount :] = 0
+
+        elif shift_amount < 0:
+            # Shift backward (right)
+            result_data[:, -shift_amount :] = data[:, : shift_amount]
+            result_data[:, : -shift_amount] = 0
+
+            result_time[:, -shift_amount :] = time[:, : shift_amount]
+            result_time[:, : -shift_amount] = 0
+
         else:
             # No shift
             result_data = data
             result_time = time
         # Update the dictionary with shifted data
-        sample_dict['data'] = result_data
-        sample_dict['time'] = result_time
-        sample_dict['mask'] = (result_data!=0).bool()
-        return sample_dict
+        sample["data"] = result_data
+        sample["time"] = result_time
+        sample["mask"] = (result_data != 0)
+        return sample
 
 
-class Jitter: 
+
+class Jitter:
     def __call__(self, sample):
-        x = sample['data']  # Shape: [bs, seqlen, channels]
+        x = sample["data"]  # Shape: [bs, seqlen, channels]
 
         # Create a mask for non-zero values
-        
-        max_jitter = torch.rand(1).to(device = x.device).item()
+        mask = x != 0  # Mask with the same shape as x
+        max_jitter = torch.rand(1).to(device=x.device,non_blocking=True).item()
 
         # Generate random jitter for each channel independently within the range [-max_jitter, max_jitter]
-        jitter = (torch.rand_like(x, device=x.device) * 2 - 1) * max_jitter  # Shape: [bs, seqlen, channels]
+        jitter = (
+            torch.rand_like(x, device=x.device) * 2 - 1
+        ) * max_jitter  # Shape: [bs, seqlen, channels]
 
         # Apply jitter only to the non-zero values
-        x_with_jitter = (x + jitter).masked_fill_(x == 0,0)
+        x_with_jitter = x + jitter * mask
 
-        sample['data'] = x_with_jitter
+        sample["data"] = x_with_jitter
         return sample
-    
 
-class GaussianNoise: 
+
+class GaussianNoise:
     def __call__(self, sample):
-        x = sample['data']  # Shape: [bs, seqlen, channels]
-        
-        self.mean = 0 #torch.rand(1).to(device = x.device).item()
-        self.std =  torch.rand(1).to(device = x.device).item()
+        x = sample["data"]  # Shape: [bs, seqlen, channels]
+        mask = x!=0
+          # torch.rand(1).to(device = x.device).item()
+        std = torch.randint(0,10, size = (1,)).to(device=x.device,non_blocking=True).item()
         # Generate Gaussian noise for each channel independently
-        noise = torch.normal(self.mean, self.std, size=x.shape).to(device = x.device)
-        noise = torch.clip(noise,0,0.5)
-        # Apply noise only to the non-zero values
-        x_with_noise = (x + noise).masked_fill_(x == 0, 0)
-        sample['data'] = x_with_noise
+        noise = torch.normal(0, std, size=x.shape).to(device=x.device, non_blocking=True) 
+        sample["data"] = x + noise * mask
         return sample
-    
+
+class RandomMask:
+    def __call__(self, sample):
+        """
+        Args:
+            sample (torch.Tensor): Input tensor of shape [bs, seqlen, channels].
+
+        Returns:
+            torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
+        """
+        mask = ( torch.rand_like(sample['data'])>=0.5).bool() & sample['mask']    
+        
+        sample['mask'] = mask
+        return sample
 
 import random
 class CutLC:
@@ -408,5 +402,20 @@ class TimeWarp:
 
         #print(factor)
         sample['time'] = x *factor
+        return sample
+    
+
+
+class TimeShift: 
+    def __init__(self, min_scale=0.5, max_scale=1.5):
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+    def __call__(self, sample):
+        x = sample['time']
+        
+        factor =torch.FloatTensor(1).uniform_(self.min_scale,self.max_scale).to(x.device)
+        #factor = (r1 - r2) * torch.rand(1) + r2
+        mask = (sample['time'] != 0) * factor
+        sample['time'] = sample['time'] + mask
         return sample
     

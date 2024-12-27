@@ -48,7 +48,7 @@ class MultiheadAttention(nn.Module):
         self.last = nn.Linear(
             embedding_size, embedding_size, bias=True
         )  # Final proyection
-        self.attn = None
+         
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, query, key, value, mask=None, **kwargs):
@@ -65,9 +65,10 @@ class MultiheadAttention(nn.Module):
         ]
 
         # 2) Apply attention on all the projected vectors in batch.
-        x, self.attn, sc = attention(
+        x, _, __ = attention(
             query, key, value, mask=mask, dropout=self.dropout, **kwargs
         )
+        del _,__
 
         # 3) "Concat" and apply a final linear.
         output = x.transpose(1, 2).contiguous().view(nbatches, -1, self.h * self.d_k)

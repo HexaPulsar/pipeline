@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=1,2
 pwd
 # Define variables
 EXPERIMENT_TYPE="lc"
-EXPERIMENT_NAME="scale-gauss-optimized_v2"
+EXPERIMENT_NAME="v3"
 DATASET_NAME="ztf_ff"
 
 DATA_ROOT="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/"
@@ -17,7 +17,7 @@ python SSL_training.py \
   --data_root_general "$DATA_ROOT" \
   --batch_size_general 256 \
   --patience_general 15 \
-  --lr_general 1e-03 \
-  --num_harmonics 16 \
+  --lr_general 1e-04 \
+  --num_harmonics 4 \
   --use_sampler_general 0
 

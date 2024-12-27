@@ -11,7 +11,7 @@ from .tAPE import tAPE
 from ..utils import clones
 
 
-class TimeHandler(nn.Module):
+class   TimeHandler(nn.Module):
     def __init__(
         self,
         num_bands=2,
@@ -80,27 +80,26 @@ class TimeHandler(nn.Module):
         )
 
 
-
 class TimeHandlerMOD(nn.Module):
-    def __init__(self, num_bands=2, embedding_size=64, Tmax=1000.0, num_harmonics = 16,**kwargs):
+    def __init__(self, num_bands=2, embedding_size=64, Tmax=1000.0, num_harmonics = 4,**kwargs):
         super().__init__()
         # general params
         self.num_bands = num_bands
         self.time_encoders = nn.ModuleList([TimeFilmModifiedMOD(n_harmonics=num_harmonics,embedding_size=embedding_size, Tmax=Tmax) for _ in range(num_bands)])
         self.embedding_size = embedding_size
-        
+    
+    def bring_zeros(self,tensor):
+        indices = (tensor != 0).type(torch.float32)
+        sorted_indices = torch.argsort(indices, dim=1, descending=True) 
+        return torch.gather(tensor, 1, sorted_indices)
+    
     def forward(self, x, t, mask, **kwargs):
-        batch_size, seqlen, channels = x.shape
-            
+        batch_size, seqlen, channels = x.shape          
         x_mod = torch.empty(batch_size,seqlen*channels,self.embedding_size,device = x.device)
         for i in range(self.num_bands):
-            x_mod[:,seqlen*i:seqlen*(i+1),:] = self.time_encoders[i](x[:, :,  i].unsqueeze(-1), t[:, :, i].unsqueeze(-1))
-
-        t = t.transpose(2,1).reshape(batch_size,-1,1)
-        mask = mask.transpose(2,1).reshape(batch_size,-1,1)
-        indexes = ( t.clone().masked_fill_(mask  == 0,float('inf'))).argsort(axis=1,descending = False)
-        return (
-            x_mod.gather(1, indexes.repeat(1, 1, self.embedding_size)),
-            mask.gather(1, indexes),
-            t.gather(1, indexes),
-        )
+            x_mod[:,seqlen*i:seqlen*(i+1),:] = self.time_encoders[i](x[:, :,  i].unsqueeze(-1).clone(), t[:, :, i].unsqueeze(-1).clone())
+        x_mod = self.bring_zeros(x_mod)
+        mask = self.bring_zeros(mask.reshape(batch_size,-1,1))
+        t = self.bring_zeros(t.reshape(batch_size,-1,1))
+        max_seq = (x_mod).count_nonzero(dim =1).max()      
+        return x_mod[:,:max_seq,:], mask[:,:max_seq,:],t[:,:max_seq,:]

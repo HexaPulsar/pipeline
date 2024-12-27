@@ -5,8 +5,7 @@ import torch.nn as nn
 import numpy as np
 from .transformer import FeedForward 
 from .timeEncoders import TimeHandler, TimeHandlerMOD
-from .embeddings import Embedding
-#from .transformer import Transformer 
+from .embeddings import Embedding 
 from .transformer.torchimpl import Transformer
 from .classifiers import TokenClassifier, MixedClassifier
 from .tokenEmbeddings import Token 
@@ -44,7 +43,17 @@ class LightCurveTransformer(nn.Module):
     def __init__(self, **kwargs):
         super(LightCurveTransformer, self).__init__()
         self.time_encoder = TimeHandlerMOD(**kwargs)
-        self.transformer_lc = Transformer(**kwargs)
+        
+        encoder = nn.TransformerEncoderLayer(d_model = kwargs['embedding_size'],
+                                                 nhead=kwargs['num_heads'],
+                                                 dim_feedforward=kwargs['embedding_size_sub'],
+                                                 activation = 'gelu',
+                                                 dropout=0.01,
+                                                 batch_first=True,
+                                                 norm_first=True)
+         
+        self.transformer_lc = nn.TransformerEncoder(encoder_layer=encoder,num_layers=kwargs['num_encoders'])
+        
         self.token_lc = Token(**kwargs)
         self.register_buffer('m_token',torch.ones(1, 1, 1).bool())
 
@@ -55,14 +64,24 @@ class LightCurveTransformer(nn.Module):
     def forward(self, data, time, mask, **kwargs):
         x_mod, m_mod, _ = self.embedding_light_curve(**{"x": data, "t": time, "mask": mask})
        # m_mod =  #invert mask so its compatible with native torch transformer masking 
-        x_emb = self.transformer_lc(**{"x": x_mod, "src_key_padding_mask": ~(m_mod.squeeze(-1))}) # m_mod.squeeze(-1)
+        x_emb = self.transformer_lc(**{"src": x_mod, "src_key_padding_mask": ~(m_mod.squeeze(-1))}) # m_mod.squeeze(-1)
         return x_emb[:,0,:]
 
 class TabularTransformer(nn.Module):
     def __init__(self, **kwargs):
+        print(kwargs)
         super(TabularTransformer, self).__init__()
         self.embedding_ft =   Embedding(**kwargs) #nn.Linear(kwargs['TAB_ARGS']['length_size'],kwargs['TAB_ARGS']['embedding_size']) #
-        self.transformer_ft = Transformer(**kwargs) #TabTransformer() #
+        encoder = nn.TransformerEncoderLayer(d_model = kwargs['embedding_size'],
+                                                 nhead=kwargs['num_heads'],
+                                                 dim_feedforward=kwargs['embedding_size_sub'],
+                                                 activation = 'gelu',
+                                                 dropout=0.01,
+                                                 batch_first=True,
+                                                 norm_first=True)
+         
+        self.transformer_ft= nn.TransformerEncoder(encoder_layer=encoder,num_layers=kwargs['num_encoders'])
+        
         self.token_ft = Token(**kwargs) 
         
     def embedding_feats(self, f):
@@ -71,23 +90,21 @@ class TabularTransformer(nn.Module):
     
     def forward(self,tabular_feat, **kwargs): 
         f_mod = self.embedding_feats(**{"f": tabular_feat})
-        f_emb = self.transformer_ft(**{"x": f_mod, 'src_key_padding_mask':None}) 
+        f_emb = self.transformer_ft(**{"src": f_mod, 'src_key_padding_mask':None}) 
         return f_emb[:,0,:]
 
 class LightCurveClassifier(nn.Module):
     def __init__(self, **kwargs):
         super(LightCurveClassifier, self).__init__() 
         self.LC = LightCurveTransformer(**kwargs['lc'])
-        self.classifier_lc = MixedClassifier(input_dim=kwargs['lc']['embedding_size'],
-                                             num_classes=kwargs['general']['num_classes'],
+        self.classifier_lc = TokenClassifier(kwargs['lc']['embedding_size'],
+                                             num_classes=kwargs['general']['num_classes']
                                              )  
         self.init_model()
         
     def init_model(self):
-            for p in self.classifier_lc.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_normal_(p)
-            for p in self.LC.parameters():
+            
+            for p in self.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_normal_(p)
                      
@@ -99,15 +116,12 @@ class TabularClassifier(nn.Module):
     def __init__(self, **kwargs):
         super(TabularClassifier, self).__init__()
         self.TAB = TabularTransformer(**kwargs['ft'])
-        self.classifier_tab = MixedClassifier(input_dim=kwargs['ft']['embedding_size'],
+        self.classifier_tab = TokenClassifier(kwargs['ft']['embedding_size'],
                                              num_classes=kwargs['general']['num_classes'],
                                              )  
         self.init_model()
     def init_model(self):
-                for p in self.classifier_tab.parameters():
-                    if p.dim() > 1:
-                        nn.init.xavier_normal_(p)
-                for p in self.TAB.parameters():
+                for p in self.parameters():
                     if p.dim() > 1:
                         nn.init.xavier_normal_(p)
     def forward(self, tabular_feat, **kwargs):
@@ -127,7 +141,7 @@ class SingleBranch(nn.Module):
                     
                     self.project = Projector(192,
                                              192,
-                                             192, l2norm = False) 
+                                             48, l2norm = False) 
             else:
                 self.transformer = TabularTransformer(**kwargs) 
                 if not self.finetune:
@@ -155,7 +169,79 @@ class SingleBranch(nn.Module):
         emb = self.transformer(**kwargs)
         return emb    
 
+class ATAT(nn.Module):
+    def __init__(self, **kwargs):
+        super(ATAT, self).__init__()
+        self.kwargs = kwargs 
+        self.general_ = kwargs["general"]
+        self.lightcv_ = kwargs["lc"]
+        self.feature_ = kwargs["ft"]
+        self.LC = LightCurveTransformer(**self.lightcv_)
+        self.TAB = TabularTransformer(**self.feature_)
+        
+        # Lightcurve Transformer
+        if self.general_["use_lightcurves"]:
+             
+            self.classifier_lc = TokenClassifier(
+                num_classes=self.general_["num_classes"], **kwargs["lc"]
+            )
+        # Tabular Transformer
+        if self.general_["use_metadata"] or self.general_["use_features"]:
+            self.classifier_tab = TokenClassifier(
+                num_classes=self.general_["num_classes"], **kwargs["ft"]
+            )
+             
 
+        # Mixed Classifier (Lightcurve and tabular)
+        if self.general_["use_lightcurves"] and any(
+            [self.general_["use_metadata"], self.general_["use_features"]]
+        ):
+
+            input_dim = kwargs["lc"]["embedding_size"] + kwargs["ft"]["embedding_size"]
+            self.classifier_mix = MixedClassifier(
+                input_dim=input_dim, **kwargs["general"]
+            )
+
+        # init model params
+        self.init_model()
+        
+    def init_model(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_normal_(p)
+                
+    def forward(
+        self,
+        data=None,
+        data_err=None,
+        time=None,
+        tabular_feat=None,
+        mask=None,
+        **kwargs
+        ):
+        x_cls, f_cls, m_cls = None, None, None
+
+        if self.general_["use_lightcurves"]:
+            if self.general_["use_lightcurves_err"]:
+                data = torch.stack((data, data_err), dim=data.dim() - 1)
+
+            
+            x_emb = self.LC(data,time,mask)
+            x_cls = self.classifier_lc(x_emb)
+
+        if self.general_["use_metadata"] or self.general_["use_features"]:
+            
+            f_emb = self.TAB(tabular_feat)
+            f_cls = self.classifier_tab(f_emb)
+
+        if self.general_["use_lightcurves"] and (
+            self.general_["use_metadata"] or self.general_["use_features"]
+        ):
+            m_cls = self.classifier_mix(
+                torch.cat([f_emb, x_emb], axis=1)
+            )
+
+        return x_cls, f_cls, m_cls
 
 class cATAT(nn.Module):
     def __init__(self, **kwargs):

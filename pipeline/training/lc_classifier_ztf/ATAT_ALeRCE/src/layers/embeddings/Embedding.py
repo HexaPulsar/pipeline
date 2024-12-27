@@ -10,4 +10,4 @@ class Embedding(nn.Module):
         self.tab_b_feat = nn.Parameter(torch.randn(1, length_size, embedding_size))
 
     def forward(self, f): 
-        return torch.addmm(self.tab_b_feat, self.tab_W_feat, f)
+        return self.tab_W_feat * f + self.tab_b_feat

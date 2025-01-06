@@ -98,8 +98,9 @@ class TimeHandlerMOD(nn.Module):
         x_mod = torch.empty(batch_size,seqlen*channels,self.embedding_size,device = x.device)
         for i in range(self.num_bands):
             x_mod[:,seqlen*i:seqlen*(i+1),:] = self.time_encoders[i](x[:, :,  i].unsqueeze(-1).clone(), t[:, :, i].unsqueeze(-1).clone())
-        x_mod = self.bring_zeros(x_mod)
-        mask = self.bring_zeros(mask.reshape(batch_size,-1,1))
-        t = self.bring_zeros(t.reshape(batch_size,-1,1))
-        max_seq = (x_mod).count_nonzero(dim =1).max()      
+        with torch.no_grad():
+            x_mod = self.bring_zeros(x_mod)
+            mask = self.bring_zeros(mask.reshape(batch_size,-1,1))
+            t = self.bring_zeros(t.reshape(batch_size,-1,1))
+            max_seq = (x_mod).count_nonzero(dim =1).max()      
         return x_mod[:,:max_seq,:], mask[:,:max_seq,:],t[:,:max_seq,:]

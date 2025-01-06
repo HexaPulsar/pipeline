@@ -123,6 +123,36 @@ class PermuteChannels:
 
         return sample
 
+class Factor:
+    def __init__(self, min_scale=0.99, max_scale=1.01):
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+
+    def __call__(self, sample):
+        data = sample['data']
+        #time = sample['time']
+        factor = torch.FloatTensor(1).uniform_(0.95, 1.05)
+        # Scale each point of sample['data'] with its corresponding scale factor
+        sample['data'] = data * factor
+        #sample['time'] = time * scale_factors
+
+        return sample
+
+class Shift:
+    def __init__(self, min_scale=0.99, max_scale=1.01):
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+
+    def __call__(self, sample):
+        data = sample['data']
+        #time = sample['time']
+        factor = torch.FloatTensor(1).uniform_(-0.5, 0.5)
+        # Scale each point of sample['data'] with its corresponding scale factor
+        sample['data'] = data + factor*data
+        #sample['time'] = time * scale_factors
+
+        return sample
+    
 class RandomRoll:
     def __call__(self, sample):
         roll_1 = torch.randint(low = 0,high = 99,size=(1,))
@@ -154,22 +184,22 @@ class SequenceShift:
         # Create output tensor of same shape
         result_data = torch.zeros_like(data)
         result_time = torch.zeros_like(data)
-
+        #print(result_data.shape)
         if shift_amount > 0:
             # Shift forward (left)
-            result_data[:, : -shift_amount] = data[:, shift_amount :]
-            result_data[:, -shift_amount :] = 0
+            result_data[: -shift_amount,:] = data[ shift_amount :,:]
+            result_data[ -shift_amount :,:] = 0
 
-            result_time[:, : -shift_amount] = time[:, shift_amount :]
-            result_time[:, -shift_amount :] = 0
+            result_time[: -shift_amount,:] = time[shift_amount :,:]
+            result_time[ -shift_amount :,:] = 0
 
         elif shift_amount < 0:
             # Shift backward (right)
-            result_data[:, -shift_amount :] = data[:, : shift_amount]
-            result_data[:, : -shift_amount] = 0
+            result_data[ -shift_amount :,:] = data[: shift_amount,:]
+            result_data[: -shift_amount,:] = 0
 
-            result_time[:, -shift_amount :] = time[:, : shift_amount]
-            result_time[:, : -shift_amount] = 0
+            result_time[ -shift_amount :,:] = time[: shift_amount,:]
+            result_time[: -shift_amount,:] = 0
 
         else:
             # No shift
@@ -208,10 +238,12 @@ class GaussianNoise:
         x = sample["data"]  # Shape: [bs, seqlen, channels]
         mask = x!=0
           # torch.rand(1).to(device = x.device).item()
-        std = torch.randint(0,10, size = (1,)).to(device=x.device,non_blocking=True).item()
+        #std = torch.randint(0,5, size = (1,)).to(device=x.device,non_blocking=True).item()
+        
         # Generate Gaussian noise for each channel independently
-        noise = torch.normal(0, std, size=x.shape).to(device=x.device, non_blocking=True) 
-        sample["data"] = x + noise * mask
+        noise = torch.normal(0, 1, size=x.shape).to(device=x.device, non_blocking=True) 
+
+        sample["data"] = x + noise * x.mean() * mask
         return sample
 
 class RandomMask:
@@ -223,7 +255,7 @@ class RandomMask:
         Returns:
             torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
         """
-        mask = ( torch.rand_like(sample['data'])>=0.5).bool() & sample['mask']    
+        mask = torch.bitwise_and(( torch.rand_like(sample['data'])>=0.5).bool() ,sample['mask']  )  
         
         sample['mask'] = mask
         return sample
@@ -242,7 +274,7 @@ class CutLC:
         seqlen, channels = sample['data'].shape
         
         # Create a mask to zero out elements after eval_time
-        mask = torch.arange(seqlen).expand(bs, seqlen).unsqueeze(-1).to(sample['data'].device)
+        mask = torch.arange(seqlen).expand( seqlen).unsqueeze(-1).to(sample['data'].device)
         cutoff_mask = mask < eval_time
         
         # Zero out elements in 'time', 'data', and 'mask' after the eval_time
@@ -361,11 +393,14 @@ class Scale:
 
     def __call__(self, sample):
         data = sample['data']
+        #time = sample['time']
+         
         # Generate a random scale factor for each point in sample['data']
         scale_factors = torch.empty(sample['data'].shape,device = data.device).uniform_(self.min_scale, self.max_scale)
 
         # Scale each point of sample['data'] with its corresponding scale factor
         sample['data'] = data * scale_factors
+        #sample['time'] = time * scale_factors
 
         return sample
 
@@ -407,15 +442,14 @@ class TimeWarp:
 
 
 class TimeShift: 
-    def __init__(self, min_scale=0.5, max_scale=1.5):
+    def __init__(self, min_scale=0.1, max_scale=1.0):
         self.min_scale = min_scale
         self.max_scale = max_scale
     def __call__(self, sample):
         x = sample['time']
         
         factor =torch.FloatTensor(1).uniform_(self.min_scale,self.max_scale).to(x.device)
-        #factor = (r1 - r2) * torch.rand(1) + r2
-        mask = (sample['time'] != 0) * factor
+        mask = sample['time'] * factor
         sample['time'] = sample['time'] + mask
         return sample
     

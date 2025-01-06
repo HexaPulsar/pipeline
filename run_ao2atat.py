@@ -10,6 +10,9 @@ import warnings
 from scipy.optimize import OptimizeWarning
 import glob
 from tqdm import tqdm
+
+from pipeline.lc_classifier.lc_classifier.features.composites.ztf import ZTFFeatureExtractor
+from pipeline.lc_classifier.lc_classifier.features.preprocess.ztf import ZTFLightcurvePreprocessor
 ###WARNING SUPRESSION
 warnings.filterwarnings("ignore", category=OptimizeWarning, message="Covariance of the parameters could not be estimated")
 warnings.filterwarnings("ignore", category=np.RankWarning)

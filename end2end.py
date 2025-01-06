@@ -92,8 +92,7 @@ def create_astro_objects(detections,forced_photometry,xmatch):
             
             continue
     return aos_list
-
-@jit
+ 
 def extract_diff_flux_per_band(detections)-> Dict:
         detections_per_band = {}
         for band in detections['fid'].unique():
@@ -101,8 +100,7 @@ def extract_diff_flux_per_band(detections)-> Dict:
             ith_band = ith_band[ith_band['unit'] == 'diff_flux']
             detections_per_band.update({f'{band}': ith_band})
         return detections_per_band
-
-@jit
+ 
 def band_list_to_time_flux_mask_arrays(band_detection_dict: Dict, seq_len: int = 200):
         """
         Convert band detection dictionary to flux, time, and mask arrays with improved efficiency.
@@ -148,8 +146,7 @@ def band_list_to_time_flux_mask_arrays(band_detection_dict: Dict, seq_len: int =
         assert mask_arr.shape == (seq_len, 2)
         
         return flux_arr, time_arr, mask_arr
-
-@jit
+ 
 def transform2arrays(aos_list,config_dict,ft_ex, lc_ex):
     lc_ex.preprocess_batch(aos_list)
     ft_ex.compute_features_batch(aos_list)
@@ -162,7 +159,7 @@ def transform2arrays(aos_list,config_dict,ft_ex, lc_ex):
         flux, time, mask = band_list_to_time_flux_mask_arrays(
             det_per_band)
         time = normalizing_time(time)
-        ao.features['fid'].fillna('', inplace=True)
+        ao.features.fillna({'fid':''}, inplace=True)
         ao.features["name_fid"] = ao.features['name'] + ao.features['fid'].where(ao.features['fid'] != '', '')
         ao.features['prod'] = ao.features['name_fid'].map(
             ZTF_ff_columns_to_PROD)

@@ -65,7 +65,7 @@ class ATATDataset(Dataset):
         #self.time_phot = h5_.get("time_photometry")).float()
         self.target = h5_.get("labels")
         self.labels =  torch.from_numpy(self.target[:][self.these_idx]).long()
-         
+        
         self.eval_time = eval_metric  # must be a number 
         self.use_lightcurves = use_lightcurves
         self.use_lightcurves_err = use_lightcurves_err
@@ -84,7 +84,7 @@ class ATATDataset(Dataset):
         logging.info(f"Partition : {partition_used} Set Type : {set_type}")
         if self.use_metadata:
             metadata_feat = h5_.get("metadata_feat")[:]
-            path_QT = "./{}/quantiles/metadata/fold_{}.joblib".format(
+            path_QT = f"{data_root}/quantiles/metadata/fold_{partition_used}.joblib".format(
                 data_root, partition_used
             )
             self.metadata_feat = self.get_tabular_data(
@@ -117,22 +117,22 @@ class ATATDataset(Dataset):
         }
 
         data_dict.update({'idx':_idx,
-                          "time": torch.Tensor(self.time[_idx,:,:]).float(),
-                            "mask": torch.Tensor(self.mask[_idx,:,:]).bool(),} ) #if any([self.online_opt_tt,self.force_online_opt]) else None 
+                          "time": torch.tensor(self.time[_idx,:,:],dtype =  torch.float),
+                            "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool),} ) #if any([self.online_opt_tt,self.force_online_opt]) else None 
         if self.use_lightcurves:
-            data_dict.update({"data":  torch.Tensor(self.data[_idx,:,:]).float(),
+            data_dict.update({"data":  torch.tensor(self.data[_idx,:,:],dtype =  torch.float),
                               })
 
         if self.use_lightcurves_err:
-            data_dict.update({"data_err":  torch.Tensor(self.data_err[_idx,:,:]).float()})
+            data_dict.update({"data_err":  torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
 
         if self.use_metadata:
-            data_dict.update({"metadata_feat":   torch.Tensor(self.metadata_feat[_idx]).float(),
+            data_dict.update({"metadata_feat":   torch.tensor(self.metadata_feat[_idx],dtype =  torch.float),
                               })
 
         if self.use_features:
             data_dict.update(
-                {"extracted_feat": torch.Tensor(self.extracted_feat[self.list_time_to_eval[-1]][_idx]).float()}
+                {"extracted_feat": torch.tensor(self.extracted_feat[self.list_time_to_eval[-1]][_idx]).float()}
             )
 
         if self.set_type == "train":

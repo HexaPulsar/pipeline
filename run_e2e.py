@@ -9,6 +9,9 @@ from end2end import *
 import warnings
 from scipy.optimize import OptimizeWarning
 from tqdm import tqdm
+
+from pipeline.lc_classifier.lc_classifier.features.composites.ztf import ZTFFeatureExtractor
+from pipeline.lc_classifier.lc_classifier.features.preprocess.ztf import ZTFLightcurvePreprocessor
 ###WARNING SUPRESSION
 warnings.filterwarnings("ignore", category=OptimizeWarning, message="Covariance of the parameters could not be estimated")
 warnings.filterwarnings("ignore", category=np.RankWarning)
@@ -20,7 +23,7 @@ import jax
 jax.config.update('jax_platform_name', 'cpu')
 os.environ['JAX_PLATFORMS'] = 'cpu'
 # Load OIDs and other configurations
-oids = pd.read_parquet('/home/mdelafuente/SSL/2020_oids.parquet')
+oids = pd.read_parquet('/home/magdalena/pipeline/data_preprocessing/sixplusdets/2020_plussixdet_oids_.parquet')
 oids_list = oids.index.tolist()
 
 url = "https://raw.githubusercontent.com/alercebroker/usecases/master/alercereaduser_v4.json"
@@ -35,7 +38,7 @@ db_params = {
 }
 
 # Load YAML config
-with open("/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dict_info.yaml", 'r') as stream:
+with open("/home/magdalena/pipeline/h5file/dict_info.yaml", 'r') as stream:
     config = yaml.safe_load(stream)
 
 # Helper function to extract, process, and save data for a chunk of OIDs
@@ -57,9 +60,9 @@ def process_chunk(oids_chunk, db_params, config,ft_ex,lc_ex, out_dir):
     
     # Save the result to a pickle file for each OID in the chunk
     for dict_array in dict_array_list:
-        out_dir = f'{out_dir}/array_{dict_array["oid"]}.pkl'
+        out_dir_temp = f'{out_dir}/array_{dict_array["oid"]}.pkl'
         # Write the pickle file
-        with open(out_dir, "wb") as f:
+        with open(out_dir_temp, "wb") as f:
             pickle.dump(dict_array, f,protocol=pickle.HIGHEST_PROTOCOL)
 
 # Helper function to split the list into chunks
@@ -69,9 +72,9 @@ def chunkify(lst, chunk_size):
         yield lst[i:i + chunk_size]
 
 # Define the chunk size (you can adjust this based on your system's capabilities)
-chunk_size = 100
-n_jobs =8
-out_dir = '/home/mdelafuente/SSL/corrected_md/'
+chunk_size = 50
+n_jobs =10
+out_dir = '/home/magdalena/pipeline/data_preprocessing/sixplusdets/2020_out'
 
 # Create the directory if it doesn't exist
 os.makedirs(os.path.dirname(out_dir), exist_ok=True)

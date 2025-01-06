@@ -3,8 +3,8 @@ cd ../../
 export CUDA_VISIBLE_DEVICES=0 #1,2 
 # Define variables
 for seed in {0..0}; do
-  EXPERIMENT_TYPE="lc_mta"
-  EXPERIMENT_NAME="lv_v1_FINE"
+  EXPERIMENT_TYPE="md"
+  EXPERIMENT_NAME="FINE_tab_v8"
   DATASET_NAME="ztf_ff"
 
   DATA_ROOT="/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/"
@@ -18,6 +18,6 @@ for seed in {0..0}; do
     --data_root_general "$DATA_ROOT" \
     --patience_general 15 \
     --num_harmonics 4 \
-    --lr_general 5e-04 \
+    --lr_general 1e-05 \
     --use_sampler_general 1
 done

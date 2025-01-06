@@ -9,9 +9,10 @@ warnings.filterwarnings("ignore")
 
 from custom_parser import parse_model_args, handler_parser
 
-from src.data.modules.LitPretrain import LitPretrain
-from src.models.LitPreTrainVICREGLC import LitPreTrainVICREGLC
-from src.layers import cATAT
+from src.data.modules.LitPretrain import LitPretrain 
+from src.models.lightcurve.selfsupervised.pretrain import LitPreTrainVICREGLC
+from src.models.tabular.selfsupervised.pretrain import LitPreTrainVICREG
+ 
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -158,23 +159,24 @@ if __name__ == "__main__":
 
     ############################  MODEL  ############################
     pl_model = LitPreTrainVICREGLC(**args)
-    #pl_model = LitPreTrainVICREGLC(**args)
+    #pl_model = LitPreTrainVICREG(**args)
  
 
     if args_general["change_clf"]:
         pl_model.atat.change_clf(args_general["num_classes"])
 
     ############################  TRAINING  ############################
-
+    pl_model = torch.compile(pl_model)#,fullgraph=True)
     trainer = Trainer(
         callbacks=all_callbacks,
         logger=all_loggers,
         val_check_interval=0.5,
-        log_every_n_steps=50,
+        log_every_n_steps=10,
         accelerator="gpu",
-        #devices=[],
+        #devices=1,
         min_epochs=1,
         max_epochs=args_general["num_epochs"],
+        gradient_clip_val=1,
         #check_val_every_n_epoch=5,
         #accumulate_grad_batches = 5,
         num_sanity_val_steps=0,

@@ -12,11 +12,14 @@ class LitPretrain(pl.LightningDataModule):
         self.data_root = data_root
         self.batch_size = 256 #batch_size
         self.kwargs = kwargs
+    
 
+    
     def train_dataloader(self):
 
         
         return get_dataloader(
+            batch_size=self.batch_size,
             dataset_used=SSLDataset(
                 data_root=self.data_root, set_type="train", **self.kwargs
             ),
@@ -25,6 +28,7 @@ class LitPretrain(pl.LightningDataModule):
 
     def val_dataloader(self):
         return get_dataloader(
+            batch_size=self.batch_size,
             dataset_used=SSLDataset(
                 data_root=self.data_root, set_type="validation", **self.kwargs
             ),
@@ -33,6 +37,7 @@ class LitPretrain(pl.LightningDataModule):
 
     def test_dataloader(self):
         return get_dataloader(
+            batch_size=self.batch_size,
             dataset_used=SSLDataset(
                 data_root=self.data_root, set_type="test", **self.kwargs
             ),

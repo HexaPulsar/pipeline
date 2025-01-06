@@ -10,9 +10,9 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitPretrain import LitPretrain
-from src.models.LitPreTrainVICREGLC import LitPreTrainVICREGLC
-from src.models.LitPreTrainVICREGTAB import LitPreTrainVICREGTAB
-from src.models.LitcATAT import LitcATAT
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.lightcurve.contrastive.LitPreTrainVICREGLC import LitPreTrainVICREGLC
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.tabular.contrastive.LitPreTrainVICREGTAB import LitPreTrainVICREGTAB
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.multimodal.contrastive.LitcATAT import LitcATAT
 
 from src.layers import cATAT
 

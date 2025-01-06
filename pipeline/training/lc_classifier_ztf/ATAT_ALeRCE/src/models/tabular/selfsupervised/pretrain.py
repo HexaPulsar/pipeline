@@ -3,15 +3,15 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 import torch
-from typing import Dict, Optional, Literal
-from src.layers.cATAT import SingleBranch
+from typing import Dict, Optional, Literal 
+from src.layers.selfsupervised.tabular import TabularProjector
 import pytorch_lightning as pl  
 from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR 
 
 from src.losses.VICReg import VICReg 
 
 
-class LitPreTrainVICREGLC(pl.LightningModule):
+class LitPreTrainVICREG(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__()
         
@@ -22,7 +22,7 @@ class LitPreTrainVICREGLC(pl.LightningModule):
         self.feature_ = kwargs["ft"]
 
         self.loss = VICReg()
-        self.model = SingleBranch(type = 'lc',**self.lightcv_)
+        self.model = TabularProjector(**self.feature_)
  
         self.warmup = 0
 
@@ -60,11 +60,11 @@ class LitPreTrainVICREGLC(pl.LightningModule):
         x_emb = self.model(**batch_data)
         aug_x_emb = self.model(**aug_batch_data)
         loss_dict = self.loss(x_emb,aug_x_emb)
- 
-        loss_dict = {f'loss_train/{key}': value for key, value in loss_dict.items()}
-        self.log_dict(loss_dict,on_epoch=False,on_step=True)
-        
-        return loss_dict['loss_train/loss']
+        with torch.no_grad():
+            loss_dict = {f'loss_train/{key}': value for key, value in loss_dict.items()}
+            self.log_dict(loss_dict,on_epoch=False,on_step=True)
+        loss = loss_dict['loss_train/loss']
+        return loss
      
     def validation_step(self, batch, batch_idx):
         batch_data,aug_batch_data= batch
@@ -72,9 +72,9 @@ class LitPreTrainVICREGLC(pl.LightningModule):
         x_emb = self.model(**batch_data)
         aug_x_emb = self.model(**aug_batch_data)
         loss_dict = self.loss(x_emb,aug_x_emb)
-        loss_dict = {f'loss_validation/{key}': value for key, value in loss_dict.items()}
-
-        self.log_dict(loss_dict,on_epoch=True,on_step=False)
+        with torch.no_grad():
+            loss_dict = {f'loss_validation/{key}': value for key, value in loss_dict.items()}
+            self.log_dict(loss_dict,on_epoch=True,on_step=False)
         return 0
     
     def test_step(self, batch, batch_idx):

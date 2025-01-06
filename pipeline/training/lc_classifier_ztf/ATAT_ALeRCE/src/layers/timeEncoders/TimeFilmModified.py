@@ -67,8 +67,7 @@ class TimeFilmModifiedMOD(nn.Module):
     def get_sin(self, t):
             # t: Batch size x time x dim, dim = 1:
             return torch.sin(self.ar * t.expand(-1, -1, self.n_harmonics))
-    
-    #@torch.compile
+     
     def get_cos(self, t):
         # t: Batch size x time x dim, dim = 1: 
         return torch.cos(self.ar * t.expand(-1, -1, self.n_harmonics)).masked_fill_(t ==0,0)
@@ -77,6 +76,5 @@ class TimeFilmModifiedMOD(nn.Module):
     def forward(self, x, t):
         alpha = torch.matmul(self.concise_sin_cos(t),self.alpha_weights)
         beta = torch.matmul(self.concise_sin_cos(t),self.beta_weights)
-        x  = self.dropout(x)
-        return (self.linear_proj(x)*alpha).add_(beta)#.masked_fill_(t ==0,0)
+        return (self.linear_proj(self.dropout(x))*alpha).add_(beta)#.masked_fill_(t ==0,0)
     

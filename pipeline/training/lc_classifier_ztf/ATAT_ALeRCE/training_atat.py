@@ -11,9 +11,9 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitData import LitData
-from src.models.LitATAT import LitATAT
-from src.models.LitLC import LitLC
-from src.models.LitTAB import LitTAB
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.multimodal.supervised.LitATAT import LitATAT
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.lightcurve.supervised.LitLC import LitLC
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.tabular.supervised.LitTAB import LitTAB
 
 from src.layers import ATAT
 

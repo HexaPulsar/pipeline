@@ -11,9 +11,9 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitData import LitData
-from src.models.LitATAT import LitATAT
-from src.models.LitLC import LitLC
-from src.models.LitTAB import LitTAB
+from src.models.multimodal.supervised.LitATAT import LitATAT
+from src.models.lightcurve.supervised.LitLC import LitLC
+from src.models.tabular.supervised.LitTAB import LitTAB
 
 from src.layers import ATAT
 
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     # load from checkpoint if there is one
 
     ############################  MODEL  ############################
-    pl_model = LitTAB(**args)
+    pl_model = LitATAT(**args)
 
     if args_general["load_pretrained_model"]:
         pl_model.atat = handler_checkpoint(

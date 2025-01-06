@@ -101,7 +101,7 @@ def handler_parser(
     #    "./{}/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
     #) as yaml_file:
     with open(
-        "/home/mdelafuente/batch_processing/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
+        "/home/magdalena/pipeline/h5file/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
     ) as yaml_file:
             dict_info = yaml.safe_load(yaml_file)
 

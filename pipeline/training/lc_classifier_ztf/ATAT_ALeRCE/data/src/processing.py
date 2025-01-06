@@ -3,8 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 import copy
-import glob
-from numba import jit
+import glob 
 
 MAX_DAYS = 2072
 num_obs_before_det = 10
@@ -120,8 +119,7 @@ def pad_list(lc, nepochs, dict_info, aux_times, flag_detections):
 # Genero la mascara donde hay observaciones de flujos, es decir, donde no hay PAD?
 def create_mask(lc):
     return (lc != 0).astype(float)
-
-@jit
+ 
 def normalizing_time(time_fid):
     mask_min = 9999999999 * (time_fid == 0).astype(
         float

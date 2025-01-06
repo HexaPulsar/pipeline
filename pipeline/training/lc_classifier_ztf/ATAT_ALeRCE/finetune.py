@@ -11,9 +11,10 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitData import LitData
-from src.models.LitFinetuneTAB import LitFinetuneTAB
-from src.models.LitFinetune import LitFinetune
-from src.models.LitATAT import LitATAT
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.tabular.supervised.LitFinetuneTAB import LitFinetuneTAB
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.lightcurve.supervised.LitFinetune import LitFinetune
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.tabular.supervised.LitFinetuneTAB import LitFinetuneTAB
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.multimodal.supervised.LitATAT import LitATAT
 #from src.layers import ATAT
 
 from pytorch_lightning.callbacks import ModelCheckpoint

@@ -11,6 +11,7 @@ data_preprocessing/h5file/
 
 
 data_exploration/
+pipeline/data_preprocessing/sixplusdets/2021_out/*
 h5file/
 # Distribution / packaging
 .Python
@@ -174,3 +175,4 @@ pipeline/mhps/mhps/mhps_wrapper.c
 pipeline/P4J/P4J/algorithms/analysis_of_variance.c
 pipeline/mhps/mhps/mhps_wrapper.c
 pipeline/P4J/P4J/algorithms/utilities.html
+data_preprocessing/sixplusdets/*

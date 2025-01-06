@@ -10,9 +10,9 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitPretrain import LitPretrain
-from src.models.LitPreTrainVICREGLC import LitPreTrainVICREG
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.lightcurve.contrastive.LitPreTrainVICREGLC import LitPreTrainVICREG
 
-from src.models.LitcATAT import LitcATAT
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.multimodal.contrastive.LitcATAT import LitcATAT
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import LearningRateMonitor

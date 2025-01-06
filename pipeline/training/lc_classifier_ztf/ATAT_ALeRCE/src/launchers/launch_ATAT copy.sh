@@ -1,12 +1,12 @@
 #!/bin/bash
 
 cd  ../..
-export CUDA_VISIBLE_DEVICES=0 #1,2 
+export CUDA_VISIBLE_DEVICES=1,2 
 
 # Define variables
 
 EXPERIMENT_TYPE="lc_md"
-EXPERIMENT_NAME=mm_scaleshiftfine_${seed}
+EXPERIMENT_NAME=mm_fine_${seed}
 DATASET_NAME="ztf_ff"
 pwd
 DATA_ROOT="data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12"
@@ -20,4 +20,5 @@ python training.py \
   --patience_general 10 \
   --num_harmonics 4 \
   --use_sampler_general 1 \
-  --lr_general 1e-04
+  --lr_general 1e-05
+   

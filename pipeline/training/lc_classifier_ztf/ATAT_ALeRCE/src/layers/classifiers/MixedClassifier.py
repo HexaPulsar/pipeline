@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class MixedClassifier(nn.Module):
-    def __init__(self, input_dim, num_classes, dropout=0.0, **kwargs):
+    def __init__(self, input_dim, num_classes, dropout=0.01, **kwargs):
         super().__init__()
 
         self.norm = nn.LayerNorm(input_dim)

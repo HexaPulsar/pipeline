@@ -9,13 +9,14 @@ class LitData(pl.LightningDataModule):
         super().__init__()
 
         self.data_root = data_root
-        self.batch_size = batch_size
+        self.batch_size = 256
         self.kwargs = kwargs
         print("KWARGS")
         print(self.kwargs)
         
     def train_dataloader(self):
         return get_dataloader(
+                    batch_size=self.batch_size,
                   dataset_used=ATATDataset(
                 data_root=self.data_root, set_type="train", **self.kwargs
             ),
@@ -25,6 +26,7 @@ class LitData(pl.LightningDataModule):
 
     def val_dataloader(self):
         return get_dataloader(
+            batch_size=self.batch_size,
             dataset_used=ATATDataset(
                 data_root=self.data_root, set_type="validation", **self.kwargs
             ),
@@ -34,6 +36,7 @@ class LitData(pl.LightningDataModule):
 
     def test_dataloader(self):
         return get_dataloader(
+            batch_size=self.batch_size,
             dataset_used=ATATDataset(
                 data_root=self.data_root, set_type="test", **self.kwargs
             ),

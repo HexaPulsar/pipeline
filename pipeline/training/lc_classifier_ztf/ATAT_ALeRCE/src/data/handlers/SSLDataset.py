@@ -44,7 +44,7 @@ class SSLDataset(Dataset):
         # only using partition 0
         assert partition_used == 0
 
-        h5_ = h5py.File("{}/no_contamination.h5".format(data_root))
+        h5_ = h5py.File("{}/2021_no_contamination.h5".format(data_root))
         #print(h5_.keys())
         self.these_idx = (
             h5_.get("test")[:]
@@ -77,7 +77,7 @@ class SSLDataset(Dataset):
 
         logging.info(f"Partition : {partition_used} Set Type : {set_type}")
         if self.use_metadata:
-            metadata_feat = h5_.get("md_cols")[:][self.these_idx]
+            metadata_feat = h5_.get("md_cols")[:]#[self.these_idx]
             path_QT = "{}/quantiles/metadata/md_qt-fold-{}.joblib".format(
                 data_root, partition_used
             )
@@ -101,76 +101,93 @@ class SSLDataset(Dataset):
                 )
 
         self.transforms_aug_lc = Compose([  LC.OnlyMaskPadding(),
-                                            RandomApply([LC.Scale(0.5,5),],p =0.5),
-                                            RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            RandomApply([LC.TimeWarp(0.1,1.5),],p =0.5),
-                                            #RandomApply([LC.SequenceShift((-3,3)),],p =0.5),
-                                            RandomApply([LC.RandomMask()], p =0.5),
+                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
+                                            #RandomApply([LC.GaussianNoise(),],p =1),
+                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5),
+                                            RandomApply([LC.SequenceShift((-30,0)),],p =0.5),
+                                             
+
                                             #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            
-                                            #TAB.GaussianNoise(),
-                                            #TAB.Jitter(),
+                                            #RandomApply([LC.GaussianNoise(),],p =1),
+  
                                             ])
         self.transforms_data_lc = Compose([LC.OnlyMaskPadding(),
-                                            RandomApply([LC.Scale(0.5,5),],p =0.5),
-                                            RandomApply([LC.RandomMask()], p =0.5),
-                                            RandomApply([LC.TimeWarp(0.5,1.5),],p =0.5), 
-                                            #RandomApply([LC.SequenceShift((-3,3)),],p =0.5),
                                             #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            RandomApply([LC.GaussianNoise(),],p =0.5),
+                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
+                                            #RandomApply([LC.RandomMask()], p =0.5),
+                                          
+
+                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5), 
+                                            RandomApply([LC.SequenceShift((-30,0)),],p =0.5),
                                             
                                             
-                                            #TAB.Jitter(),
-                                            #TAB.GaussianNoise(),
+                                            #RandomApply([LC.GaussianNoise(),],p =0.5),
+                                             
                                             ])
+        '''
+        self.transforms_aug_lc = Compose([   
+                                            RandomApply([TAB.Scale()],p = 0.5),
+                                            RandomApply([TAB.Factor()],p = 0.5),
+                                            RandomApply([TAB.Shift()],p = 0.5),
+                                            RandomApply([TAB.RandomShift()],p = 0.5),
+                                            
+                                            RandomApply([TAB.Jitter()],p = 0.5),
+                                            RandomApply([TAB.GaussianNoise()],p = 0.5),
+                                            ])
+        self.transforms_data_lc = Compose([ 
+                                            
+                                            RandomApply([TAB.Scale()],p = 0.5),
+                                            RandomApply([TAB.Factor()],p = 0.5),
+                                            RandomApply([TAB.Shift()],p = 0.5),
+                                            RandomApply([TAB.RandomShift()],p = 0.5),
+                                            RandomApply([TAB.Jitter()],p = 0.5),
+                                            RandomApply([TAB.GaussianNoise()],p = 0.5),
+                                            ])
+        '''
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
-
+        _idx = self.these_idx[idx]
         data_dict = {}
         aug_data_dict = {}
  
         if self.use_lightcurves:
-            data_dict.update({"data": torch.Tensor(self.data[idx]).float(),
-                              "time": torch.Tensor(self.time[idx]).float(),
-                                "mask": torch.Tensor(self.mask[idx]).bool()})
-            aug_data_dict.update({"data": torch.Tensor(self.data[idx]).float(),
-                              "time": torch.Tensor(self.time[idx]).float(),
-                                "mask": torch.Tensor(self.mask[idx]).bool()})
+            data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
+                              "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
+                                "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
+            aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
+                              "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
+                                "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
 
         tabular_features = []
         aug_tabular_features = []
         if self.use_metadata:
-            data_dict.update({"metadata_feat": self.metadata_feat[idx]})
+            data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
             tabular_features.append(data_dict["metadata_feat"])
             
-            aug_data_dict.update({"metadata_feat": self.metadata_feat[idx].clone()})
+            aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx].clone()})
             aug_tabular_features.append(aug_data_dict["metadata_feat"])
             
         if self.use_features: 
             data_dict.update({
-                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][idx]
+                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][_idx]
                         })
             tabular_features.append(aug_data_dict["extracted_feat"])
             
             aug_data_dict.update({
-                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][idx].clone()
+                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][_idx].clone()
                         })
             aug_tabular_features.append(aug_data_dict["extracted_feat"])
         
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
-      
-         
-        data_dict = self.transforms_data_lc(data_dict)
-        aug_data_dict = self.transforms_aug_lc(aug_data_dict)
         
-        return data_dict, aug_data_dict
+        return self.transforms_data_lc(data_dict), self.transforms_aug_lc(aug_data_dict)
 
     def __len__(self):
         """length of the dataset, is necessary for consistent getitem values"""
-        return  self.len
+        return len(self.these_idx)
     
     def get_tabular_data(self, tabular_data, path_QT, type_data):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")

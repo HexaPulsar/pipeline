@@ -100,50 +100,45 @@ class SSLDataset(Dataset):
                     }
                 )
 
-        self.transforms_aug_lc = Compose([  LC.OnlyMaskPadding(),
-                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
-                                            #RandomApply([LC.GaussianNoise(),],p =1),
-                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5),
-                                            RandomApply([LC.SequenceShift((-30,0)),],p =0.5),
-                                             
-
+        '''
+        self.transforms_aug_lc = Compose([   LC.OnlyMaskPadding(),
+                                            #RandomApply([LC.Scale(0.5,3),],p =0.5),
                                             #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            #RandomApply([LC.GaussianNoise(),],p =1),
-  
+                                            #RandomApply([LC.TimeWarp(0.9,1.2),],p =0.5),
+                                            #RandomApply([LC.ChannelTimeShift(),],p =1), 
+                                            #RandomApply([LC.TimeWarp(),],p =1), 
+                                            #RandomApply([LC.RandomMask(),],p =1), 
+
+                                            #RandomApply([LC.InverseCurve(),],p =0.5), 
+                                            #RandomApply([LC.FlipLC(),],p =0.5), 
+
+
                                             ])
         self.transforms_data_lc = Compose([LC.OnlyMaskPadding(),
                                             #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
-                                            #RandomApply([LC.RandomMask()], p =0.5),
-                                          
-
-                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5), 
-                                            RandomApply([LC.SequenceShift((-30,0)),],p =0.5),
-                                            
-                                            
+                                            #RandomApply([LC.Scale(0.1,1.5),],p =0.5),
+                                            #RandomApply([LC.TimeWarp(0.5,3),],p =0.5), 
+                                            #RandomApply([LC.SequenceShift((-15,0)),],p =0.5),
                                             #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                             
+
+                                            
                                             ])
         '''
-        self.transforms_aug_lc = Compose([   
-                                            RandomApply([TAB.Scale()],p = 0.5),
-                                            RandomApply([TAB.Factor()],p = 0.5),
-                                            RandomApply([TAB.Shift()],p = 0.5),
-                                            RandomApply([TAB.RandomShift()],p = 0.5),
-                                            
-                                            RandomApply([TAB.Jitter()],p = 0.5),
-                                            RandomApply([TAB.GaussianNoise()],p = 0.5),
+        self.transforms_aug_lc = Compose([RandomApply([TAB.GaussianNoise()],p = 0.5),
+                                          RandomApply([TAB.RandomShift()],p = 0.5),
+                                          RandomApply([TAB.RandomMask()],p = 1),
+
+                                          #RandomApply([TAB.Factor()],p = 1),
+                                          #RandomApply([TAB.Scale()],p = 1),
+                                          #RandomApply([TAB.GaussianNoise()],p = 1)
+                                          
                                             ])
-        self.transforms_data_lc = Compose([ 
-                                            
-                                            RandomApply([TAB.Scale()],p = 0.5),
-                                            RandomApply([TAB.Factor()],p = 0.5),
-                                            RandomApply([TAB.Shift()],p = 0.5),
-                                            RandomApply([TAB.RandomShift()],p = 0.5),
-                                            RandomApply([TAB.Jitter()],p = 0.5),
-                                            RandomApply([TAB.GaussianNoise()],p = 0.5),
-                                            ])
-        '''
+        
+                                          
+        self.transforms_data_lc = Compose([RandomApply([TAB.RandomMask()],p = 1),]
+                                          ,RandomApply([TAB.GaussianNoise()],p = 0.5),
+                                          RandomApply([TAB.RandomShift()],p = 0.5),)
+        
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """

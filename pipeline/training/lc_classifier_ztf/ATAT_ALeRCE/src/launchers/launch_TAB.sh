@@ -1,13 +1,13 @@
 #!/bin/bash
 
 cd ../../
-export CUDA_VISIBLE_DEVICES=0#1,2 
+export CUDA_VISIBLE_DEVICES=0 #1,2 
 
 # Define variables
 
 for seed in {0..0}; do
-  EXPERIMENT_TYPE="md"
-  EXPERIMENT_NAME=baseline_1e5_${seed}
+  EXPERIMENT_TYPE="md_feat"
+  EXPERIMENT_NAME=class_BASELINE_feat_md${seed}
   DATASET_NAME="ztf_ff"
   DATA_ROOT="data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12"
 

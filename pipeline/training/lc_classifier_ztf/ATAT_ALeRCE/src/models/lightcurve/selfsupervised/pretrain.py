@@ -92,7 +92,7 @@ class LitPreTrainVICREGLC(pl.LightningModule):
         cosine = CosineAnnealingWarmRestarts(optimizer,T_0=1200,eta_min=1e-5)                                         
         scheduler = SequentialLR(
                     optimizer,
-                    schedulers=[cosine,cosine],
+                    schedulers=[constant,constant],
                     milestones=[self.warmup]
                 )
 

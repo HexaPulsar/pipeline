@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import os
 from typing import Dict, Optional
 import torch.nn.functional as F
@@ -31,7 +32,9 @@ class LitTAB(pl.LightningModule):
         metrics = torchmetrics.MetricCollection({
             'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.general_["num_classes"]),
             'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
-            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
+            'precision': torchmetrics.classification.Precision(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+
         })
 
         self.train_metrics = metrics.clone(prefix='train/')
@@ -42,7 +45,18 @@ class LitTAB(pl.LightningModule):
         self.gradient_clip_val = (
             1.0 if kwargs["general"]["use_gradient_clipping"] else 0
         )
-
+        import glob
+        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/MD/pretrain_randommask_md_ft/' #
+        print(f'loading model {lc_out_path}')
+        lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
+        checkpoint_ = torch.load(lc_out_path)
+        weights = OrderedDict()
+        for key in checkpoint_["state_dict"].keys():
+            if 'projection' in key:
+                continue
+            else:    
+                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
+        #self.model.TAB.load_state_dict(weights, strict=True)
         
     def gradfilter_ema(self,
         m: nn.Module,

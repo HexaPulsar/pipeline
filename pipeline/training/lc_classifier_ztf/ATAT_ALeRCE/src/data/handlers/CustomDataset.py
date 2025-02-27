@@ -10,7 +10,7 @@ from joblib import load
 
 from torchvision.transforms import Compose, RandomApply
 from .augmentations import SCAugmentation, ThreeTimeMask
-
+from ...augmentations.TabularTransformations import RandomMask
 class ATATDataset(Dataset):
     def __init__(
         self,
@@ -105,8 +105,10 @@ class ATATDataset(Dataset):
                 )
         self.transforms = Compose([ThreeTimeMask(self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None),
                                     SCAugmentation(self.per_init_time,
-                                                list_time_to_eval,self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None)
+                                                list_time_to_eval,self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None),
+                                    
                                     ])
+        #self.random_mask = Compose([RandomMask()])
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -149,7 +151,7 @@ class ATATDataset(Dataset):
 
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
-        
+        #data_dict = self.random_mask(data_dict)
         #print(data_dict['tabular_feat'].shape)
         return data_dict
 

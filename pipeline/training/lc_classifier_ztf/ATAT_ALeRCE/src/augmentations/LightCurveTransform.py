@@ -88,6 +88,8 @@ class ChessMask:
 
 class InverseCurve:
     def __call__(self, sample):
+        sample = deepcopy(sample)
+
         data = sample["data"]
         data[:, :] *= -1
         sample["data"] = data
@@ -95,6 +97,8 @@ class InverseCurve:
 
 class FlipLC:
     def __call__(self, sample):
+        sample = deepcopy(sample)
+
         data = sample["data"]
         time = sample["time"]
         mask = sample["mask"]
@@ -177,10 +181,14 @@ class SequenceShift:
         Returns:
             dict: Dictionary with shifted data
         """
+        sample = deepcopy(sample)
 
         data = sample["data"]
         time = sample["time"]
         shift_amount = random.randint(self.shift_range[0], self.shift_range[1])
+
+        max_len = (data != 0).sum(dim = 0).max()
+        shift_amount = (shift_amount if shift_amount < max_len else (max_len-1))
         # Create output tensor of same shape
         result_data = torch.zeros_like(data)
         result_time = torch.zeros_like(data)
@@ -211,8 +219,6 @@ class SequenceShift:
         sample["mask"] = (result_data != 0)
         return sample
 
-
-
 class Jitter:
     def __call__(self, sample):
         x = sample["data"]  # Shape: [bs, seqlen, channels]
@@ -235,6 +241,8 @@ class Jitter:
 
 class GaussianNoise:
     def __call__(self, sample):
+        sample = deepcopy(sample)
+
         x = sample["data"]  # Shape: [bs, seqlen, channels]
         mask = x!=0
           # torch.rand(1).to(device = x.device).item()
@@ -286,6 +294,8 @@ class CutLC:
 
 class OnlyMaskPadding:
     def __call__(self,sample:dict): 
+        sample = deepcopy(sample)
+
         sample['mask'] = (sample['data'] != 0)
         return sample
     
@@ -392,6 +402,7 @@ class Scale:
         self.max_scale = max_scale
 
     def __call__(self, sample):
+        sample = deepcopy(sample)
         data = sample['data']
         #time = sample['time']
          
@@ -426,30 +437,31 @@ class RandomPointDrop:
 
  
 class TimeWarp: 
-    def __init__(self, min_scale=0.5, max_scale=1.5):
+    def __init__(self, min_scale=-2*torch.pi, max_scale=2*torch.pi):
         self.min_scale = min_scale
         self.max_scale = max_scale
     def __call__(self, sample):
         x = sample['time']
         
         factor =torch.FloatTensor(1).uniform_(self.min_scale,self.max_scale).to(x.device)
-        #factor = (r1 - r2) * torch.rand(1) + r2
-
-        #print(factor)
+        
         sample['time'] = x *factor
         return sample
     
+import math
 
-
-class TimeShift: 
-    def __init__(self, min_scale=0.1, max_scale=1.0):
+class ChannelTimeShift: 
+    def __init__(self, min_scale=-2*torch.pi, max_scale=2*torch.pi):
         self.min_scale = min_scale
         self.max_scale = max_scale
     def __call__(self, sample):
+        sample = deepcopy(sample)
         x = sample['time']
         
-        factor =torch.FloatTensor(1).uniform_(self.min_scale,self.max_scale).to(x.device)
-        mask = sample['time'] * factor
-        sample['time'] = sample['time'] + mask
+        for i in range(x.size(1)):
+            min_scale = sample['time'][:,i].max()
+            factor =torch.FloatTensor(1).uniform_(-min_scale,self.max_scale).to(x.device)
+            mask = (sample['time'][:,i]>0) * factor
+            sample['time'][:,i] = sample['time'][:,i] + mask
         return sample
     

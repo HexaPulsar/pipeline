@@ -11,7 +11,7 @@ from .projector import Projector
 class LightCurveTransformer(nn.Module):
     def __init__(self, **kwargs):
         super(LightCurveTransformer, self).__init__()
-        self.time_encoder = TimeHandlerMOD(**kwargs)
+        self.time_encoder = TimeHandler(**kwargs)
         
         encoder = nn.TransformerEncoderLayer(d_model = kwargs['embedding_size'],
                                                  nhead=kwargs['num_heads'],
@@ -21,7 +21,7 @@ class LightCurveTransformer(nn.Module):
                                                  batch_first=True,
                                                  norm_first=True)
          
-        self.transformer_lc = nn.TransformerEncoder(encoder_layer=encoder,num_layers=kwargs['num_encoders'])
+        self.transformer_lc = nn.TransformerEncoder(encoder_layer=encoder,num_layers=kwargs['num_encoders'], norm = nn.LayerNorm(kwargs['embedding_size']))
         
         self.token_lc = Token(**kwargs)
         self.register_buffer('m_token',torch.ones(1, 1, 1).bool())
@@ -63,8 +63,8 @@ class LightCurveProjector(nn.Module):
         super(LightCurveProjector, self).__init__() 
         self.transformer = LightCurveTransformer(**kwargs)
         self.project = Projector(192,
-                                48,
-                                48, l2norm = False)
+                                192,
+                                192, l2norm = False)
         self.init_model()
 
     def init_model(self):

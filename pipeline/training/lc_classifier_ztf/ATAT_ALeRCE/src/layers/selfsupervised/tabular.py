@@ -20,17 +20,23 @@ class TabularTransformer(nn.Module):
                                                  batch_first=True,
                                                  norm_first=True)
          
-        self.transformer_ft= nn.TransformerEncoder(encoder_layer=encoder,num_layers=kwargs['num_encoders'])
+        self.transformer_ft= nn.TransformerEncoder(encoder_layer=encoder,num_layers=kwargs['num_encoders'], norm = nn.LayerNorm(kwargs['embedding_size']))
         
         self.token_ft = Token(**kwargs) 
-        
-    def embedding_feats(self, f):
+        self.register_buffer('m_token',torch.ones(1, 1, 1).bool())
+    def embedding_feats(self, f, mask = None):
         f_mod = self.embedding_ft(**{"f": f}) 
-        return torch.cat([self.token_ft(f.shape[0]), f_mod], axis=1) 
-    
-    def forward(self,tabular_feat, **kwargs): 
-        f_mod = self.embedding_feats(**{"f": tabular_feat})
-        f_emb = self.transformer_ft(**{"src": f_mod, 'src_key_padding_mask':None}) 
+        if mask is not None:
+            return torch.cat([self.token_ft(f.shape[0]), f_mod], axis=1), torch.cat([self.m_token.repeat(mask.shape[0],1,1), mask], axis=1)
+
+        return torch.cat([self.token_ft(f.shape[0]), f_mod], axis=1), None 
+        
+    def forward(self,tabular_feat,mask = None, **kwargs): 
+        f_mod, mask = self.embedding_feats(**{"f": tabular_feat, 'mask':mask})
+        if mask is not None:
+            mask =  ~(mask.squeeze(-1))
+            #print(mask.shape)
+        f_emb = self.transformer_ft(**{"src": f_mod, 'src_key_padding_mask':mask}) 
         return f_emb
 
 
@@ -58,8 +64,8 @@ class TabularProjector(nn.Module):
         super(TabularProjector, self).__init__()
         self.transformer = TabularTransformer(**kwargs)
         self.project = Projector(128,
-                                    48,
-                                    48,
+                                    8,
+                                    8,
                                     l2norm = False) 
         self.init_model()
              

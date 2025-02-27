@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 from custom_parser import parse_model_args, handler_parser
 
 from src.data.modules.LitPretrain import LitPretrain
-from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.tabular.contrastive.LitPreTrainVICREGTAB import LitPreTrainVICREG
+from src.models.tabular.selfsupervised.pretrain import LitPreTrainVICREG
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -168,7 +168,7 @@ if __name__ == "__main__":
         callbacks=all_callbacks,
         logger=all_loggers,
         val_check_interval=0.5,
-        log_every_n_steps=100,
+        log_every_n_steps=10,
         accelerator="gpu",
         #devices=[],
         min_epochs=1,

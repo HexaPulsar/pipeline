@@ -1,10 +1,10 @@
 
 cd ../../
-export CUDA_VISIBLE_DEVICES=0#1,2 
+export CUDA_VISIBLE_DEVICES=0 #1,2 
 pwd
 # Define variables
 EXPERIMENT_TYPE="lc"
-EXPERIMENT_NAME="v1_scaleshift"
+EXPERIMENT_NAME="DEBUG_random_mask_192"
 DATASET_NAME="ztf_ff"
 
 DATA_ROOT="/home/magdalena/pipeline/data_preprocessing/sixplusdets/final_datasets/"

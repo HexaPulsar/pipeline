@@ -175,7 +175,7 @@ if __name__ == "__main__":
         accelerator="gpu",
         #devices=1,
         min_epochs=1,
-        max_epochs=args_general["num_epochs"],
+        max_epochs=19, #args_general["num_epochs"],
         gradient_clip_val=1,
         #check_val_every_n_epoch=5,
         #accumulate_grad_batches = 5,

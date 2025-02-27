@@ -16,6 +16,21 @@ class Jitter:
 
         sample['tabular_feat'] = x_with_jitter
         return sample
+    
+from copy import deepcopy
+class RandomShuffle:
+
+    def __call__(self, sample):
+        sample = deepcopy(sample)
+        data = sample['tabular_feat']
+        #time = sample['time']
+        indices = torch.randperm(data.size(0))
+
+        # Scale each point of sample['data'] with its corresponding scale factor
+        sample['tabular_feat'] = data[indices]
+        #sample['time'] = time * scale_factors
+
+        return sample
 
 class Factor:
     def __init__(self, min_scale=0.99, max_scale=1.01):
@@ -31,6 +46,8 @@ class Factor:
         #sample['time'] = time * scale_factors
 
         return sample
+
+
 
 class Shift:
     def __init__(self, min_scale=0.99, max_scale=1.01):
@@ -48,23 +65,26 @@ class Shift:
         return sample
     
 class RandomShift:
-    def __init__(self, min_scale=0.99, max_scale=1.01):
+    def __init__(self, min_scale=0.999, max_scale=1.001):
         self.min_scale = min_scale
         self.max_scale = max_scale
 
     def __call__(self, sample):
         data = sample['tabular_feat']
         #time = sample['time']
-        factor = torch.FloatTensor(1).uniform_(-0.01, 0.01)
+        factor = torch.FloatTensor(1).uniform_(-0.3, 0.3)
         mask = torch.rand_like(data, device=data.device) >=0.5
+         
         # Scale each point of sample['data'] with its corresponding scale factor
         sample['tabular_feat'] = data + factor*mask
+        sample['tabular_feat'] = torch.clip(sample['tabular_feat'], 0,1.0)
+
         #sample['time'] = time * scale_factors
 
         return sample
 
 class Scale:
-    def __init__(self, min_scale=0.99, max_scale=1.01):
+    def __init__(self, min_scale=0.9990, max_scale=1.0001):
         self.min_scale = min_scale
         self.max_scale = max_scale
 
@@ -87,14 +107,14 @@ class GaussianNoise:
     def __call__(self, sample):
         x = sample['tabular_feat']  # Shape: [bs, seqlen, channels]
         mask = (x != 0)
-        self.std =  torch.FloatTensor(1).uniform_(0, 1.5).to(device = x.device).item()
+        self.std =  torch.FloatTensor(1).uniform_(0, 0.1).to(device = x.device).item()
         # Generate Gaussian noise for each channel independently
-        noise = torch.normal(self.mean, self.std, size=x.shape).to(device = x.device)
+        noise = torch.normal(0.5, self.std, size=x.shape).to(device = x.device)
          
         # Apply noise only to the non-
         # zero values
         x_with_noise = x + noise*mask
-        x_with_noise = torch.clip(x_with_noise, 0,1.1)
+        x_with_noise = torch.clip(x_with_noise, 0,1.0)
         sample['tabular_feat'] = x_with_noise
         return sample
     
@@ -108,7 +128,7 @@ class RandomMask:
         Returns:
             torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
         """
-        mask = ( torch.rand_like(sample['tabular_feat'])>=0.5).bool()
+        mask = (torch.rand_like(sample['tabular_feat'])>=0.5).bool()
         
         sample['mask'] = mask
         return sample

@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import os
 from typing import Dict, Optional
 import torch.nn.functional as F
@@ -29,7 +30,9 @@ class LitLC(pl.LightningModule):
         metrics = torchmetrics.MetricCollection({
             'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.general_["num_classes"]),
             'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
-            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
+            'precision': torchmetrics.classification.Precision(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+
         })
 
         self.train_metrics = metrics.clone(prefix='train/')
@@ -42,7 +45,19 @@ class LitLC(pl.LightningModule):
         )
         #for param in self.model.LC.parameters():
         #    param.requires_grad = False
-        
+        import glob
+        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/DEBUG_random_mask_192/' #
+        print(f'loading model {lc_out_path}')
+        lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
+        checkpoint_ = torch.load(lc_out_path)
+        weights = OrderedDict()
+        for key in checkpoint_["state_dict"].keys():
+            if 'projection' in key:
+                continue
+            else:    
+                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
+        self.model.LC.load_state_dict(weights, strict=True)
+
     def gradfilter_ema(self,
         m: nn.Module,
         grads: Optional[Dict[str, torch.Tensor]] = None,
@@ -135,3 +150,18 @@ class LitLC(pl.LightningModule):
             input_dict.update({"data_err": batch_data["data_err"].float()})
 
         tabular_features = []
+    def configure_optimizers(self):
+       
+        self.learning_rate = self.general_['lr']
+        
+        optimizer = optim.AdamW(self.parameters(), 
+                                lr = self.learning_rate)
+        constant = ConstantLR(optimizer,1)  
+        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=1200,eta_min=1e-5)                                         
+        scheduler = SequentialLR(
+                    optimizer,
+                    schedulers=[constant,constant],
+                    milestones=[self.warmup]
+                )
+
+        return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]

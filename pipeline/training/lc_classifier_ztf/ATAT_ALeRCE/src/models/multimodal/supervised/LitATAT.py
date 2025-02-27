@@ -30,7 +30,10 @@ class LitATAT(pl.LightningModule):
         metrics = torchmetrics.MetricCollection({
             'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.general_["num_classes"]),
             'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
-            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.general_["num_classes"], average="macro"),
+            'precision': torchmetrics.classification.Precision(task="multiclass", num_classes=self.general_["num_classes"], average="macro")
+            
+
         })
 
         self.train_metrics = metrics.clone(prefix='train/')
@@ -42,7 +45,7 @@ class LitATAT(pl.LightningModule):
         )
         import glob
         
-        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/v1_scaleshift/' #
+        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/DEBUG_timehandler_channelshiftywarp_192/' #
         print(f'loading model {lc_out_path}')
         lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
         checkpoint_ = torch.load(lc_out_path)
@@ -54,7 +57,7 @@ class LitATAT(pl.LightningModule):
                 weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
         self.atat.LC.load_state_dict(weights, strict=True)
 
-        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/MD/v6_tabular/' #
+        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/MD/bothrandommask/' #
         print(f'loading model {lc_out_path}')
         lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
         checkpoint_ = torch.load(lc_out_path)

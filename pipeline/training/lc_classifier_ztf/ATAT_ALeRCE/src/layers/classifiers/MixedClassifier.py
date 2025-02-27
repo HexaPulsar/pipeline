@@ -3,10 +3,10 @@ import torch.nn as nn
 
 
 class MixedClassifier(nn.Module):
-    def __init__(self, input_dim, num_classes, dropout=0.01, **kwargs):
+    def __init__(self, input_dim, num_classes, dropout=0.1, **kwargs):
         super().__init__()
 
-        self.norm = nn.LayerNorm(input_dim)
+        self.norm = nn.Sequential() #nn.LayerNorm(input_dim)
         self.net = nn.Sequential(
             nn.Linear(input_dim, input_dim),
             nn.GELU(),

@@ -13,8 +13,8 @@ def off_diagonal(x):
 class VICReg(nn.Module):
     def __init__(self):
         super().__init__()
-        self.inv = 5
-        self.var = 5
+        self.inv = 25
+        self.var = 25
         self.cov = 1
 
     def forward(self, x, y):

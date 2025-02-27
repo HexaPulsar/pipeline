@@ -148,7 +148,7 @@ values.staging.yml
 values.production.yml
 *.tgz
 .vscode/
-
+pipeline/data_preprocessing/data/*
 .terraform/
 .terraform.lock.hcl
 terraform.tfvars
@@ -176,3 +176,4 @@ pipeline/P4J/P4J/algorithms/analysis_of_variance.c
 pipeline/mhps/mhps/mhps_wrapper.c
 pipeline/P4J/P4J/algorithms/utilities.html
 data_preprocessing/sixplusdets/*
+data_preprocessing/data/*

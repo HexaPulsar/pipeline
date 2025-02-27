@@ -31,44 +31,139 @@ from sqlalchemy.exc import SQLAlchemyError
 import time
 
 class OIDMiner:
-    def __init__():
+    # The miner should try mining by days. If timeout, try hours. If timeout, try minutes. Else log date+oid, continue
+    def __init__(self,years_list:list,find_latest_date_in_dir:bool= False):
+        assert all([isinstance(year,int) for year in years_list])
+
+        for year in years_list:
+            year_dir = os.path.join(core_path, str(year))
+            os.makedirs(year_dir, exist_ok=True)
+            mjd_results = self.calculate_mjd_for_year(year)
+            if find_latest_date_in_dir:
+                existing_files = glob.glob(os.path.join(year_dir, 'oids_*.parquet'))
+                if existing_files:
+                    latest_file = max(existing_files, key=os.path.getctime)
+                    latest_mjd = float(latest_file.split('_')[-1].split('.')[0])
+                    start_index = next(i for i, (_, mjd) in enumerate(mjd_results) if mjd > latest_mjd)
+                else:
+                    start_index = 0
+        
+            for day in tqdm(range(start_index, len(mjd_results)-1)):
+                try: #try day mining
+                    #setup connection
+                    self.mine_day(day,)
+                except:
+                    try:
+                        hour_intervals = self.calculate_hour_intervals(day,day+1)
+                        hour_df_list = []
+                        for hour in range(len(hour_intervals))
+                            # Log the error with the MJD value that failed
+                            hours_df = self.mine_hour(hour_intervals[hour],hour_intervals[hour+1])
+                            hour_df_list.append(hours_df)
+                            day_df = pd.concat(hour_df_list)
+                            file_name = f'oids_{str(day).replace(".0","")}.parquet'
+                            file_path = os.path.join(year_dir, file_name)
+                            day_df.to_parquet(file_path)
+                    except Exception as e:
+                        error_msg = f"Error querying for MJD {mjd_results[day][1]}: {str(e)}"
+                        logging.error(error_msg)
+                        #print(error_msg)  # Also print to console for immediate feedback
+                        continue  # Move to the next iteration
+
+    def calculate_mjd(self,date_string):
+        # Parse the input string
+        day = int(date_string[:2])
+        month = int(date_string[2:4])
+        year = int(date_string[4:])
+        
+        # Add 2000 to the year if it's less than 100
+        if year < 100:
+            year += 2000
+        
+        # Create a datetime object
+        date = datetime(year, month, day)
+        
+        # Calculate the Julian Date
+        jd = date.toordinal() + 1721424.5
+        
+        # Calculate the Modified Julian Date
+        mjd = jd - 2400000.5
+        
+        # Return the MJD as a float
+        return round(mjd, 2)
+
+    def calculate_mjd_for_year(self,year):
+        start_date = datetime(year, 1, 1)
+        end_date = datetime(year, 12, 31)
+        
+        mjd_list = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_string = current_date.strftime("%d%m%Y")
+            mjd = self.calculate_mjd(date_string)
+            mjd_list.append((current_date.strftime('%Y-%m-%d'), mjd))
+            current_date += timedelta(days=1)
+        
+        return mjd_list
+     
+    def mine_day(self,start_mjd,end_mjd):
+        try:
+            client = Alerce()
+            url = 'https://raw.githubusercontent.com/alercebroker/usecases/master/alercereaduser_v4.json'
+            params = requests.get(url).json()['params']
+            engine = sa.create_engine('postgresql+psycopg2://' + params['user'] \
+                            + ':' + params['password'] + '@' + params['host'] \
+                            + '/' + params['dbname'])
+            conn = engine.connect()
+            query = f"""SELECT oid, ndet
+                FROM alerce."object" o
+                WHERE mjdstarthist >= {start_mjd[1]} AND mjdstarthist < {end_mjd[1]}
+                """
+            df_day = pd.read_sql_query(query, conn)
+            df_day = df_day.drop_duplicates('oid').set_index('oid')
+            conn.close()
+            return df_day
+            
+        except:
+            conn.close()
+            return
+        
+        # Save the file in the year directory
+        
+    def calculate_hour_intervals(self,start_mjd,end_mjd):
         pass
+        
 
-def calculate_mjd(date_string):
-    # Parse the input string
-    day = int(date_string[:2])
-    month = int(date_string[2:4])
-    year = int(date_string[4:])
+    def mine_hour(self,start_mjd,end_mjd):
+        client = Alerce()
+        url = 'https://raw.githubusercontent.com/alercebroker/usecases/master/alercereaduser_v4.json'
+        params = requests.get(url).json()['params']
+        engine = sa.create_engine('postgresql+psycopg2://' + params['user'] \
+                        + ':' + params['password'] + '@' + params['host'] \
+                        + '/' + params['dbname'])
+        conn = engine.connect()
+        per_hour_intervals = self.calculate_hour_intervals(start_mjd,end_mjd)
+        try:
+            query = f"""SELECT oid, ndet
+                FROM alerce."object" o
+                WHERE mjdstarthist >= {start_mjd[1]} AND mjdstarthist < {mjd_results[day+1][1]}
+                """
+            
+            df_day = pd.read_sql_query(query, conn)
+            df_day = df_day.drop_duplicates('oid').set_index('oid'\)
+        except:
+            print('lalalala')
+            
+            # Save the file in the year directory
+            file_name = f'oids_{str(mjd_results[day][1]).replace(".0","")}.parquet'
+            file_path = os.path.join(year_dir, file_name)
+            df_day.to_parquet(file_path)
+            conn.close()
+            return 
     
-    # Add 2000 to the year if it's less than 100
-    if year < 100:
-        year += 2000
-    
-    # Create a datetime object
-    date = datetime(year, month, day)
-    
-    # Calculate the Julian Date
-    jd = date.toordinal() + 1721424.5
-    
-    # Calculate the Modified Julian Date
-    mjd = jd - 2400000.5
-    
-    # Return the MJD as a float
-    return round(mjd, 2)
 
-def calculate_mjd_for_year(year):
-    start_date = datetime(year, 1, 1)
-    end_date = datetime(year, 12, 31)
-    
-    mjd_list = []
-    current_date = start_date
-    while current_date <= end_date:
-        date_string = current_date.strftime("%d%m%Y")
-        mjd = calculate_mjd(date_string)
-        mjd_list.append((current_date.strftime('%Y-%m-%d'), mjd))
-        current_date += timedelta(days=1)
-    
-    return mjd_list
+
+         
 
 # Set up logging
 logging.basicConfig(filename='query_errors.log', level=logging.ERROR,

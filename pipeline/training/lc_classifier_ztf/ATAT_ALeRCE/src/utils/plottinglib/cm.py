@@ -39,6 +39,7 @@ def elasticc_confusion_matrix(
     # Compute confusion matrix
     cm = confusion_matrix(y_true, y_pred)
     # Only use the labels that appear in the data
+     
     classes = classes[unique_labels(y_true, y_pred)]
 
     if normalize:

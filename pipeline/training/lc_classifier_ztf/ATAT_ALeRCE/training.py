@@ -196,7 +196,7 @@ if __name__ == "__main__":
         callbacks=all_callbacks,
         logger=all_loggers,
         val_check_interval=0.5,
-        log_every_n_steps=100,
+        log_every_n_steps=10,
         accelerator="gpu",
         min_epochs=1,
         max_epochs=args_general["num_epochs"],

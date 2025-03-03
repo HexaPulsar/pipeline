@@ -1,0 +1,12 @@
+from data_preprocessing.src.mining.OIDExtractor import DBExtractor
+from data_preprocessing.src.h5_constructor.CreateAstroObjectPKL import CreateAstroObjectPKL
+#from ao2atat iport AO2ATAT
+#
+#DBExtractor(path_oids_to_pull='/home/mdelafuente/SSL/2020_oids.parquet',
+#            path_to_save_dir='/home/mdelafuente/SSL/2020/pulled_data/')
+
+
+CreateAstroObjectPKL(chunks_dir='/home/mdelafuente/SSL/pulled_data/',
+                     output_dir='/home/mdelafuente/SSL/aos/',
+                     n_jobs=8)
+

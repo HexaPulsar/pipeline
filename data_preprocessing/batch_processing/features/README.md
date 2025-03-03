@@ -1,2 +1,0 @@
-# Batch processing: features + classification
-

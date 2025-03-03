@@ -6,7 +6,7 @@ import torch
 from typing import Dict, Optional, Literal
 from src.layers.selfsupervised.lightcurve import LightCurveProjector
 import pytorch_lightning as pl  
-from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR 
+from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR, LinearLR
 
 from src.losses.VICReg import VICReg 
 
@@ -23,7 +23,6 @@ class LitPreTrainVICREGLC(pl.LightningModule):
 
         self.loss = VICReg()
         self.model = LightCurveProjector(**self.lightcv_)
- 
         self.warmup = 0
 
     def gradfilter_ema(self,
@@ -65,6 +64,7 @@ class LitPreTrainVICREGLC(pl.LightningModule):
             self.log_dict(loss_dict,on_epoch=False,on_step=True)
         loss = loss_dict['loss_train/loss']
         return loss
+    
      
     def validation_step(self, batch, batch_idx):
         batch_data,aug_batch_data= batch
@@ -81,18 +81,26 @@ class LitPreTrainVICREGLC(pl.LightningModule):
         pass
 
         return 0
-    
     def configure_optimizers(self):
-       
+        self.warmup = 336*10
         self.learning_rate = self.general_['lr']
+        optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
+
+        # Create a linear warmup scheduler starting from 1e-7
         
-        optimizer = optim.AdamW(self.parameters(), 
-                                lr = self.learning_rate)
+        #warmup = LinearLR(optimizer, 
+        #                start_factor=1e-5/self.learning_rate,  # Start from 1e-7
+        #                end_factor=1.0,
+        #                total_iters=self.warmup)
+
+        # Keep your cosine annealing scheduler
+        cosine = CosineAnnealingWarmRestarts(optimizer, T_0=336*5, eta_min=1e-5)
         constant = ConstantLR(optimizer,1)  
-        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=1200,eta_min=1e-5)                                         
+
+        # Create sequential scheduler with warmup followed by cosine
         scheduler = SequentialLR(
                     optimizer,
-                    schedulers=[cosine,cosine],
+                    schedulers=[constant,constant],
                     milestones=[self.warmup]
                 )
 

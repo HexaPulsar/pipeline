@@ -9,10 +9,8 @@ class LitData(pl.LightningDataModule):
         super().__init__()
 
         self.data_root = data_root
-        self.batch_size = 256
+        self.batch_size = batch_size
         self.kwargs = kwargs
-        print("KWARGS")
-        print(self.kwargs)
         
     def train_dataloader(self):
         return get_dataloader(

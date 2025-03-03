@@ -7,7 +7,7 @@ import math
 
 
 class TimeFilmModified(nn.Module):
-    def __init__(self, n_harmonics=16, embedding_size=64, Tmax=1000.0, input_size=1):
+    def __init__(self, n_harmonics=4, embedding_size=64, Tmax=1000.0, input_size=1):
         super(TimeFilmModified, self).__init__()
         self.alpha_sin = nn.Parameter(torch.randn(n_harmonics, embedding_size))
         self.alpha_cos = nn.Parameter(torch.randn(n_harmonics, embedding_size))
@@ -20,38 +20,39 @@ class TimeFilmModified(nn.Module):
         self.linear_proj = nn.Sequential(
             nn.Linear(in_features=input_size, out_features=embedding_size, bias=True),
         )
-
-    def get_sin(self, t):
+        self.dropout = nn.Dropout(0.05)
+        
+        
+    def get_sin(self, t,mask):
         # t: Batch size x time x dim, dim = 1:
+        #print(t.shape, self.ar.shape)  
         return torch.sin(
-            (2 * math.pi * self.ar * t.repeat(1, 1, self.n_harmonics)) / self.Tmax
+            (2 * math.pi * self.ar * (t).repeat(1, 1, self.n_harmonics)) / self.Tmax
         )
 
-    def get_cos(self, t):
+    def get_cos(self, t,mask):
         # t: Batch size x time x dim, dim = 1:
         return torch.cos(
-            (2 * math.pi * self.ar * t.repeat(1, 1, self.n_harmonics)) / self.Tmax
-        )
+            (2 * math.pi * self.ar * (t).repeat(1, 1, self.n_harmonics)) / self.Tmax
+        )#.masked_fill_(t.repeat(1,1,self.n_harmonics) == 0,0) 
 
-    def get_sin_cos(self, t):
-        return self.get_sin(t), self.get_cos(t)
+    def get_sin_cos(self, t,mask):
+        return self.get_sin(t,mask), self.get_cos(t,mask)
 
-    def forward(self, x, t):
-        sin_emb, cos_emb = self.get_sin_cos(t)
-
+    def forward(self, x, t,mask):
+        sin_emb, cos_emb = self.get_sin_cos(t,mask)
+    
         alpha = torch.matmul(sin_emb, self.alpha_sin) + torch.matmul(
             cos_emb, self.alpha_cos
         )
         beta = torch.matmul(sin_emb, self.beta_sin) + torch.matmul(
             cos_emb, self.beta_cos
         )
-
-        return self.linear_proj(x) * alpha + beta
-
-   
+         
+        return self.dropout(self.linear_proj(x)) * alpha + self.dropout(beta) 
 
 class TimeFilmModifiedMOD(nn.Module):
-    def __init__(self, n_harmonics=4, embedding_size=64, Tmax=1000.0, input_size=1,dropout=0.01):
+    def __init__(self, n_harmonics=16, embedding_size=64, Tmax=1000.0, input_size=1,dropout=0.00):
         super().__init__()
         self.alpha_weights = nn.Parameter(torch.randn(2*n_harmonics, embedding_size))
         self.beta_weights = nn.Parameter(torch.randn(2*n_harmonics, embedding_size))

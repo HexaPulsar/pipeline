@@ -13,6 +13,7 @@ data_preprocessing/h5file/
 data_exploration/
 pipeline/data_preprocessing/sixplusdets/2021_out/*
 h5file/
+/home/mdelafuente/pipeline/SSL_final_datasets/*
 # Distribution / packaging
 .Python
 build/

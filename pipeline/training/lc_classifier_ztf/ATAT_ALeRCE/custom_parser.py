@@ -46,7 +46,7 @@ def parse_model_args(arg_dict=None):
     parser.add_argument("--use_sampler_general", type=int, default=1)
     
     parser.add_argument("--batch_size_general", type=int, default=512)
-    parser.add_argument("--num_epochs_general", type=int, default=100)
+    parser.add_argument("--num_epochs_general", type=int, default=500)
     parser.add_argument("--patience_general", type=int, default=30)
     parser.add_argument("--lr_general", type=float, default=2e-4)
     parser.add_argument(
@@ -101,7 +101,7 @@ def handler_parser(
     #    "./{}/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
     #) as yaml_file:
     with open(
-        "/home/magdalena/pipeline/h5file/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
+        "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/dict_info.yaml".format(parser_dict["data_root_general"]), "r"
     ) as yaml_file:
             dict_info = yaml.safe_load(yaml_file)
 

@@ -166,17 +166,16 @@ if __name__ == "__main__":
         pl_model.atat.change_clf(args_general["num_classes"])
 
     ############################  TRAINING  ############################
-    pl_model = torch.compile(pl_model)#,fullgraph=True)
+    #pl_model = torch.compile(pl_model)#,fullgraph=True)
     trainer = Trainer(
         callbacks=all_callbacks,
         logger=all_loggers,
-        val_check_interval=0.5,
+        #val_check_interval=0.5,
         log_every_n_steps=10,
         accelerator="gpu",
         #devices=1,
-        min_epochs=1,
+        min_epochs=1,   
         max_epochs=args_general["num_epochs"],
-        gradient_clip_val=1,
         #check_val_every_n_epoch=5,
         #accumulate_grad_batches = 5,
         num_sanity_val_steps=0,

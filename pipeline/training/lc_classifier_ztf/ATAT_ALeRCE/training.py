@@ -180,7 +180,7 @@ if __name__ == "__main__":
     # load from checkpoint if there is one
 
     ############################  MODEL  ############################
-    pl_model = LitATAT(**args)
+    pl_model = LitLC(**args)
 
     if args_general["load_pretrained_model"]:
         pl_model.atat = handler_checkpoint(

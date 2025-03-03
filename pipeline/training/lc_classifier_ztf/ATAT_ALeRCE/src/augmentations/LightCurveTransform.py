@@ -1,90 +1,33 @@
+from typing import Literal, Union
 import scipy.signal as signal 
 import numpy as np
 import torch 
 import torch.nn.functional as F
 from copy import deepcopy
-
-
-class ChessCurve:
-    def __call__(self, data_dict):
-        """
-        Creates a chess mask and returns one of two possible variations of the lightcurve. (chess or ~chess)
-
-        Parameters:
-        - data_dict: Dictionary with 'data' and 'time' keys containing tensors.
-
-        Returns:
-        - Dictionary with 'data' and 'time' keys, where the data and time is masked by the chess pattern or the inverse chess pattern.
-        """
-        data_dict = data_dict #very very very important line do not remov
-        data = data_dict['data']
-        time = data_dict['time']
-
-        # Create the chessboard mask for a single lightcurve
-        mask = torch.zeros((99, 6), dtype=torch.bool)
-        mask[::2, 1::2] = 1
-        mask[1::2, ::2] = 1
-
-        # Expand the mask along the batch dimension
-        mask = mask.unsqueeze(0)  # Shape (1, 99, 6)
-        mask = mask.expand(data.size(0), -1, -1).to(device=data.device)  # Shape (batch_size, 99, 6)
-
-        # Apply the mask and its inverse to the lightcurve and time
-        lightcurve_masked = data * mask
-        lightcurve_inverse_masked = data * (~mask)
-
-        time_masked = time * mask
-        time_inverse_masked = time * (~mask)
-
-        # Randomly choose between the two masked outputs
-        selected_data, selected_time = (lightcurve_masked, time_masked) if np.random.rand() > 0.5 \
-            else (lightcurve_inverse_masked, time_inverse_masked)
-        
-        data_dict['data'] = selected_data
-        data_dict['time'] = selected_time
-        data_dict['mask'] = (selected_time>1).int()
-        # Return the modified dictionary
-        return data_dict
-    
-class ChessMask:
-    def __call__(self, data_dict):
-        """
-        Creates a chess mask and returns one of two possible variations of the lightcurve. (chess or ~chess)
-
-        Parameters:
-        - data_dict: Dictionary with 'data' and 'time' keys containing tensors.
-
-        Returns:
-        - Dictionary with 'data' and 'time' keys, where the data and time is masked by the chess pattern or the inverse chess pattern.
-        """ 
-        data = data_dict['data']
-        time = data_dict['time']
-
-        # Create the chessboard mask for a single lightcurve
-        mask = torch.zeros((99, 6), dtype=torch.bool)
-        mask[::2, 1::2] = 1
-        mask[1::2, ::2] = 1
-
-        # Expand the mask along the batch dimension
-        mask = mask.unsqueeze(0)  # Shape (1, 99, 6)
-        mask = mask.expand(data.size(0), -1, -1).to(device=data.device)  # Shape (batch_size, 99, 6)
-
-        # Apply the mask and its inverse to the lightcurve and time
-        lightcurve_masked = data * mask
-        lightcurve_inverse_masked = data * (~mask)
-
-        time_masked = time * mask
-        time_inverse_masked = time * (~mask)
-
-        # Randomly choose between the two masked outputs
-        selected_data, selected_time = (lightcurve_masked, time_masked) if np.random.rand() > 0.5 \
-            else (lightcurve_inverse_masked, time_inverse_masked)
-        
-        #data_dict['data'] = selected_data
-        #data_dict['time'] = selected_time
-        data_dict['mask'] = (selected_time>1).int()
-        # Return the modified dictionary
-        return data_dict
+ 
+ 
+class MaskFirstN:
+    def __init__(self,mask_first = 8):
+        self.mask_first = mask_first
+    def __call__(self,sample):
+        sample = deepcopy(sample)
+        if self.mask_first ==-1:
+            return sample
+        if isinstance(self.mask_first,list):
+            mask_first = np.random.choice(self.mask_first)
+            if mask_first ==-1:
+                return sample
+            if sample['mask'].sum(dim = [0,1]) < mask_first:
+                return sample
+            else:
+                sample['mask'][:,:mask_first] = 0
+                return sample 
+        else:
+            if sample['mask'].sum(dim = [0,1]) < self.mask_first:
+                return sample
+            else:
+                sample['mask'][:,:self.mask_first] = 0
+                return sample 
 
 class InverseCurve:
     def __call__(self, sample):
@@ -93,7 +36,7 @@ class InverseCurve:
         sample["data"] = data
         return sample
 
-class FlipLC:
+class InverseTime:
     def __call__(self, sample):
         data = sample["data"]
         time = sample["time"]
@@ -103,10 +46,33 @@ class FlipLC:
         time = torch.flip(time, [0])
         mask = torch.flip(mask, [0])
 
-        sample["data"] = data
-        sample["time"] = time
-        sample["mask"] = mask
+        data = sample["time"]
+        data[:, :] *= -1
+        sample["time"] = data
+        return sample
 
+class FlipLC:
+    def __call__(self, sample):
+        sample = deepcopy(sample)
+        data = sample["data"]
+        
+        # Get indices of nonzero elements
+        nonzero_indices = torch.nonzero(data)
+        
+        # Get the nonzero values
+        nonzero_values = data[nonzero_indices]
+        
+        # Create a mask of zeros with the same shape as the input
+        result = torch.zeros_like(data)
+        
+        # Flip only the nonzero values
+        flipped_values = torch.flip(nonzero_values, [0])
+        
+        # Place the flipped values back into their corresponding positions
+        for i, idx in enumerate(nonzero_indices):
+            result[idx] = flipped_values[i]
+            
+        sample["data"] = result
         return sample
 
 class PermuteChannels:
@@ -122,33 +88,65 @@ class PermuteChannels:
         sample["mask"] = sample["mask"][:, permuted_channels]
 
         return sample
-
-class Factor:
-    def __init__(self, min_scale=0.99, max_scale=1.01):
-        self.min_scale = min_scale
-        self.max_scale = max_scale
-
+    
+class Undersample:
+    def __init__(self, num_bands, sample_fraction, ignore_samples_with_less_points_than = 6):
+        self.num_bands = num_bands
+        self.sample_fraction = sample_fraction
+        self.ignore = ignore_samples_with_less_points_than = ignore_samples_with_less_points_than
+        assert all([self.sample_fraction < 1, sample_fraction > 0])
     def __call__(self, sample):
-        data = sample['data']
-        #time = sample['time']
-        factor = torch.FloatTensor(1).uniform_(0.95, 1.05)
-        # Scale each point of sample['data'] with its corresponding scale factor
-        sample['data'] = data * factor
-        #sample['time'] = time * scale_factors
+        sample = deepcopy(sample)
+        
+        for channel in range(self.num_bands):
+            valid_indices = torch.nonzero(sample['data'][:,channel])
+            #print(valid_indices)
+            #print(valid_indices.shape)
+            if len(valid_indices) < self.ignore: # Skip if too few points
+                continue
+            
+            # Ensure first point is included
+            if 0 not in valid_indices:
+                valid_indices[0] = 0
+            
+            # Randomly select subset of indices while keeping first point
+            num_points = valid_indices.size(0)
+            num_to_keep = max(int(num_points * self.sample_fraction), self.ignore)  # Keep 70% or minimum 12 points
+            
+            # Always keep the first point and randomly select the rest
+            keep_indices = torch.cat([
+                valid_indices[0:1],
+                valid_indices[1:][torch.randperm(num_points-1)[:num_to_keep-1]]
+            ])
+            keep_indices = torch.sort(keep_indices)[0]  # Sort indices to maintain temporal order
+            
+            # Create new zeros vector and copy selected data points
+            new_data = torch.zeros_like(sample['data'][:, channel])
+            new_time = torch.zeros_like(sample['time'][:, channel])
+            new_mask = torch.zeros_like(sample['mask'][:, channel])
+            new_data[keep_indices] = sample['data'][keep_indices, channel]
+            new_time[keep_indices] = sample['time'][keep_indices, channel]
+            new_mask[keep_indices] = sample['mask'][keep_indices, channel]
+            
+            # Replace original data with undersampled version
+            sample['data'][:, channel] = new_data
+            sample['time'][:, channel] = new_time
+            sample['mask'][:, channel] = new_mask
 
         return sample
 
-class Shift:
-    def __init__(self, min_scale=0.99, max_scale=1.01):
+
+class TimeShift:
+    def __init__(self, min_scale=0, max_scale=2*torch.pi):
         self.min_scale = min_scale
         self.max_scale = max_scale
 
     def __call__(self, sample):
-        data = sample['data']
+        data = (sample['time']!=0)
         #time = sample['time']
-        factor = torch.FloatTensor(1).uniform_(-0.5, 0.5)
+        factor = torch.FloatTensor(1).uniform_(self.min_scale, self.max_scale)
         # Scale each point of sample['data'] with its corresponding scale factor
-        sample['data'] = data + factor*data
+        sample['time'] = data + factor*data
         #sample['time'] = time * scale_factors
 
         return sample
@@ -232,9 +230,10 @@ class Jitter:
         sample["data"] = x_with_jitter
         return sample
 
-
-class GaussianNoise:
+class Exptime:
     def __call__(self, sample):
+        sample = deepcopy(sample)
+
         x = sample["data"]  # Shape: [bs, seqlen, channels]
         mask = x!=0
           # torch.rand(1).to(device = x.device).item()
@@ -243,45 +242,34 @@ class GaussianNoise:
         # Generate Gaussian noise for each channel independently
         noise = torch.normal(0, 1, size=x.shape).to(device=x.device, non_blocking=True) 
 
-        sample["data"] = x + noise * x.mean() * mask
+        x = sample["time"]  # Shape: [bs, seqlen, channels]
+        sample["time"] = torch.exp(x/1000)
         return sample
 
-class RandomMask:
+
+class GaussianNoise:
+    def  __init__(self, num_bands, mean,std):
+        self.num_bands = num_bands
+        self.mean = mean
+        self.std = std
     def __call__(self, sample):
-        """
-        Args:
-            sample (torch.Tensor): Input tensor of shape [bs, seqlen, channels].
-
-        Returns:
-            torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
-        """
-        mask = torch.bitwise_and(( torch.rand_like(sample['data'])>=0.5).bool() ,sample['mask']  )  
-        
-        sample['mask'] = mask
+        sample = deepcopy(sample)
+        for i in range(self.num_bands):
+            noise = torch.normal(self.mean,self.std, size=(sample['data'].shape[0],)).to(device=sample['data'].device, non_blocking=True) 
+            sample["data"][:,i] = sample['data'][:,i] + noise * (sample['data'][:,i]!=0)
         return sample
 
-import random
-class CutLC:
-    def __init__(self):
-        super().__init__()
-        self.eval_times = [10,20,30,40,60,80,100]
 
-    def __call__(self, sample: dict):
-        # Select a random eval_time
-        eval_time = random.choice(self.eval_times)
-        
-        # Get the batch size, sequence length, and channels
-        seqlen, channels = sample['data'].shape
-        
-        # Create a mask to zero out elements after eval_time
-        mask = torch.arange(seqlen).expand( seqlen).unsqueeze(-1).to(sample['data'].device)
-        cutoff_mask = mask < eval_time
-        
-        # Zero out elements in 'time', 'data', and 'mask' after the eval_time
-        sample['time'] = sample['time'] * cutoff_mask
-        sample['data'] = sample['data'] * cutoff_mask
-        sample['mask'] = sample['mask'] * cutoff_mask
-        
+class TimeGaussianNoise:
+    def  __init__(self, num_bands, mean,std):
+        self.num_bands = num_bands
+        self.mean = mean
+        self.std = std
+    def __call__(self, sample):
+        sample = deepcopy(sample)
+        for i in range(self.num_bands):
+            noise = torch.normal(self.mean,self.std, size=(sample['time'].shape[0],)).to(device=sample['time'].device, non_blocking=True) 
+            sample["time"][:,i] = sample['time'][:,i] + noise * (sample['time'][:,i]!=0)
         return sample
 
 class OnlyMaskPadding:
@@ -293,101 +281,225 @@ class SobelFilterTransform:
     def __init__(self,thr=0.01):
         self.thr = thr
     def __call__(self, sample):
-        input_tensor = sample['data']
-        seqlen, channels = input_tensor.shape
-        sobel_filter = torch.tensor([-1, 0, 1], dtype=input_tensor.dtype, device=input_tensor.device).view(1, 1, 3)
-        output = torch.zeros_like(input_tensor)
+        sample = deepcopy(sample)
+        time_eval = np.random.choice(self.time_eval_list)  
+        if self.use_lightcurves:
+            mask, time = sample["mask"], sample["time"]
+            mask_time = (time <= time_eval).bool()
+            sample["mask"] = (mask * mask_time).bool()
+        
+        if self.use_features:
+            sample["extracted_feat"] = self.extracted_feat[time_eval][sample['idx']]
+        return sample
+     
 
-        for c in range(channels):
-            channel_data = input_tensor[:, :, c]
-            filtered_channel = F.conv1d(channel_data.unsqueeze(1), sobel_filter, padding=1)
-            filtered_channel = filtered_channel.squeeze(1)
+class SelectEven:
+    def __init__(self,num_bands):
+        self.num_bands = num_bands
+    def __call__(self, sample):
+        """
+        Args:
+            sample (torch.Tensor): Input tensor of shape [bs, seqlen, channels].
 
-            norm = filtered_channel.norm(p=2, dim=1, keepdim=True)
-            filtered_channel_normalized = filtered_channel / (norm + 1e-8)
-            output[:, :, c] = filtered_channel_normalized
-        sample['data'] = (output > self.thr).float() * input_tensor
-                    
+        Returns:
+            torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
+        """
+        indices = (2*torch.range(0,99, dtype = int)) + 1
+        sample['data'] = sample['data'][indices, :]
+        sample['time'] = sample['time'][indices, :]
+        sample['mask'] = sample['mask'][indices, :]
+        return sample
+
+ 
+class PostMaxMask:
+    def __init__(self,num_bands):
+        self.num_bands = num_bands
+    def __call__(self, sample):
+        """
+        Args:
+            sample (torch.Tensor): Input tensor of shape [bs, seqlen, channels].
+
+        Returns:
+            torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
+        """
+        values, indices = sample['data'].max(dim = 1)
+        for i in range(self.num_bands):
+            sample['mask'][indices[i]:,i] = 0
+            return sample
+  
+class OnlyMaskPadding:
+    def __call__(self,sample:dict): 
+        sample = deepcopy(sample)
+
+        sample['mask'] = (sample['data'] != 0)
+        return sample
+    
+class WindowMask:
+    def __init__(self,num_bands, window_size):
+        self.num_bands = num_bands
+        self.window_size = window_size
+    def __call__(self,sample:dict): 
+        sample = deepcopy(sample)
+        new_mask = torch.zeros_like(sample['mask'])
+        for i in range(self.num_bands):
+            if (sample['data'][:,i]!=0).sum() == 0:
+                continue
+            ints = torch.randint(0,200- self.window_size, (1,))
+            #if ordered_ints.sum() == 0:
+             #   return sample
+            new_mask[ints.item():ints.item()+self.window_size,i] = 1
+            new_mask = new_mask  & sample['mask']
+        if new_mask.sum() < 6:
+            return sample
+        sample['mask'] = new_mask
         return sample
     
 
 class MaskChannels: 
-    def __init__(self, channel_list):
-        self.channel_list = channel_list
+    def __init__(self, num_bands):
+      
+        self.num_bands = num_bands
     def __call__(self,sample):
-        """
-        Args:
-            sample (torch.Tensor): Input tensor of shape [bs, seqlen, channels].
-
-        Returns:
-            torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
-        """
-        mask = sample['mask']  # Assuming 'mask' is the key for the input tensor
          
-        for i in self.channel_list:
-             
-            mask[:, :, i] = 0
+        band = torch.randint(low = 0, high = self.num_bands, size= (1,))
+            
+        sample['mask'][:, band] = 0
+        
+        return sample
+   
+from scipy import ndimage, datasets 
+class SobelFilterMask:
+    def __init__(self,keep:Literal['below', 'above'] = 'above',threshold = 0.1):
+        self.threshold = threshold
+        self.keep = keep
+    def __call__(self, sample):
+        sample = deepcopy(sample)
+        signal = sample['data']
+        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
+        sobel_h = torch.tensor(sobel_h) * (signal!=0)
+        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
+        sobel_v = torch.tensor(sobel_v)* (signal!=0)
+        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)  
+         
+        if magnitude.max() > 1:
+            magnitude = (magnitude/magnitude.max()) * (signal !=0)
+        
+        if self.keep == 'below': 
+            new_mask = (torch.tensor(magnitude)<= self.threshold).bool() & sample['mask'].clone()
+        if self.keep == 'above':
+            new_mask =  (torch.tensor(magnitude)>= self.threshold).bool() & sample['mask'].clone()
  
-        sample['mask'] = mask.bool
+        if new_mask.sum().item() < 6:
+            return sample
+        else:
+            sample['mask'] = new_mask
+            return sample
+    
+     
+class RangeSobelFilterMask:
+    def __init__(self, threshold_range:tuple = (0.01,0.05)):
+        self.threshold_range= threshold_range
+    def __call__(self, sample):
+        sample = deepcopy(sample)
+        signal = sample['data']
+        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
+        sobel_h = torch.tensor(sobel_h) * (signal!=0)
+        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
+        sobel_v = torch.tensor(sobel_v)* (signal!=0)
+        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)   
+        if magnitude.max() > 1:
+            magnitude = (magnitude/magnitude.max())* (signal !=0) 
+        sample['mask'] = torch.logical_and(
+            magnitude >= self.threshold_range[0],
+            magnitude <= self.threshold_range[1]
+        )  
+        return sample
+
+
+class RandomSobelFilterMask:
+    def __init__(self,
+                 filter_type:Literal['horizontal', 'vertical', 'magnitude'], 
+                 keep: Literal['above', 'below'],
+                 threshold_range:tuple = (0.01,0.05)):
+        self.threshold_range= threshold_range
+        self.keep = keep
+        self.filter = filter_type
+        assert self.filter in ['horizontal','vertical','magnitude']
+    
+    def __call__(self, sample):
+        sample = deepcopy(sample)
+        signal = sample['data']
+        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
+        sobel_h = torch.tensor(sobel_h) * (signal!=0)
+        if sobel_h.max() > 1:
+            sobel_h = (sobel_h/sobel_h.max())* (signal !=0)
+        
+        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
+        sobel_v = torch.tensor(sobel_v)* (signal!=0)
+        if sobel_v.max() > 1:
+            sobel_v = (sobel_v/sobel_v.max())* (signal !=0)
+        
+        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)  
+        magnitude = torch.tensor(magnitude)* (signal!=0)
+        
+        threshold = torch.FloatTensor(1).uniform_(self.threshold_range[0],self.threshold_range[1]).to(signal.device)
+        
+        if self.keep == 'above':
+            if self.filter == 'horizontal':
+                new_mask = (abs(sobel_h) >= threshold).bool()  & sample['mask'].clone()
+            elif self.filter == 'vertical':
+                new_mask = (abs(sobel_v) >= threshold).bool()  & sample['mask'].clone()
+            elif self.filter == 'magnitude':
+                new_mask = (magnitude >= threshold).bool()  & sample['mask'].clone()
+        elif self.keep == 'below':
+            if self.filter == 'horizontal':
+                new_mask = (abs(sobel_h) <= threshold).bool()  & sample['mask'].clone()
+            elif self.filter == 'vertical':
+                new_mask = (abs(sobel_v) <= threshold).bool()  & sample['mask'].clone()
+            elif self.filter == 'magnitude':
+                new_mask = (magnitude <= threshold).bool()  & sample['mask'].clone()
+        if (sample['mask'].sum()) <6: 
+            return sample
+        else:
+            sample['mask'] = new_mask
+            return sample
+    
+    
+class RandomRangeSobelFilterMask:
+    def __init__(self, threshold_range:tuple = (0.01,0.05)):
+        self.threshold_range= threshold_range
+    def __call__(self, sample):
+        sample = deepcopy(sample)
+        signal = sample['data']
+        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
+        sobel_h = torch.tensor(sobel_h) * (signal!=0)
+        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
+        sobel_v = torch.tensor(sobel_v)* (signal!=0)
+        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)   
+        if magnitude.max() > 1:
+            magnitude = (magnitude/magnitude.max())* (signal !=0)
+        threshold = torch.FloatTensor(2).uniform_(self.threshold_range[0],self.threshold_range[1]).to(signal.device)
+        sample['mask'] = torch.logical_and(
+            magnitude >= self.threshold_range[0],
+            magnitude <= threshold[1]
+        )  
         return sample
     
-class RandomMaskChannelZero: 
+from scipy.ndimage import gaussian_filter1d
 
+class GaussianFilter:
+    def __init__(self, num_bands,filter_std):
+        self.num_bands =num_bands
+        self.filter_std = filter_std
     def __call__(self,sample):
-        """
-        Args:
-            sample (torch.Tensor): Input tensor of shape [bs, seqlen, channels].
-
-        Returns:
-            torch.Tensor: Tensor with a random channel zeroed for each sample in the batch.
-        """
-        mask = sample['mask']  # Assuming 'mask' is the key for the input tensor
-        bs, seqlen, channels = mask.shape
-
-        for i in range(bs):
-            random_channel = torch.randint(0, channels, (1,)).item()
-            mask[i, :, random_channel] = 0
- 
-        sample['mask'] = mask.float()
+        sample = deepcopy(sample)
+        for i in range(self.num_bands):
+            filtered_signal = gaussian_filter1d(sample['data'][:,i], self.filter_std)
+            filtered_signal = torch.tensor(filtered_signal)* (sample['data'] != 0)[:,i]
+            sample['data'][:,i] = filtered_signal
         return sample
-
-class SobelFilterMask:
-    def __init__(self,combine_mask_with:str = None,threshold = 0.001):
-        self.threshold = threshold
-        self.cmw = combine_mask_with
-    def __call__(self, sample):
-        input_tensor = sample['data']
-        #time = sample['time']
-        og_mask = sample['mask']
-        seqlen, channels = input_tensor.shape
-        sobel_filter = torch.tensor([-1, 0, 1], dtype=input_tensor.dtype, device=input_tensor.device).view(1, 1, 3)
-        output = torch.zeros_like(input_tensor)
-
-        for c in range(channels):
-            channel_data = input_tensor[:, :, c]
-            filtered_channel = F.conv1d(channel_data.unsqueeze(1), sobel_filter, padding=1)
-            filtered_channel = filtered_channel.squeeze(1)
-
-            norm = filtered_channel.norm(p=2, dim=1, keepdim=True)
-            filtered_channel_normalized = filtered_channel / (norm + 1e-8)
-            output[:, :, c] = filtered_channel_normalized
-
-        thr = output  > self.threshold 
-         
-        #sample['mask'] =  (input_tensor != 0) & ~thr
-        if self.cmw  == "mask":
-            sample['mask'] =  og_mask.bool() & (thr!=0)
-        elif self.cmw == "datamask":
-            sample['mask'] = thr # (input_tensor != 0) & 
-
-             
-        else:
-            sample['mask'] =  og_mask.bool() & (thr!=0) if torch.rand(1) >0.5 else (input_tensor != 0) & thr
-            
-        return sample
-
 class Scale:
-    def __init__(self, min_scale=0.9, max_scale=1.2):
+    def __init__(self, min_scale=0.998, max_scale=1.002):
         self.min_scale = min_scale
         self.max_scale = max_scale
 
@@ -404,29 +516,67 @@ class Scale:
 
         return sample
 
-class RandomPointDrop:
+class TimeScale:
+    def __init__(self, min_scale=0.998, max_scale=1.002):
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+
     def __call__(self, sample):
-        x = sample['data']  # Shape: [bs, seqlen, channels]
-        t = sample['time']  # Shape: [bs, seqlen, channels]
+        sample = deepcopy(sample)
+        time = sample['time']
+        #time = sample['time']
+         
+        # Generate a random scale factor for each point in sample['time']
+        scale_factors = torch.empty(sample['time'].shape,device = time.device).uniform_(self.min_scale, self.max_scale)
 
-        # Iterate over the batch
-        for i in range(x.shape[0]):  # Loop over each sample in the batch
-            for c in range(x.shape[2]):  # Loop over each channel
-                # Randomly select one point in the sequence to drop (set to zero)
-                drop_idx = random.randint(0, x.shape[1] - 1)
-                x[i, drop_idx, c] = 0  # Set the selected point to zero
-                t[i, drop_idx, c] = 0  # Set the selected point to zero
-
-
-        sample['data'] = x
-        sample['time'] = t
-        sample['mask'] = (t>1).float()
+        # Scale each point of sample['time'] with its corresponding scale factor
+        sample['time'] = time * scale_factors
+        #sample['time'] = time * scale_factors
 
         return sample
-
- 
+    
+class Factor:
+    def __init__(self, factor = 0.5):
+        self.factor = factor
+          
+    def __call__(self, sample):
+        if isinstance(self.factor,list):
+            return self.random_factor(sample)
+        sample = deepcopy(sample)
+        data = sample['data']
+        sample['data'] = (data * self.factor)
+        return sample
+    
+    def random_factor(self,sample):
+        sample = deepcopy(sample)
+        data = sample['data']
+        choose = np.random.choice(self.factor)
+        sample['data'] =  (data * choose)
+        return sample
+class TimeFactor:
+    def __init__(self, factor =0.5):
+        self.factor = factor
+        
+    def __call__(self, sample):
+        if isinstance(self.factor,list):
+            return self.random_factor(sample)
+        sample = deepcopy(sample)
+        data = sample['time']
+        sample['time'] = (data * self.factor)
+        return sample
+    
+    def random_factor(self,sample):
+        sample = deepcopy(sample)
+        data = sample['time']
+        choose = np.random.choice(self.factor)
+        sample['time'] =  (data * choose)
+        return sample
+  
+    
 class TimeWarp: 
-    def __init__(self, min_scale=0.5, max_scale=1.5):
+
+    def __init__(self, min_scale=0.8, max_scale=1.2):
+
         self.min_scale = min_scale
         self.max_scale = max_scale
     def __call__(self, sample):
@@ -438,18 +588,19 @@ class TimeWarp:
         #print(factor)
         sample['time'] = x *factor
         return sample
-    
+     
+class ChannelTimeShift: 
+    def __init__(self, min_scale = 0, max_scale=5):
 
-
-class TimeShift: 
-    def __init__(self, min_scale=0.1, max_scale=1.0):
         self.min_scale = min_scale
         self.max_scale = max_scale
     def __call__(self, sample):
         x = sample['time']
         
-        factor =torch.FloatTensor(1).uniform_(self.min_scale,self.max_scale).to(x.device)
-        mask = sample['time'] * factor
-        sample['time'] = sample['time'] + mask
+        for i in range(x.size(1)):
+            min_scale = sample['time'][:,i].max()
+            factor =torch.FloatTensor(1).uniform_(-min_scale,self.max_scale).to(x.device)
+            mask = (sample['time'][:,i]>0) * factor
+            sample['time'][:,i] = sample['time'][:,i] + mask
         return sample
     

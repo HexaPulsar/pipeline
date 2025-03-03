@@ -9,9 +9,11 @@ import torch
 from torch.utils.data import Dataset
 from joblib import load
 import pandas as pd
-from torchvision.transforms import Compose, RandomApply
+from torchvision.transforms import Compose, RandomApply, RandomChoice
 from ...augmentations import LightCurveTransform as LC
 from ...augmentations import TabularTransformations as TAB
+
+
 class SSLDataset(Dataset):
     def __init__(
         self,
@@ -43,23 +45,36 @@ class SSLDataset(Dataset):
 
         # only using partition 0
         assert partition_used == 0
+        seed_ = 1234
+        np.random.seed(seed_)
+        random.seed(seed_)
+        torch.manual_seed(seed_)
 
-        h5_ = h5py.File("{}/2021_no_contamination.h5".format(data_root))
+        self.datasets = []
+        h5_ = h5py.File(data_root)
         #print(h5_.keys())
         self.these_idx = (
             h5_.get("test")[:]
             if set_type == "test"
             else h5_.get("%s_%s" % (name, partition_used))[:]
         )
-
+        subset_size = None #20000
+        if subset_size is not None:
+            subset_size = min(subset_size, len(self.these_idx))
+            random.seed(seed)  # Use the same seed parameter for consistency
+            self.these_idx = random.sample(list(self.these_idx), subset_size)
+            print(f"Using subset of {subset_size} samples")
         print(
             f"using set {set_type} total of idx : {len(self.these_idx)}, use_lightcurves {use_lightcurves}, use_metadata {use_metadata}, use_features {use_features},  use MTA {online_opt_tt}"
         )
-
+        
         self.data = h5_.get("flux") # flux
         self.mask = h5_.get("mask")  # mask_alert # mask
         self.time = h5_.get("time") # time_phot # time
-         
+        #self.lc_lens = []
+        #for i in self.these_idx:
+        #    print((self.data[i,:,:] != 0).sum())
+
         self.eval_time = eval_metric  # must be a number
         self.use_lightcurves = use_lightcurves
         self.use_lightcurves_err = use_lightcurves_err
@@ -71,9 +86,9 @@ class SSLDataset(Dataset):
          
         self.per_init_time = per_init_time
         
-        self.len = self.these_idx.shape[0]
+        #self.len = self.these_idx.shape[0]
         self.list_time_to_eval = list_time_to_eval
-        print("list_time_to_eval: ", list_time_to_eval)
+       # print("list_time_to_eval: ", list_time_to_eval)
 
         logging.info(f"Partition : {partition_used} Set Type : {set_type}")
         if self.use_metadata:
@@ -84,55 +99,40 @@ class SSLDataset(Dataset):
             self.metadata_feat = self.get_tabular_data(
                 metadata_feat, path_QT, "metadata"
             )
-
+        #print(h5_.keys())
         if self.use_features:
-            self.extracted_feat = dict()
-            for time_eval in self.list_time_to_eval:
-                path_QT = f"./{data_root}/quantiles/features/fold_{partition_used}.joblib"
-                extracted_feat = h5_.get("extracted_feat_{}".format(time_eval))[:][
-                    self.these_idx
-                ]
-                self.extracted_feat.update(
-                    {
-                        time_eval: self.get_tabular_data(
-                            extracted_feat, path_QT, f"features_{time_eval}"
-                        ).float()
-                    }
-                )
+            feat_feat = h5_.get("ft_cols")[:]#[self.these_idx]
+            path_QT = "{}/quantiles/features/ft_qt-fold-{}.joblib".format(
+                data_root, partition_used
+            )
+            self.feat_feat = self.get_tabular_data(
+                feat_feat, path_QT, "features"
+            )
+       
 
-        self.transforms_aug_lc = Compose([  LC.OnlyMaskPadding(),
-                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
-                                            #RandomApply([LC.GaussianNoise(),],p =1),
-                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5),
-                                            RandomApply([LC.SequenceShift((-30,0)),],p =0.5),
-                                             
-
-                                            #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            #RandomApply([LC.GaussianNoise(),],p =1),
-  
-                                            ])
-        self.transforms_data_lc = Compose([LC.OnlyMaskPadding(),
-                                            #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                            RandomApply([LC.Scale(0.8,1.2),],p =0.5),
-                                            #RandomApply([LC.RandomMask()], p =0.5),
-                                          
-
-                                            #RandomApply([LC.TimeWarp(0.8,1.2),],p =0.5), 
-                                            RandomApply([LC.SequenceShift((-30,0)),],p =0.5),
-                                            
-                                            
-                                            #RandomApply([LC.GaussianNoise(),],p =0.5),
-                                             
-                                            ])
+        self.transforms_data_lc = Compose([LC.MaskFirstN([-1,0,1,2]),
+                                    RandomChoice([LC.GaussianNoise(num_bands=2,mean = 0,std = 1e-2),
+                                    LC.TimeGaussianNoise(num_bands=2,mean = 0, std = 1e-2),
+                                    LC.TimeFactor([i/10 for i in range(8,13)])])
+                                    
+                                    ])
+    
+        self.transforms_aug_lc =   Compose([LC.MaskFirstN([-1,0,1,2]),
+                                    RandomChoice([LC.GaussianNoise(num_bands=2,mean = 0,std = 1e-2),
+                                    LC.TimeGaussianNoise(num_bands=2,mean = 0, std = 1e-2),
+                                    LC.TimeFactor([i/10 for i in range(8,13)])])
+                                    
+                                    ])
+                       
         '''
         self.transforms_aug_lc = Compose([   
-                                            RandomApply([TAB.Scale()],p = 0.5),
-                                            RandomApply([TAB.Factor()],p = 0.5),
-                                            RandomApply([TAB.Shift()],p = 0.5),
-                                            RandomApply([TAB.RandomShift()],p = 0.5),
-                                            
-                                            RandomApply([TAB.Jitter()],p = 0.5),
-                                            RandomApply([TAB.GaussianNoise()],p = 0.5),
+                                            RandomApply([TAB.GaussianNoise()],p = 1),
+                                            RandomApply([TAB.RandomMask()],p = 1),
+
+                                            ])
+        self.transforms_data_lc = Compose([ 
+                                            #RandomApply([TAB.GaussianNoise()],p = 1)
+
                                             ])
         self.transforms_data_lc = Compose([ 
                                             
@@ -147,6 +147,8 @@ class SSLDataset(Dataset):
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
+        
+        
         _idx = self.these_idx[idx]
         data_dict = {}
         aug_data_dict = {}
@@ -169,21 +171,19 @@ class SSLDataset(Dataset):
             aug_tabular_features.append(aug_data_dict["metadata_feat"])
             
         if self.use_features: 
-            data_dict.update({
-                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][_idx]
-                        })
-            tabular_features.append(aug_data_dict["extracted_feat"])
+            data_dict.update({"extracted_feat": self.feat_feat[_idx]})
+            tabular_features.append(data_dict["extracted_feat"])
             
-            aug_data_dict.update({
-                            "extracted_feat": self.extracted_feat[self.list_time_to_eval[-1]][_idx].clone()
-                        })
+            aug_data_dict.update({"extracted_feat": self.feat_feat[_idx].clone()})
             aug_tabular_features.append(aug_data_dict["extracted_feat"])
         
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
         
-        return self.transforms_data_lc(data_dict), self.transforms_aug_lc(aug_data_dict)
+        data_dict = self.transforms_data_lc(data_dict)
+        aug_data_dict = self.transforms_aug_lc(aug_data_dict)
+        return data_dict, aug_data_dict
 
     def __len__(self):
         """length of the dataset, is necessary for consistent getitem values"""

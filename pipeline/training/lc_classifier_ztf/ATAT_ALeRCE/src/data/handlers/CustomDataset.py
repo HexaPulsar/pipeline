@@ -8,9 +8,11 @@ import torch
 from torch.utils.data import Dataset
 from joblib import load
 
-from torchvision.transforms import Compose, RandomApply
+from torchvision.transforms import Compose, RandomApply, RandomChoice
 from .augmentations import SCAugmentation, ThreeTimeMask
-
+from ...augmentations.TabularTransformations import RandomMask
+ 
+import src.augmentations.LightCurveTransform as LC
 class ATATDataset(Dataset):
     def __init__(
         self,
@@ -50,10 +52,11 @@ class ATATDataset(Dataset):
             if set_type == "test"
             else h5_.get("%s_%s" % (name, partition_used))[:]
         )
-
+        
         print(
-            f"using set {set_type} total of idx : {len(self.these_idx)}, \
-                use_lightcurves {use_lightcurves}, use_metadata {use_metadata}, use_features {use_features}, \
+            f"using set {set_type} total of idx : {len(self.these_idx)} \n \
+                use_lightcurves {use_lightcurves}, use_metadata {use_metadata} \n \
+                use_features {use_features} \n  \
                     use MTA {online_opt_tt}"
         )
 
@@ -79,7 +82,7 @@ class ATATDataset(Dataset):
         self.online_opt_tt = online_opt_tt
         self.len = len(self.these_idx)
         self.list_time_to_eval = list_time_to_eval
-        print("list_time_to_eval: ", list_time_to_eval)
+        #print("list_time_to_eval: ", list_time_to_eval)
 
         logging.info(f"Partition : {partition_used} Set Type : {set_type}")
         if self.use_metadata:
@@ -99,14 +102,35 @@ class ATATDataset(Dataset):
                 self.extracted_feat.update(
                     {
                         time_eval: self.get_tabular_data(
-                            extracted_feat, path_QT, f"features_{time_eval}"
+                            extracted_feat, path_QT, f"features_{time_eval}"    
                         )
                     }
                 )
-        self.transforms = Compose([ThreeTimeMask(self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None),
-                                    SCAugmentation(self.per_init_time,
-                                                list_time_to_eval,self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None)
-                                    ])
+                #Compose([ #ThreeTimeMask(self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None),
+                                    #SCAugmentation(self.per_init_time,
+                                     #           list_time_to_eval,self.use_features,self.use_lightcurves,self.extracted_feat if self.use_features else None)
+        
+        self.transforms =  Compose([LC.MaskFirstN([-1,0,1,2]),
+                                    LC.GaussianNoise(num_bands=2,mean = 0,std = 1e-2),
+                                    LC.TimeGaussianNoise(num_bands=2,mean = 0, std = 1e-2),
+                                    LC.TimeFactor([i/10 for i in range(8,13)])
+            ])
+        LC.SobelFilterMask(keep = 'above',threshold=1e-1)
+        LC.SobelFilterMask(keep = 'above',threshold=1e-2)
+        LC.SobelFilterMask(keep = 'above',threshold=1e-3)
+        LC.SobelFilterMask(keep = 'above',threshold=2e1)
+        LC.SobelFilterMask(keep = 'above',threshold=3e1)
+        LC.SobelFilterMask(keep = 'above',threshold=4e1)
+        LC.SobelFilterMask(keep = 'below',threshold=1e-1)
+        LC.SobelFilterMask(keep = 'below',threshold=1e-2)
+        LC.SobelFilterMask(keep = 'below',threshold=1)
+         #Compose([RandomApply([RandomChoice([])], p = 0.5)])
+         #RandomApply([LC.RandomSobelFilterMask(filter_type = 'magnitude',
+         #                                                                how = 'above',
+         #                                                                threshold_range=(1e-5,0.15))], p = 0.5)]
+        
+        print(f'using set_Type {self.set_type}')
+
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -137,7 +161,7 @@ class ATATDataset(Dataset):
 
         if self.set_type == "train":
             data_dict = self.transforms(data_dict)
-         
+        
         tabular_features = []
          
         if self.use_metadata:

@@ -1,7 +1,6 @@
 from matplotlib.patches import Polygon
 from itertools import cycle
 import torch.nn.functional as F
-from scipy import interp
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np

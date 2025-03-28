@@ -9,8 +9,13 @@ warnings.filterwarnings("ignore")
 
 from custom_parser import parse_model_args, handler_parser
 
+
 from src.data.modules.LitPretrain import LitPretrain
 from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.models.tabular.contrastive.LitPreTrainVICREGTAB import LitPreTrainVICREG
+
+
+from src.data.modules.LitPretrain import LitPretrain 
+from src.models.tabular.selfsupervised.pretrain import LitPreTrainVICREG
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping

@@ -4,28 +4,30 @@ cd ../../
 export CUDA_VISIBLE_DEVICES=0,3 
 
 # Define variables
+ 
+#!/bin/bash
 
-for seed in {0..0}; do
-  EXPERIMENT_TYPE="lc"
-  EXPERIMENT_NAME=MLP_v0_BASELINE_${seed}
-  DATASET_NAME="ztf_ff"
-  DATA_ROOT="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/"
+# Set experiment variables correctly
+export EXPERIMENT_TYPE='LC'
+export EXPERIMENT_NAME='HYDRA_01'
+export EXPERIMENT_OUTPUT_PATH="./results/ZTF_ff/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
+export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 
-  # Run the Python script with variables
-  python training.py \
-    --experiment_type_general "$EXPERIMENT_TYPE" \
-    --experiment_name_general "$EXPERIMENT_NAME" \
-    --name_dataset_general "$DATASET_NAME" \
-    --data_root_general "$DATA_ROOT" \
-    --patience_general 15 \
-    --lr_general 1e-3 \
-    --num_harmonics 4 \
-    --batch_size_general 256 \
-    --use_sampler_general 1 \
-    --num_encoders 3 \
-    --embedding_size 192 \
-    --embedding_size_sub 384 \
-    --num_heads 4 \
-    --num_epochs_general 40
+# Ensure directories exist
+mkdir -p "$EXPERIMENT_OUTPUT_PATH"
+export HYDRA_FULL_ERROR=1
+# Run the Python script with Hydra
 
-done 
+python training.py \
+  ++ATATConfig.experiment_type=$EXPERIMENT_TYPE\
+  ++ATATConfig.experiment_name=$EXPERIMENT_NAME \
+  ++ATATConfig.log_filename=$LOG_FILENAME \
+  ++ATATConfig.save_dir_path=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.datamodule.dataset.experiment_type=$EXPERIMENT_TYPE\
+  ++ATATConfig.learning_rate=1e-3\
+  ++ATATConfig.loggers.tensorboard.save_dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.loggers.csv.save_dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
+  hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATAT.config.learning_rate=1e-3

@@ -1,0 +1,29 @@
+
+taxonomy:
+  transients:
+    SNIa: 4
+    SNII: 9
+    SNIbc: 16
+    SLSN: 17
+    TDE: 18
+    SNIIb: 19
+    SNIIn: 20
+    Microlensing: 21
+                                  
+  stochastic:
+    AGN: 0
+    QSO: 1
+    YSO: 3
+    CV/Nova: 5
+    Blazar: 8
+
+  periodic:
+    EA: 2
+    RRLc: 6
+    RSCVn: 7
+    EB/EW: 10
+    LPV: 11
+    CEP: 12
+    RRLab: 13
+    Periodic-Other: 14
+    DSCT: 15

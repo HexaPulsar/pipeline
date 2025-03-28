@@ -9,7 +9,7 @@ import torchmetrics
 import pytorch_lightning as pl
 
 from torch.optim.lr_scheduler import LambdaLR
-from ....layers.selfsupervised.multimodal import ATAT
+from ....layers.selfsupervised.multimodal import ATATClassifier
 from src.training.schedulers import cosine_decay_ireyes
 
 
@@ -17,10 +17,10 @@ class LitATAT(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__()
 
-        self.atat = ATAT(**kwargs)
+        self.atat = ATATClassifier(**kwargs)
         self.general_ = kwargs["general"]
         self.lightcv_ = kwargs["lc"]
-        self.feature_ = kwargs["ft"]
+        self.feature_ = kwargs["tab"]
 
         self.use_lightcurves = self.general_["use_lightcurves"]
         self.use_lightcurves_err = self.general_["use_lightcurves_err"]
@@ -41,31 +41,44 @@ class LitATAT(pl.LightningModule):
             1.0 if kwargs["general"]["use_gradient_clipping"] else 0
         )
         import glob
-        
-        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/v1_scaleshift/' #
-        print(f'loading model {lc_out_path}')
-        lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
-        checkpoint_ = torch.load(lc_out_path)
-        weights = OrderedDict()
-        for key in checkpoint_["state_dict"].keys():
-            if 'projection' in key:
-                continue
-            else:    
-                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
-        self.atat.LC.load_state_dict(weights, strict=True)
+        load = False
+        if load:
+            lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/both_multiple_1e4_48_v2/' #
+            print(f'loading model {lc_out_path}')
+            lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
+            checkpoint_ = torch.load(lc_out_path)
+            weights = OrderedDict()
+            for key in checkpoint_["state_dict"].keys():
+                if 'projection' in key:
+                    continue
+                else:    
+                    weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
+            #self.atat.LC.load_state_dict(weights, strict=True)
 
-        lc_out_path = f'/home/magdalena/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/MD/v6_tabular/' #
-        print(f'loading model {lc_out_path}')
-        lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
-        checkpoint_ = torch.load(lc_out_path)
-        weights = OrderedDict()
-        for key in checkpoint_["state_dict"].keys():
-            if 'projection' in key:
-                continue
-            else:    
-                weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
-        self.atat.TAB.load_state_dict(weights, strict=True)
-
+    
+            lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/MD/pretrain_tab/' #
+            print(f'loading model {lc_out_path}')
+            lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
+            checkpoint_ = torch.load(lc_out_path)
+            weights = OrderedDict()
+            for key in checkpoint_["state_dict"].keys():
+                if 'projection' in key:
+                    continue
+                else:    
+                    weights[key.replace("model.transformer.", "")] = checkpoint_["state_dict"][key]
+            #self.atat.TAB.load_state_dict(weights, strict=True)
+            
+        load_2 = True
+        if load_2:
+            lc_out_path = '/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC_MD/pretrain_lcmd_v1/' #
+            lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
+            checkpoint_ = torch.load(lc_out_path)
+            weights = OrderedDict()
+            for key in checkpoint_["state_dict"].keys():
+                if 'project' in key:
+                    continue
+                else:    
+                    weights[key.replace("model.", "")] = checkpoint_["state_dict"][key]   
 
     def training_step(self, batch_data, batch_idx):
         #input_dict = self.get_input_data(batch_data)

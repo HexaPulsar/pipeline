@@ -9,6 +9,8 @@ EXPERIMENT_TYPE="md"
 EXPERIMENT_NAME="pretrain_tab"
 DATASET_NAME="ztf_ff"
 
+EXPERIMENT_OUTPUT_PATH=''
+
 DATA_ROOT="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/"
  
 =======

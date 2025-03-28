@@ -7,7 +7,7 @@ class MixedClassifier(nn.Module):
         super().__init__()
 
 
-        self.norm = nn.Sequential() #nn.LayerNorm(input_dim)
+        self.norm = nn.Sequential()#nn.LayerNorm(input_dim)
         self.net = nn.Sequential(
             nn.Linear(input_dim, input_dim),
             nn.GELU(),

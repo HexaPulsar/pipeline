@@ -11,56 +11,44 @@ def off_diagonal(x):
 
 
 class VICReg(nn.Module):
-    def __init__(self):
+    def __init__(self, inv_coeff,var_coeff,cov_coeff):
         super().__init__()
-        self.inv = 20
-        self.var = 35
-        self.cov = 1
-        
+        self.inv = inv_coeff
+        self.var = var_coeff
+        self.cov = cov_coeff
+    @staticmethod
+    def calculate_cov_loss(embedding):
+        cov_ = (embedding.T @ embedding) / (embedding.size(0) - 1)
+        return off_diagonal(cov_).pow_(2).sum().div(embedding.size(-1))
+    @staticmethod
+    def calculate_std_loss(embedding):
+        var_ = embedding.var(dim = 0)
+        std_ = torch.sqrt(var_ + 0.0001)
+        return torch.mean(F.relu(1.0 - std_))
+    
     def forward(self, x, y):
         batch_size, embedding_size = x.shape
         loss_dict = {}
-        #repr_loss = torch.sqrt(F.mse_loss(x, y, reduce='mean'))
+         
         repr_loss = F.mse_loss(x, y, reduce='mean')
         
-        loss_dict.update({'z_mean_corr_xy': (torch.corrcoef(x).mean() +torch.corrcoef(y).mean())/2})
-        #loss_dict.update({'median_corr_xy': (torch.corrcoef(x).mean() +torch.corrcoef(y).mean()/2).median()})
-        
-
+        loss_dict.update({'prenorm_corr_xy': (torch.corrcoef(x).mean() +torch.corrcoef(y).mean())/2})
         x = x - x.mean(dim=0)
         y = y - y.mean(dim=0) 
-
-        var_x = x.var(dim = 0)
-        var_y = y.var(dim = 0)
-
-        std_x = torch.sqrt(var_x + 0.0001)
-        std_y = torch.sqrt(var_y + 0.0001)
-        std_loss = torch.mean(F.relu(1 - std_x)) / 2 + torch.mean(F.relu(1 - std_y)) / 2
-
-        cov_x = (x.T @ x) / (batch_size - 1)
-        cov_y = (y.T @ y) / (batch_size - 1)
-        cov_loss = off_diagonal(cov_x).pow_(2).sum().div(
-            embedding_size
-        ) + off_diagonal(cov_y).pow_(2).sum().div(embedding_size)
-
-
-       
+        loss_dict.update({'post_norm_xy': (torch.corrcoef(x).mean() +torch.corrcoef(y).mean())/2})
+        std_loss = (self.calculate_std_loss(x) +  self.calculate_std_loss(y))/2
+        cov_loss = self.calculate_cov_loss(x) + self.calculate_cov_loss(y)
         loss_dict.update({'loss':  (self.inv * (repr_loss)
                             + self.var * std_loss
                             + self.cov * cov_loss
                         ),})
-         
 
         with torch.no_grad():
             loss_dict.update({'not_weighted_inv': repr_loss,
                 'not_weighted_1menos_var': std_loss,
                 'not_weighted_cov': cov_loss,
-                'weighted_inv': (self.inv * repr_loss).mean(),
-                'weighted_1mvar': (self.var * std_loss).mean(),
-                #'weighted_std*': self.var * (std_x.mean() + std_y.mean())/2,
-
-                #'weighted_var*':  (var_x.mean() + var_y.mean())/2,
-                'weighted_cov': (self.cov * cov_loss).mean(),
-                #'mean_var_xy': (var_x.mean() + var_y.mean())/2, 
+                'weighted_inv': self.inv * repr_loss,
+                'weighted_1mvar': self.var * std_loss,
+                'weighted_cov': self.cov * cov_loss, 
             })
         return loss_dict

@@ -1,86 +1,89 @@
 import pytorch_lightning as pl
-
-from src.data.handlers.datasetHandlers import get_dataloader
 from src.data.handlers.SSLDataset import SSLDataset
 import glob
 from torch.utils.data import ConcatDataset
 import logging
+from torchvision.transforms import Compose, RandomApply, RandomChoice
+from typing import Union, Optional
+from dataclasses import asdict
+from torch.utils.data import DataLoader
+
+from src.utils.CustomParser import SSLDatasetArgs
+from dataclasses import dataclass
+
+@dataclass
 class LitPretrain(pl.LightningDataModule):
-    def __init__(self,
-     data_root: str = "path/to/dir", batch_size: int = 128, **kwargs):
+    batch_size: int
+    dataset: SSLDatasetArgs
+    train_use_sampler: bool = True
+    train_shuffle: bool = True
+    num_workers: int = 8
+    pin_memory: bool = True
+    def __post_init__(self):
         super().__init__()
 
-        self.data_root = glob.glob('/home/mdelafuente/sixplusdets/*/*/*.h5', recursive = True) # data_root 
-        assert isinstance(self.data_root,list)
-        self.batch_size =  batch_size
-        self.kwargs = kwargs
-
-    
     def train_dataloader(self):
-       # print(self.data_root)
-        
-       
-        if isinstance(self.data_root,str):
-            return get_dataloader(
-                batch_size=self.batch_size,
-                dataset_used=SSLDataset(
-                    data_root=self.data_root, set_type="train", **self.kwargs
-                ),
-                set_type="train" 
-            )
+        if isinstance(self.dataset.data_root, str):
+            dataset_used = SSLDataset(set_type="train", **self.dataset)
         else:
-            list_of_datasets = []
-            for directory in self.data_root:
-                dataset_init = SSLDataset(data_root=directory, set_type="train", **self.kwargs)
-                list_of_datasets.append(dataset_init)
-            concatenated_datasets = ConcatDataset(list_of_datasets)
-            return get_dataloader(
+            datasets = []
+            for i in range(len(self.dataset.data_root)):
+                dataset_config = {key:value for key,value in self.dataset.items() if key != 'data_root'}
+                datasets.append(SSLDataset(set_type='train',data_root = self.dataset.data_root[i], **dataset_config))
+            dataset_used = ConcatDataset(datasets)
+            print('full dataset size:', len(dataset_used))
+        loader =loader = DataLoader(
+                dataset_used,
                 batch_size=self.batch_size,
-                dataset_used=concatenated_datasets,
-                set_type="train" 
+                sampler=None,
+                shuffle=False,
+                drop_last=True,
+                num_workers= self.num_workers,
+                pin_memory=self.pin_memory
             )
-            
-            
+        return loader
 
     def val_dataloader(self):
-        if isinstance(self.data_root,str):
-            return get_dataloader(
-                batch_size=self.batch_size,
-                dataset_used=SSLDataset(
-                    data_root=self.data_root, set_type="validation", **self.kwargs
-                ),
-                set_type="validation" 
-            )
+        if isinstance(self.dataset.data_root, str):
+            dataset_used = SSLDataset(set_type="validation", **self.dataset)
         else:
-            list_of_datasets = []
-            for directory in self.data_root:
-                dataset_init = SSLDataset(data_root=directory, set_type="validation", **self.kwargs)
-                list_of_datasets.append(dataset_init)
-            concatenated_datasets = ConcatDataset(list_of_datasets)
-            return get_dataloader(
+            datasets = []
+            for i in range(len(self.dataset.data_root)):
+                dataset_config = {key:value for key,value in self.dataset.items() if key != 'data_root'}
+                print(dataset_config)
+                datasets.append(SSLDataset(set_type='validation',data_root = self.dataset.data_root[i], **dataset_config))
+            dataset_used = ConcatDataset(datasets)
+            print('full dataset size:', len(dataset_used))
+            
+        loader =loader = DataLoader(
+                dataset_used,
                 batch_size=self.batch_size,
-                dataset_used=concatenated_datasets,
-                set_type="validation" 
+                sampler=None,
+                shuffle=False,
+                drop_last=True,
+                num_workers= self.num_workers,
+                pin_memory=self.pin_memory
             )
+        return loader
 
     def test_dataloader(self):
-         if isinstance(self.data_root,str):
-            return get_dataloader(
+        if isinstance(self.dataset.data_root, str):
+            dataset_used = SSLDataset(set_type="test", **self.dataset)
+        else:
+            datasets = []
+            
+            for i in range(len(self.dataset.data_root)):
+                dataset_config = {key:value for key,value in self.dataset.items() if key != 'data_root'}
+                datasets.append(SSLDataset(set_type='test',data_root = self.dataset.data_root[i], **dataset_config))
+            dataset_used = ConcatDataset(datasets)
+            print('full dataset size:', len(dataset_used))
+        loader =loader = DataLoader(
+                dataset_used,
                 batch_size=self.batch_size,
-                dataset_used=SSLDataset(
-                    data_root=self.data_root, set_type="test", **self.kwargs
-                ),
-                set_type="test" 
+                sampler=None,
+                shuffle=False,
+                drop_last=True,
+                num_workers= self.num_workers,
+                pin_memory=self.pin_memory
             )
-         else:
-            list_of_datasets = []
-            for directory in self.data_root:
-                dataset_init = SSLDataset(data_root=directory, set_type="test", **self.kwargs)
-                list_of_datasets.append(dataset_init)
-            concatenated_datasets = ConcatDataset(list_of_datasets)
-            logging.log(concatenated_datasets.__len__)
-            return get_dataloader(
-                batch_size=self.batch_size,
-                dataset_used=concatenated_datasets,
-                set_type="test" 
-            )
+        return loader

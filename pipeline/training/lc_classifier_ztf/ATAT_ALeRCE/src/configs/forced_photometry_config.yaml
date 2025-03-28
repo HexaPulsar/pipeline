@@ -1,0 +1,64 @@
+defaults:
+  - /miscelaneous/tabular_cols
+num_classes: 22
+
+bands_to_use:
+- 1
+- 2
+mapping_classes:
+  AGN: 0
+  Blazar: 8
+  CEP: 12
+  CV/Nova: 5
+  DSCT: 15
+  EA: 2
+  EB/EW: 10
+  LPV: 11
+  Microlensing: 21
+  Periodic-Other: 14
+  QSO: 1
+  RRLab: 13
+  RRLc: 6
+  RSCVn: 7
+  SLSN: 17
+  SNII: 9
+  SNIIb: 19
+  SNIIn: 20
+  SNIa: 4
+  SNIbc: 16
+  TDE: 18
+  YSO: 3
+  
+classes_to_use:
+- CV/Nova
+- LPV
+- YSO
+- QSO
+- RSCVn
+- CEP
+- EA
+- RRLab
+- RRLc
+- SNIa
+- SNII
+- AGN
+- EB/EW
+- DSCT
+- Blazar
+- Microlensing
+- SNIIn
+- Periodic-Other
+- SNIbc
+- SLSN
+- TDE
+- SNIIb
+
+list_time_to_eval:
+- 16
+- 32
+- 64
+- 128
+- 256
+- 512
+- 1024
+- 2048 

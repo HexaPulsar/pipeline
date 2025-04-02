@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from ..data.AlerceDictionaries import ALERCE_TAXONOMY
 
 
-def plot_umap(ax, umap_result, numeric_labels, num_classes, title,marker_size = 4):
-    colors = ALERCE_TAXONOMY.colors
+
+def plot_umap(ax, umap_result, numeric_labels, num_classes, title,marker_size = 4,colors = [], taxonomy = []):
+    
 
     for i in range(num_classes):
         class_indices = numeric_labels == i
@@ -42,7 +42,7 @@ def plot_umap(ax, umap_result, numeric_labels, num_classes, title,marker_size = 
             y=umap_result[class_indices, 1],
             s=marker_size,
             marker=markers[i],
-            label=list(ALERCE_TAXONOMY.all_classes.keys())[i],
+            label=list(taxonomy.all_classes.keys())[i],
             color=colors[i],
             alpha=0.75,
         )
@@ -54,14 +54,14 @@ def plot_umap(ax, umap_result, numeric_labels, num_classes, title,marker_size = 
     plt.legend()
 
 
-def big_group_plot_umap(ax, umap_result, numeric_labels, num_classes, title,marker_size):
+def big_group_plot_umap(ax, umap_result, numeric_labels, num_classes, title,marker_size, taxonomy = []):
     colors = ["cyan", "yellow", "magenta"]
     for i in range(num_classes):
         class_indices = numeric_labels == i
         color = (
             colors[0]
-            if i in ALERCE_TAXONOMY.transient.values()
-            else (colors[1] if i in ALERCE_TAXONOMY.stochastic.values() else colors[2])
+            if i in taxonomy.transient.values()
+            else (colors[1] if i in taxonomy.stochastic.values() else colors[2])
         )
         ax.scatter(
             x=umap_result[class_indices, 0],
@@ -80,8 +80,8 @@ def big_group_plot_umap(ax, umap_result, numeric_labels, num_classes, title,mark
     plt.legend(["transient", "stochastic", "periodic"])
 
 
-def plot_umap_3d(ax, umap_result, numeric_labels, num_classes, title,marker_size = 4):
-    colors = ALERCE_TAXONOMY.colors
+def plot_umap_3d(ax, umap_result, numeric_labels, num_classes, title,marker_size = 4, colors = [], taxonomy = []):
+    
     markers = [
         "o",
         "o",
@@ -118,7 +118,7 @@ def plot_umap_3d(ax, umap_result, numeric_labels, num_classes, title,marker_size
             umap_result[class_indices, 2],
             s=marker_size,
             marker=markers[i],
-            label=list(ALERCE_TAXONOMY.all_classes.keys())[i],
+            label=list(taxonomy().keys())[i],
             color=colors[i],
             alpha=0.75,
         )
@@ -136,27 +136,27 @@ def plot_umap_3d(ax, umap_result, numeric_labels, num_classes, title,marker_size
     ax.view_init(elev=10, azim=45)
 
 
-def plot_umap_3d_plotly(umap_result, numeric_labels, num_classes, title, output_path):
+def plot_umap_3d_plotly(umap_result, numeric_labels, num_classes, title, output_path, taxonomy = []):
     import plotly.graph_objects as go
     import plotly.express as px
  
     # Create group labels
     group_labels = []
     for label in numeric_labels:
-        if label in ALERCE_TAXONOMY.transient.values():
+        if label in taxonomy.transient.values():
             group_labels.append("Transient")
-        elif label in ALERCE_TAXONOMY.stochastic.values():
+        elif label in taxonomy.stochastic.values():
             group_labels.append("Stochastic")
         else:
             group_labels.append("Periodic")
     # Create class name mapping
-    class_names = ALERCE_TAXONOMY.values_as_keys()
+    class_names = taxonomy.values_as_keys()
     # Create group labels
     group_labels = []
     for label in numeric_labels:
-        if label in ALERCE_TAXONOMY.transient.values():
+        if label in taxonomy.transient.values():
             group_labels.append("Transient")
-        elif label in ALERCE_TAXONOMY.stochastic.values():
+        elif label in taxonomy.stochastic.values():
             group_labels.append("Stochastic")
         else:
             group_labels.append("Periodic")
@@ -212,18 +212,18 @@ def plot_umap_3d_plotly(umap_result, numeric_labels, num_classes, title, output_
 
 
 def plot_umap_3d_plotly_individual(
-    umap_result, numeric_labels, num_classes, title, output_path
+    umap_result, numeric_labels, num_classes, title, output_path,  colors = [], taxonomy = []
 ):
     import plotly.graph_objects as go
 
     # Create class name mapping
-    class_names = ALERCE_TAXONOMY.values_as_keys()
+    class_names = taxonomy.values_as_keys()
 
     # Create the figure
     fig = go.Figure()
 
     # Generate a color palette for all classes
-    colors = ALERCE_TAXONOMY.colors
+    
     # Add traces for each class
     for class_idx in range(num_classes):
         mask = numeric_labels == class_idx

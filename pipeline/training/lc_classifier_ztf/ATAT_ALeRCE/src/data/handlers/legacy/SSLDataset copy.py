@@ -1,51 +1,94 @@
-
+from copy import deepcopy
+import numpy as np
 import logging
 
+import h5py
+import random
 import torch
+
+from torch.utils.data import Dataset
 from joblib import load
 import pandas as pd
-
-
+from .augmentations import SCAugmentation, ThreeTimeMask
+from ...augmentations.TabularTransformations import RandomMask
  
-
+import src.augmentations.LightCurveTransform as LC
 from dataclasses import dataclass
 import logging
-from torchvision.transforms import Compose, RandomApply
-from .BaseDataset import BaseDataset
-from typing import Union, Optional
-from torchvision.transforms import Compose
+from torchvision.transforms import Compose, RandomApply, RandomChoice
+
 @dataclass
-class SSLDataset(BaseDataset):
+class SSLDataset(Dataset):
     data_root:str
     set_type:str
-    experiment_type:str
+    use_lightcurves:bool
+    use_lightcurves_err:bool
+    use_metadata:bool
+    use_features:bool
     seed:int
     train_apply_transform:bool
     validation_apply_transform:bool
-    train_key: str
-    validation_key:str
-    test_key:str
-    observation_key:str 
-    observation_err_key: str 
-    mask_key :str
-    time_key :str
-    time_alert_key :str
-    label_key :str
-    feature_key:  str
-    metadata_key: str
-    transforms_1: Optional[list] = None
-    transforms_2: Optional[list] = None
+    transforms_1: list
+    transforms_2: list
 
+    
     def __post_init__(self):
-        super().__init__(**{key:value for key,value in self.__dict__.items() if key not in ['transforms_1','transforms_2']})
-        self.use_lightcurves  = True if 'LC' in self.experiment_type else False
-        self.use_metadata  = True if 'MD' in self.experiment_type else False
-        self.use_features  = True if 'FEAT' in self.experiment_type else False
-        self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False        
-        self.transforms_1 =  Compose([RandomApply([trans], p = 0.5) for trans in self.transforms_1])
-        self.transforms_2 =  Compose([RandomApply([trans], p = 0.5) for trans in self.transforms_2])
+        """loading dataset from H5 file"""
+        """ dataset is composed for all samples, where self.these__idx dart to samples for each partition"""
         
 
+        h5_ = h5py.File("{}".format(self.data_root))
+        get_data = (h5_.get("test") if self.set_type == "test" else h5_.get("%s_%s" % (self.set_type, self.seed)))
+        assert get_data is not None, '{}_{} not a key of the dataset'.format(self.set_type,self.seed)
+        self.these_idx = get_data[:]
+        self.transforms_1 = Compose(self.transforms_1)
+        self.transforms_2 = Compose(self.transforms_2)
+        log_message = (
+        f"Dataset Configuration:\n"
+        f"{'='*30}\n"
+        f"• Set Type         : {self.set_type}\n"
+        f"• Total Indices    : {len(self.these_idx)}\n"
+        f"• Light Curves     : {'✓' if self.use_lightcurves else '✗'}\n"
+        f"• Metadata         : {'✓' if self.use_metadata else '✗'}\n"
+        f"• Features         : {'✓' if self.use_features else '✗'}\n"
+        f"{'='*30}"
+        )
+        logging.info(log_message)
+        self.data = h5_.get("flux")
+        self.data_err = h5_.get("flux_err")
+        self.mask = h5_.get("mask")
+        self.time = h5_.get("time")
+        self.time_alert = h5_.get("time_detection")
+        self.target = h5_.get("labels")
+        
+        
+        logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
+        
+        if self.use_metadata:
+            metadata_feat = h5_.get("metadata_feat")[:]
+            path_QT = f"{data_root}/quantiles/metadata/fold_{partition_used}.joblib".format(
+                data_root, partition_used
+            )
+
+            self.metadata_feat = self.get_tabular_data(
+                metadata_feat, path_QT, "metadata"
+            )
+            
+        if self.use_features:
+            self.extracted_feat = dict()
+            for time_eval in self.list_time_to_eval:
+                path_QT = f"{data_root}/quantiles/features/fold_{partition_used}.joblib"
+                extracted_feat = h5_.get("extracted_feat_{}".format(time_eval))[:]
+                self.extracted_feat.update(
+                    {
+                        time_eval: self.get_tabular_data(
+                            extracted_feat, path_QT, f"features_{time_eval}"    
+                        )
+                    }
+                )
+
+        
+            
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -60,9 +103,12 @@ class SSLDataset(BaseDataset):
             return self.get_md(_idx)
         elif self.use_features:
             return self.get_ft(_idx)
-    def __len__(self):
-        return len(self.these_idx)
         
+
+    def __len__(self):
+        """length of the dataset, is necessary for consistent getitem values"""
+        return len(self.these_idx)
+    
     def get_tabular_data(self, tabular_data, path_QT, type_data):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")
         
@@ -73,31 +119,41 @@ class SSLDataset(BaseDataset):
         df = df.fillna(0)
         df = df.values.reshape(df.shape[0],df.shape[1],1)
         return torch.Tensor(df).float()
- 
+
+    def update_mask(self, sample: dict, timeat: int):
+        sample.update(
+            {
+                "mask": sample["mask"]
+                * (sample["time_alert"] - sample["time_alert"][0, :].min() < timeat)
+                * (sample["time_photo"] - sample["time_photo"][0, :].min() < timeat)
+            }
+        )
+
+        return sample
+
     def get_lc(self,_idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
 
         data_dict = {}
-        aug_data_dict = {}
             
         data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
+        data_dict = self.transforms_1(data_dict)
         
 
+        aug_data_dict = {}
         aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        
-        data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
-
         return (data_dict, aug_data_dict)
     
     def get_md(self,_idx):
         data_dict = {}
         aug_data_dict = {}
+ 
         
         tabular_features = []
         aug_tabular_features = []

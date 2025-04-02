@@ -1,24 +1,15 @@
-import numpy as np
+
 import logging
-
-import h5py
-import random
 import torch
-
 from src.data.handlers.BaseDataset import BaseDataset
 from joblib import load
-
-from torchvision.transforms import Compose, RandomApply, RandomChoice
-from .augmentations import SCAugmentation, ThreeTimeMask
-from ...augmentations.TabularTransformations import RandomMask
- 
-import src.augmentations.LightCurveTransform as LC
 from dataclasses import dataclass
 import logging
 from .BaseDataset import BaseDataset
 from typing import Union, Optional
-
+from torchvision.transforms import Compose
 @dataclass
+
 class ATATDataset(BaseDataset):
     data_root:str
     set_type:str
@@ -29,18 +20,23 @@ class ATATDataset(BaseDataset):
     train_key: str
     validation_key:str
     test_key:str
+    observation_key:str 
+    observation_err_key: str 
+    mask_key :str
+    time_key :str
+    time_alert_key :str
+    label_key :str
+    feature_key:  str
+    metadata_key: str
     transforms: Optional[list] = None
-    
+
     def __post_init__(self):
-        
-        
         super().__init__(**{key:value for key,value in self.__dict__.items() if key != 'transforms'})
         self.transforms = Compose(self.transforms) if self.transforms is not None else None
         self.use_lightcurves  = True if 'LC' in self.experiment_type else False
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
         self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False
-        
         
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
@@ -50,24 +46,19 @@ class ATATDataset(BaseDataset):
         data_dict = {
             "labels":  self.target[_idx]
         }
-
-        data_dict.update({
-                          "time": torch.tensor(self.time[_idx,:,:],dtype =  torch.float),
-                            "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool),} ) #if any([self.online_opt_tt,self.force_online_opt]) else None 
         if self.use_lightcurves:
-            data_dict.update({"data":  torch.tensor(self.data[_idx,:,:],dtype =  torch.float),
-                              })
-
+            data_dict.update({"data":torch.tensor(self.data[_idx,:,:],dtype =  torch.float),
+                              "time":torch.tensor(self.time[_idx,:,:],dtype =  torch.float),
+                              "mask":torch.tensor(self.mask[_idx,:,:],dtype = bool)})
         if self.use_lightcurves_err:
-            data_dict.update({"data_err":  torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
+            data_dict.update({"data_err":torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
 
         if self.use_metadata:
-            data_dict.update({"metadata_feat":   torch.tensor(self.metadata_feat[_idx],dtype =  torch.float),
-                              })
+            data_dict.update({"metadata_feat":torch.tensor(self.metadata_feat[_idx],dtype =  torch.float),})
 
         if self.use_features:
             data_dict.update(
-                {"extracted_feat": torch.tensor(self.extracted_feat[self.list_time_to_eval[-1]][_idx]).float()}
+                {"extracted_feat": torch.tensor(self.extracted_feat[self.list_time_to_eval[-1]][_idx], dtype = torch.float)}
             )
 
         if all([self.train_apply_transform, self.set_type == 'train',self.transforms is not None]):
@@ -79,13 +70,10 @@ class ATATDataset(BaseDataset):
          
         if self.use_metadata:
             tabular_features.append(data_dict["metadata_feat"].unsqueeze(1))
-
         if self.use_features:
             tabular_features.append(data_dict["extracted_feat"].unsqueeze(1))
-
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
-        #print(data_dict.keys())
         return data_dict
 
     def __len__(self): 

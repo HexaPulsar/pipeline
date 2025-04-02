@@ -20,7 +20,7 @@ class ClassifierBaseModel(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_normal_(p)
 
-    def forward(self, data, time, mask=None):
+    def forward(self, data, time, mask=None, labels= None):
         emb = self.model(data, time, mask)
         return self.classifier(emb)
 

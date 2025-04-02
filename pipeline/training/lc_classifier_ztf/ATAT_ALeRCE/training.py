@@ -1,35 +1,27 @@
 import warnings
 import logging
-import colorlog
-import pickle
-import yaml
-import glob
-import os
+import colorlog 
 
 warnings.filterwarnings("ignore")
 
 
 from src.data.modules.LitData import LitData
 from src.models.ClassifierModule import ClassifierModule
-
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger
+ 
 from pytorch_lightning import Trainer
-from pytorch_lightning.profilers import AdvancedProfiler
+
 from src.layers.transformer.lightcurve import LightCurveTransformer
 from src.layers.classifiers.TokenClassifier import TokenClassifier
-from src.utils.CustomParser import CustomParser
+
 import torch.nn as nn
 import hydra
-from omegaconf import DictConfig, OmegaConf
-from src.utils.CustomParser import ATATConfig, ATATDatasetArgs
+
+from src.utils.CustomParser import ATATConfig
 from  hydra.utils import instantiate
+from src.losses.FocalLoss import FocalLoss
 
 
-
-@hydra.main(version_base=None, config_path="./src/configs/", config_name= 'supervised_training')
+@hydra.main(version_base=None, config_path="./src/configs/ELASTICC/", config_name= 'supervised_training')
 def main(cfg:ATATConfig):
     #print(cfg)
     
@@ -57,10 +49,13 @@ def main(cfg:ATATConfig):
     pl_datal = LitData(**cfg.datamodule)
     if cfg.experiment_type == 'LC':
         transformer = LightCurveTransformer(**cfg.lc)
-        print(transformer)
+
         classifier = TokenClassifier(num_classes=cfg.num_classes,embedding_size=cfg.lc.embedding_size)
+        #loss = FocalLoss(1,task_type='multi-class', num_classes=cfg.num_classes) 
         loss = nn.CrossEntropyLoss()
-        pl_model = ClassifierModule(transformer,classifier, loss,**cfg) 
+        pl_model = ClassifierModule(transformer,classifier, loss, 
+                                    cfg.checkpoint,
+                                    freeze_transformer=False,**cfg) 
     trainer = Trainer(
         callbacks=list(cfg.callbacks.values()),
         logger= list(cfg.loggers.values()),

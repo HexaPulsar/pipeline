@@ -9,6 +9,7 @@ from collections import OrderedDict
 import numpy as np
 import pytorch_lightning as pl
 from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR
+import torchmetrics.classification
 from tqdm import tqdm  
 
 
@@ -24,14 +25,14 @@ import glob
 
     
 class ClassifierModule(pl.LightningModule):
-    def __init__(self,model,classifier, loss, load_ckpt = True, freeze_transformer = False, **kwargs):
+    def __init__(self,model,classifier, loss, load_ckpt = None, freeze_transformer = False, **kwargs):
         super().__init__()
         self.gradients_ = None
 
         self.model = model
         self.classifier  =classifier
         self.init_model()
-        
+
         self.warmup = 0
         self.loss = loss
         self.load_ckpt = load_ckpt
@@ -45,14 +46,11 @@ class ClassifierModule(pl.LightningModule):
         
         self.train_metrics = metrics.clone(prefix='train/')
         self.valid_metrics = metrics.clone(prefix='validation/')
- 
 
-
-        if self.load_ckpt:
-            lc_out_path = f'/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/ZTF_ff/LC/TEST_HYDRA/' 
-            #print(f'loading model {lc_out_path}')
-            lc_out_path = glob.glob(lc_out_path+ "*.ckpt")[0]
-            checkpoint_ = torch.load(lc_out_path)
+        if self.load_ckpt is not None:
+            print("LOADING CKPT!!!")
+            _ckpt = glob.glob(self.load_ckpt+ "*.ckpt")[0]
+            checkpoint_ = torch.load(_ckpt)
             weights = OrderedDict()
             for key in checkpoint_["state_dict"].keys():
                 if 'projection' in key:
@@ -60,9 +58,11 @@ class ClassifierModule(pl.LightningModule):
                 else:
                     weights[key.replace("model.", "")] = checkpoint_["state_dict"][key]
             self.model.load_state_dict(weights, strict=True)
+            print("loaded chekcpoint")
         if self.freeze_transformer:
             for param in self.model.parameters():
                 param.requires_grad = False
+
     def init_model(self):
         for name, p in self.named_parameters():
             if p.dim() > 1:

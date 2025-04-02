@@ -1,12 +1,11 @@
 import argparse
 import yaml
 import os
-
+import hydra
+from omegaconf import DictConfig, OmegaConf
 from dataclasses import dataclass,asdict
 import logging
-from torchvision.transforms import Compose, RandomApply, RandomChoice
 from typing import Union, Optional, Any
-
 from src.data.handlers.CustomDataset import ATATDataset
 from src.data.handlers.SSLDataset import SSLDataset
 
@@ -22,14 +21,23 @@ class ZTFConfig:
     
 @dataclass
 class BaseDatasetArgs:
-    data_root: Any
-    train_key: str
-    validation_key: str
-    test_key:str
-    experiment_type: str = ''
-    seed:int=0
-    train_apply_transform:bool = False
-    validation_apply_transform: bool = False
+    data_root:str 
+    experiment_type:str 
+    seed:int = 0
+    train_apply_transform:bool = True
+    validation_apply_transform:bool  = False
+    train_key:str = 'training'
+    validation_key:str   = 'validation'
+    test_key:str  = 'test'
+    observation_key:str = 'flux'
+    observation_err_key:str  = 'flux_err'
+    time_key:str  = 'time'
+    time_alert_key:str = 'time_alert'
+    mask_key:str = 'mask'
+    feature_key:str  = 'feat_cols'
+    metadata_key:str = 'md_cols'
+    label_key:str= 'labels'
+    
 
 @dataclass
 class ATATDatasetArgs(BaseDatasetArgs):
@@ -37,10 +45,13 @@ class ATATDatasetArgs(BaseDatasetArgs):
     transforms:Optional[list] = None
     
     
+    
 @dataclass
 class SSLDatasetArgs(BaseDatasetArgs):
+    experiment_type: str = ''         
     transforms_1: Optional[list] = None
     transforms_2: Optional[list] = None
+
     
 @dataclass 
 class DataModuleArgs:
@@ -73,7 +84,15 @@ class LightcurveArgs:
     pe_type:str = 'tm'
     num_harmonics:int = 64
     num_bands:int = 2
+    dropout: float = 0.01
 
+@dataclass
+class VICRegArgs:
+    layers:str
+    inv_coeff: float
+    var_coeff: float
+    cov_coeff: float
+     
  
 @dataclass 
 class ATATConfig:
@@ -91,55 +110,4 @@ class ATATConfig:
     num_classes:int 
     mode: str
     monitor: str 
-    
-import os
-import hydra
-from omegaconf import DictConfig, OmegaConf
-import yaml
-from dataclasses import asdict
-
-class CustomParser:
-    def __init__(self, model_config_yaml_path: str):
-        """A custom parser implementation for ATAT training arguments using Hydra."""
-        
-        self.all_args = {}
-        self.dataset = {}
-        self.config = self._load_config(model_config_yaml_path)
-        self._setup_experiment_type(self.config.general.experiment_type)
-        self._setup_extra_args(self.config)
-        
-        self.general = asdict(self.config.general)
-        self.lightcurve = asdict(self.config.lightcurve)
-        self.tabular = asdict(self.config.tabular)
-        self.dataset = asdict(self.config.dataset)
-        self.dataloader = asdict(self.config.dataloader)
-        self.dataloader.update({'dataset_config_dict': self.dataset})
-    
-    @staticmethod
-    def _load_config(yaml_path: str) -> DictConfig:
-        with open(yaml_path, "r") as yaml_file:
-            config_dict = yaml.safe_load(yaml_file)
-        return OmegaConf.create(config_dict)
-    
-    def _setup_extra_args(self, config):
-        if config.general.use_lightcurves:
-            config.lightcurve.input_size = 1
-        if config.general.use_lightcurves_err:
-            config.lightcurve.input_size = 2
-        if config.general.use_metadata:
-            config.tabular.length_size += len(config.md_cols)
-        if config.general.use_features:
-            config.tabular.length_size += len(config.feat_cols)
-            config.general.list_time_to_eval = config.list_time_to_eval
-    
-    def _setup_experiment_type(self, experiment_type_str: str):
-        experiment_type_list = experiment_type_str.split('_')
-        
-        # Reset variables
-        self.config.general.use_lightcurves = 'lc' in experiment_type_list
-        self.config.general.use_metadata = 'md' in experiment_type_list
-        self.config.general.use_features = 'feat' in experiment_type_list
-        self.config.general.use_QT = 'feat' in experiment_type_list
-        self.config.general.online_opt_tt = 'mta' in experiment_type_list
-
- 
+    checkpoint: Optional[str] = None

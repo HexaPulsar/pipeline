@@ -16,6 +16,7 @@ class LightCurveTransformer(nn.Module):
         num_harmonics= 64,
         pe_type= 'tm',
         num_bands= 2,
+        dropout = 0.01,
         ):
         self.input_size = input_size
         self.embedding_size = embedding_size
@@ -32,15 +33,14 @@ class LightCurveTransformer(nn.Module):
                                         self.embedding_size,
                                         self.Tmax,
                                         self.pe_type)
-        p = 0.01
-        self.dropout = nn.Dropout(p)
+        self.dropout = nn.Dropout(dropout)
         self.transformer_lc = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(
                 d_model=self.embedding_size,
                 nhead=self.num_heads,
                 dim_feedforward=self.embedding_size_sub,
                 activation="gelu",
-                dropout=p,
+                dropout=dropout,
                 batch_first=True,
                 norm_first=True,
             ),

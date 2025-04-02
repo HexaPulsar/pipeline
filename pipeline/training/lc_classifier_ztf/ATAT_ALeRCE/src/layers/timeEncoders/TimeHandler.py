@@ -67,7 +67,10 @@ class   TimeHandler(nn.Module):
         x_mod = x_mod.gather(1, indexes.repeat(1, 1, x_mod.shape[-1]))
         m_mod  = m_mod.gather(1, indexes)
         t_mod = t_mod.gather(1, indexes)
-        #max_seq = (x_mod).count_nonzero(dim =1).max()     
+        x_mod_count = x_mod.count_nonzero(dim = 1).max()
+        x_mod = x_mod[:,:x_mod_count,:]
+        m_mod = m_mod[:,:x_mod_count,:]
+        t_mod = t_mod[:,:x_mod_count,:]
         return (
             x_mod,
             m_mod,

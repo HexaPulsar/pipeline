@@ -26,6 +26,7 @@ class PretrainModule(pl.LightningModule):
         self.loss = loss
         self.init_model()
         logging.debug('using learning rate {}'.format(self.lr))
+        
     def init_model(self):
         for name, p in self.named_parameters():
             if p.dim() > 1:
@@ -50,11 +51,11 @@ class PretrainModule(pl.LightningModule):
     def configure_optimizers(self):
         warmup = 0
         optimizer = optim.AdamW(self.parameters(), lr=self.lr)
-        cosine = CosineAnnealingWarmRestarts(optimizer, T_0=int(1e4), eta_min=2e-3)
+        #cosine = CosineAnnealingWarmRestarts(optimizer, T_0=int(1e4)//2, eta_min=5e-6)
         constant = ConstantLR(optimizer,1)  
         scheduler = SequentialLR(
                     optimizer,
-                    schedulers=[cosine,cosine],
+                    schedulers=[constant,constant],
                     milestones=[warmup]
                 )
         return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]

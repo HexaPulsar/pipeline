@@ -31,7 +31,7 @@ class CLIPProjector(nn.Module):
             # nn.LayerNorm(input_size),
             nn.Linear(input_size, hidden_size, bias=False),
             nn.GELU(),
-            nn.LayerNorm(hidden_size),
+            nn.BatchNorm1d(hidden_size),
             nn.Linear(hidden_size, output_size, bias=False),
         )
 

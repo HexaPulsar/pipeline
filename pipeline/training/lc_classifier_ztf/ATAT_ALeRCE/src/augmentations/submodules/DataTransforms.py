@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from copy import deepcopy
 from .WindowApply import WindowApply
+from scipy.ndimage import gaussian_filter1d
 class ShiftData(WindowApply):
     def __init__(self,num_bands,window = -1):
         super().__init__()

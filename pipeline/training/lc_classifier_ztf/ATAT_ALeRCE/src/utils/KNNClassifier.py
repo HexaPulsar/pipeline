@@ -2,9 +2,9 @@
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.neighbors import KNeighborsClassifier
 from src.utils.plots.ATATConfusionMatrix import elasticc_confusion_matrix
-from src.utils.data.AlerceDictionaries import ALERCE_TAXONOMY
 
-def KNNClassifier(train:tuple,validation:tuple, test:tuple, plot_cm = False, cm_output_titple = ''):
+
+def KNNClassifier(train:tuple,validation:tuple, test:tuple, plot_cm = False, cm_output_titple = '', taxonomy = []):
     """_summary_
 
     Args:
@@ -22,7 +22,7 @@ def KNNClassifier(train:tuple,validation:tuple, test:tuple, plot_cm = False, cm_
     y_pred = knn.predict(validation[0])
     print(
         classification_report(
-            validation[1], validation[0], target_names=list(ALERCE_TAXONOMY.all_classes.keys()), digits=4
+            validation[1], validation[0], target_names=list(taxonomy.all_classes.keys()), digits=4
         )
     )
 
@@ -30,7 +30,7 @@ def KNNClassifier(train:tuple,validation:tuple, test:tuple, plot_cm = False, cm_
         out_metrics_balto = classification_report(
             target,
             y_pred,
-            target_names=list(ALERCE_TAXONOMY.all_classes.keys()),
+            target_names=list(taxonomy.all_classes.keys()),
             output_dict=True,
         )["macro avg"]
         template_balto = ""
@@ -42,7 +42,7 @@ def KNNClassifier(train:tuple,validation:tuple, test:tuple, plot_cm = False, cm_
         elasticc_confusion_matrix(
             y_true=np.array(validation[1]).astype(int),
             y_pred=np.array(validation[0]).astype(int),
-            classes=np.array(list(ALERCE_TAXONOMY.all_classes.keys())),
+            classes=np.array(list(taxonomy.all_classes.keys())),
             ax=axes,
             normalize=True,
             title=f" FClassifier Results [TEST] \n\n {template_balto}",
@@ -53,14 +53,14 @@ def KNNClassifier(train:tuple,validation:tuple, test:tuple, plot_cm = False, cm_
         y_pred = knn.predict(test[0])
         print(
             classification_report(
-                test[1], test[0], target_names=list(ALERCE_TAXONOMY.all_classes.keys()), digits=4
+                test[1], test[0], target_names=list(taxonomy.all_classes.keys()), digits=4
             )
         )
         if plot_cm:
             out_metrics_balto = classification_report(
                 target,
                 y_pred,
-                target_names=list(ALERCE_TAXONOMY.all_classes.keys()),
+                target_names=list(taxonomy.all_classes.keys()),
                 output_dict=True,
             )["macro avg"]
             template_balto = ""
@@ -72,7 +72,7 @@ def KNNClassifier(train:tuple,validation:tuple, test:tuple, plot_cm = False, cm_
             elasticc_confusion_matrix(
                 y_true=np.array(test[1]).astype(int),
                 y_pred=np.array(test[0]).astype(int),
-                classes=np.array(list(ALERCE_TAXONOMY.all_classes.keys())),
+                classes=np.array(list(taxonomy.all_classes.keys())),
                 ax=axes,
                 normalize=True,
                 title=f" FClassifier Results [TEST] \n\n {template_balto}",

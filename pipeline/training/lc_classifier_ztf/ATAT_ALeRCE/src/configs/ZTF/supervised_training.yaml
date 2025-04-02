@@ -1,0 +1,109 @@
+
+ATATConfig:
+  _target_: src.utils.CustomParser.ATATConfig
+  experiment_type: &experiment_type 'default_type'
+  save_dir_path: &save_dir_path 'default_savepath'
+  log_filename: 'default.log'
+  learning_rate: 1e-3
+  num_classes: 22
+  lc: 
+    _target_: src.utils.CustomParser.LightcurveArgs
+    input_size: 1
+    embedding_size: 128
+    embedding_size_sub: 512
+    num_heads: 4
+    num_encoders: 3
+    Tmax: 1000.0
+    pe_type: 'tm'
+    num_harmonics: 4
+    num_bands: 2
+    dropout: 0.01
+    
+  tab: null
+  mode: &mode 'max'
+  monitor: &monitor "validation/f1"
+  datamodule:
+    _target_: src.utils.CustomParser.DataModuleArgs
+    dataset:
+      _target_: src.utils.CustomParser.ATATDatasetArgs 
+      experiment_type: *experiment_type
+      data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
+      seed: 0
+      train_apply_transform: false
+      validation_apply_transform: false
+      transforms: []  # List of transform modules
+      train_key: 'training'
+      validation_key: 'validation'
+      test_key: 'test'
+      observation_key: flux 
+      observation_err_key: flux_err
+      time_key: time
+      time_alert_key: time_alert 
+      mask_key: mask
+      feature_key: feat_cols
+      metadata_key: metadata_cols
+      label_key: labels
+    train_use_sampler: true
+    train_shuffle: true
+    num_workers: 8
+    pin_memory: true
+    batch_size: 512
+
+  trainer:
+    max_epochs: 30
+    devices: 'auto'
+    accelerator: 'gpu'
+    gradient_clip_val: 0.0
+    num_sanity_val_steps: 0
+    min_epochs: 1
+    log_every_n_steps: 10
+
+  callbacks:
+    early_stopping:
+      monitor: *monitor
+      mode: *mode
+      _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+      min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
+      patience: 15 # number of checks with no improvement after which training will be stopped
+      verbose: False # verbosity mode
+      strict: True # whether to crash the training if monitor is not found in the validation metrics
+      check_finite: True # when set True, stops training when the monitor becomes NaN or infinite
+      stopping_threshold: null # stop training immediately once the monitored quantity reaches this threshold
+      divergence_threshold: null # stop training as soon as the monitored quantity becomes worse than this threshold
+      check_on_train_epoch_end: null # whether to run early stopping at the end of the training epoch
+      # log_rank_zero_only: False  # this keyword argument isn't available in stable version
+
+    model_checkpoint:
+      monitor: *monitor
+      mode: *mode
+      _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      dirpath: ''
+      filename: classifier_ckpt # checkpoint filename
+      verbose: False # verbosity mode
+      save_last: null # additionally always save an exact copy of the last checkpoint to a file last.ckpt
+      save_top_k: 1 # save k best models (determined by above metric)
+      auto_insert_metric_name: True # when True, the checkpoints filenames will contain the metric name
+      save_weights_only: False # if True, then only the model’s weights will be saved
+      every_n_train_steps: null # number of training steps between checkpoints
+      train_time_interval: null # checkpoints are monitored at the specified time interval
+      every_n_epochs: null # number of epochs between checkpoints
+      save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
+
+  loggers:
+    
+    tensorboard:
+      _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
+      name: 'tensorboard'
+      version: 0
+      save_dir: ''
+      log_graph: False
+      default_hp_metric: True
+      prefix: ""
+      # version: ""
+    csv:
+      name: 'metrics'
+      version: 0
+      save_dir: ''
+      _target_: pytorch_lightning.loggers.csv_logs.CSVLogger
+      prefix: ""
+

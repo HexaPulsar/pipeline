@@ -1,7 +1,7 @@
 defaults:
-
+  - 
   #- tabular_config 
 #x  - forced_photometry_config
-  - supervised_training
+ # - supervised_training
  # - labeled_dataset_config
 

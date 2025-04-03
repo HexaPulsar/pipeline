@@ -3,6 +3,7 @@ import pandas as pd
 from tqdm import tqdm 
 import glob
 from copy import deepcopy
+
 class QuickLoader: 
     def __init__(self,
                  batch_size = 256,
@@ -201,26 +202,25 @@ class ReportClassification(Report):
         classification = classification_report(target,preds_out, target_names=list(self.taxonomy().keys()),digits = digits)
         print(classification)
         if confusion_matrix:
-            import matplotlib.pyplot as plt
-            fig, axes = plt.subplots(1, 1, figsize=(12, 12))
-            axes = self.get_confusion_matrix(preds_out,target, title = 'Classifier Results [{}]'.format(dataset_type.upper()))
-        return axes
+            self.get_confusion_matrix(preds_out,target, title = 'Classifier Results [{}]'.format(dataset_type.upper()))
 
     def get_confusion_matrix(self, preds,target, title = ''):
         from src.utils.plots.ATATConfusionMatrix import elasticc_confusion_matrix
         from sklearn.metrics import classification_report
+        import matplotlib.pyplot as plt
+
         out_metrics_balto = classification_report(
             target, preds,target_names=list(self.taxonomy().keys()), output_dict=True
         )["macro avg"]
         template_balto = ""
         for key in out_metrics_balto.keys():
             template_balto += " {} : {:.3f} ".format(key.upper(), out_metrics_balto[key])
-        
+        fig, axes = plt.subplots(1,1,figsize = (10,10))
         return elasticc_confusion_matrix(
             y_true=np.array(target).astype(int),
             y_pred=np.array(preds).astype(int),
             classes= np.array(list(self.taxonomy().keys())),
-            ax=None,
+            ax=axes,
             normalize=True,
             title=title,
         )

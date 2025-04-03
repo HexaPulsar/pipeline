@@ -3,6 +3,57 @@ import pandas as pd
 from tqdm import tqdm 
 import glob
 from copy import deepcopy
+class QuickLoader: 
+    def __init__(self,
+                 batch_size = 256,
+                 experiment_type =  "LC",
+                data_root =  "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5",
+                seed =  0,
+                train_apply_transform =  False,
+                validation_apply_transform =  False,
+                transforms =  [] , # List of transform modules
+                train_key =  'training',
+                validation_key =  'validation',
+                test_key =  'test',
+                observation_key =  'flux' ,
+                observation_err_key =  'flux_err',
+                time_key =  'time',
+                time_alert_key =  'time_alert' ,
+                mask_key =  'mask',
+                feature_key =  'feat_cols',
+                metadata_key =  'metadata_cols',
+                label_key =  'labels'):
+        from src.data.modules.LitData import LitData
+        datamodule = {'dataset':
+                            {'experiment_type': experiment_type,
+                            'data_root': data_root,
+                            'seed': seed,
+                            'train_apply_transform': train_apply_transform,
+                            'validation_apply_transform': validation_apply_transform,
+                            'transforms': transforms,
+                            'train_key': train_key,
+                            'validation_key': validation_key,
+                            'test_key':  test_key,
+                            'observation_key': observation_key ,
+                            'observation_err_key': observation_err_key,
+                            'time_key': time_key,
+                            'time_alert_key': time_alert_key ,
+                            'mask_key': mask_key,
+                            'feature_key': feature_key,
+                            'metadata_key': metadata_key,
+                            'label_key': label_key},
+            'train_use_sampler': False,
+            'train_shuffle': True,
+            'num_workers': 8,
+            'pin_memory': True,
+            'batch_size': batch_size,
+        }
+        pl_datal = LitData(**datamodule)
+         
+        self.train = pl_datal.train_dataloader()
+        self.validation = pl_datal.val_dataloader()
+        self.test = pl_datal.test_dataloader()
+
 
 class Report:
     def __init__(

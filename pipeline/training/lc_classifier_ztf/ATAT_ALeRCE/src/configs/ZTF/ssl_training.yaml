@@ -4,7 +4,7 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 1e-6
+  learning_rate: 1e-3
   num_classes: 22
   lc: 
     _target_: src.utils.CustomParser.LightcurveArgs

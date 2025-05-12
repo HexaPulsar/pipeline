@@ -12,7 +12,7 @@ ATATConfig:
     embedding_size: 128
     embedding_size_sub: 512
     num_heads: 4
-    num_encoders: 1
+    num_encoders: 3
     Tmax: 1000.0
     pe_type: 'tm'
     num_harmonics: 4

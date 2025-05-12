@@ -128,42 +128,41 @@ class SSLDataset(BaseDataset):
     def get_lc_md(self,_idx):
         
         data_dict = {}
-        #aug_data_dict = {}
+        aug_data_dict = {}
             
         data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
         
         
-        #if self.output_augmented_batch:
-        #    aug_data_dict = {}
-        #    aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
-        #                      "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
-        #                        "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
+        aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
+                            "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
+                            "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
        
-        
         tabular_features = []
-        #aug_tabular_features = []
-        data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
+        aug_tabular_features = []
+
+        data_dict.update({"metadata_feat": torch.tensor(self.metadata_feat[_idx],dtype = torch.float)})
         tabular_features.append(data_dict["metadata_feat"])
         
-        #if self.output_augmented_batch:
         
-        #    aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx].clone()})
-        #    aug_tabular_features.append(aug_data_dict["metadata_feat"])
-         
+        aug_data_dict.update({"metadata_feat": torch.tensor(self.metadata_feat[_idx],dtype = torch.float).clone()})
+        aug_tabular_features.append(aug_data_dict["metadata_feat"])
+        
+        
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
-            #if self.output_augmented_batch:
-            #    aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
+            aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
         
         #data_dict = self.transforms_1(data_dict)
         #if self.output_augmented_batch:
         #    aug_data_dict = self.transforms_2(aug_data_dict)
         #return (data_dict, aug_data_dict) if self.output_augmented_batch else data_dict
+        del data_dict['metadata_feat']
+        del aug_data_dict['metadata_feat']
         data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
-        return data_dict
+        return (data_dict, aug_data_dict)
     
     def get_ft(self,_idx):
 

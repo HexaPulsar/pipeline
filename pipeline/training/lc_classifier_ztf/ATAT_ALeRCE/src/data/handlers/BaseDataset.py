@@ -92,16 +92,18 @@ class BaseDataset(Dataset):
         logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
 
         if self.use_metadata:
-            metadata_feat = h5_.get(self.metadata_key)[:]
+            self.metadata_feat = h5_.get(self.metadata_key)#[:]
+            '''
             path = '/'.join(self.data_root.split('/')[:-1])
             add = 'metadata_qt'
-            add = 'fold'
+            #add = 'fold'
             path_QT = f"{path}/metadata/{add}_{self.seed}.joblib".format(
                 self.data_root, self.seed
             )
             self.metadata_feat = self.get_tabular_data(
                 metadata_feat, path_QT, "metadata"
             )
+            ''' 
         if self.use_features:
             self.extracted_feat = dict()
             

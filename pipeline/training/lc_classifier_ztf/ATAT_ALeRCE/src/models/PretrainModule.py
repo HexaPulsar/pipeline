@@ -57,7 +57,12 @@ class PretrainModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x = self.model(**batch[0])
         y = self.model(**batch[1])
+        x = x['MIX']    
+        y = y['MIX']
+
         loss_dict = self.loss(x,y)
+        
+
         with torch.no_grad():
             for key,value in loss_dict.items():
                 if 'CORR' in key:
@@ -65,23 +70,30 @@ class PretrainModule(pl.LightningModule):
                 else:
                     self.log(f'loss_train/{key}', value ,on_epoch=False,on_step=True)
             if batch_idx % 10 == 0:
+                pass
                 #for harmonic in range(4):
                 #    self.logger.experiment.add_histogram(f'HARMONICS/alpha_cos_harmonics_{harmonic}',self.model.time_encoder.time_encoders[harmonic].alpha_cos,self.global_step)
                 #    self.logger.experiment.add_histogram(f'HARMONICS/alpha_sin_harmonics_{harmonic}',self.model.time_encoder.time_encoders[harmonic].alpha_sin,self.global_step) 
                 
-                self.logger.experiment.add_histogram(f'token/x',self.model.token_lc.token,self.global_step)
-                self.logger.experiment.add_histogram(f'token/y',self.model.token_lc.token,self.global_step)
+                #self.logger.experiment.add_histogram(f'token/x',self.model.token_lc.token,self.global_step)
+                #self.logger.experiment.add_histogram(f'token/y',self.model.token_lc.token,self.global_step)
 
                 #self.logger.experiment.add_histogram(f'token/x',self.model.token_tab.token,self.global_step)
                 #self.logger.experiment.add_histogram(f'token/y',self.model.token_tab.token,self.global_step)
 
-                self.logger.experiment.add_histogram(f'out_emb/x',x,self.global_step)
-                self.logger.experiment.add_histogram(f'out_emb/y',y,self.global_step)
+                #self.logger.experiment.add_histogram(f'out_emb/x',x,self.global_step)
+                #self.logger.experiment.add_histogram(f'out_emb/y',y,self.global_step)
                 #self.logger.experiment.add_histogram(f'cos_similarity',cosine_similarity(x,y),self.global_step)
         return loss_dict['loss']
      
     def validation_step(self, batch, batch_idx):
-        loss_dict = self.loss( self.model(**batch[0]),self.model(**batch[1]))
+        x = self.model(**batch[0])
+        y = self.model(**batch[1])
+        x = x['MIX']    
+        y = y['MIX']
+
+        loss_dict = self.loss(x,y)
+        
         with torch.no_grad():
            for key,value in loss_dict.items():
                 if 'CORR' not in key:

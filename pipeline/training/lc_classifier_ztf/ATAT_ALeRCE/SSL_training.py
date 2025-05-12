@@ -2,14 +2,15 @@ import warnings
 import logging
 import colorlog
 
-warnings.filterwarnings("ignore")
+#warnings.filterwarnings("ignore")
 
+from src.layers.transformer.Combinator import Combinator
 from src.data.modules.LitPretrain import LitPretrain
 from src.models.PretrainModule import PretrainModule
 from src.models.PretrainMMModule import PretrainMMModule
 
 from src.augmentations import LightCurveTransform as LC
-#from src.augmentations import TabularTransformations as TAB
+from src.augmentations import TabularTransformations as TAB
 from src.layers.transformer.lightcurve import LightCurveTransformer
 from src.layers.transformer.tabular import TabularTransformer
 from src.layers.utils.projector import VICRegProjector
@@ -44,7 +45,7 @@ def main(cfg:ATATConfig):
             handler,
         ],
     )
-    assert cfg.experiment_type == 'LC' , cfg.experiment_type
+    #assert cfg.experiment_type == 'LC' , cfg.experiment_type
     cfg.datamodule.dataset.experiment_type = cfg.experiment_type
     WINDOW_1 = -1
     transforms = [  
@@ -80,17 +81,18 @@ def main(cfg:ATATConfig):
                                   #LC.MaskFirstN(2,mask_first= [-1,0,1,2]),
                                 #])
                     ]
-    #transforms = [TAB.GaussianNoise(0,1e-2),
+    #transforms = [
                   #TAB.Scale(),
                   #TAB.Jitter(),
                   #TAB.Shift()
     #              ]
-    p_ = 0.1
+    p_ = 1
     transforms = [RandomApply([t], p = p_) for t in transforms]
-    transforms +=[LC.TimeNormalization()]
+    transforms +=[LC.TimeNormalization(), TAB.DealWithInfs(), TAB.DealWithNaNs()]
     cfg.datamodule.dataset.transforms_1 = transforms
-    cfg.datamodule.dataset.transforms_2 = [LC.TimeNormalization()] #transforms
+    cfg.datamodule.dataset.transforms_2 = [LC.TimeNormalization(), TAB.DealWithInfs(), TAB.DealWithNaNs()] #transforms
     pl_datal = LitPretrain(**cfg.datamodule)
+
     if cfg.experiment_type == 'LC':
         transformer = LightCurveTransformer(**cfg.lc)
         projector = VICRegProjector(VICReg(25,25,1),'128-512-512')
@@ -101,11 +103,11 @@ def main(cfg:ATATConfig):
         pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate)
 
     if cfg.experiment_type == 'LC_MD':
-        projector = VICRegProjector(VICReg(100,100,1),'128-128-128')
-        pl_model = PretrainMMModule(model_lc= LightCurveTransformer(**cfg.lc),
-                                  model_tab = TabularTransformer(**cfg.tab),
-                                  loss=projector,
-                                  lr = cfg.learning_rate)
+        projector = VICRegProjector(VICReg(25,25,1),'256-2048-2048')
+        transformer_lc = LightCurveTransformer(**cfg.lc)
+        transformer_md = TabularTransformer(**cfg.tab)
+        model  = Combinator(transformer_lc,transformer_md)
+        pl_model = PretrainModule(model=model,loss=projector,lr = cfg.learning_rate)
 
     #elif args.general['experiment_type'] == 'md':
     #    pl_model = LitPreTrainVICREGTAB(**args.all_args)

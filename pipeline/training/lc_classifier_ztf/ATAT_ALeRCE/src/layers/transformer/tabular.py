@@ -65,9 +65,10 @@ class TabularTransformer(nn.Module):
         )
         tab_mask = torch.ones(f_mod.shape[:2], device = f_mod.device)
         #dropout token dims
-        tab_mask = self.dropout(tab_mask)
-        tab_mask[0,:]  = 1
-        tab_mask = ~((tab_mask).bool())
+        #tab_mask = self.dropout(tab_mask)
+        #tab_mask[0,:]  = 1
+        #tab_mask = ~((tab_mask).bool())
+        tab_mask = None
         f_mod = f_mod /f_mod.norm(dim = 1,keepdim=True)
         f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": tab_mask})[:,0,:]
         #f_emb = self.transformer_tab(**{"src": f_mod})[:,0,:]

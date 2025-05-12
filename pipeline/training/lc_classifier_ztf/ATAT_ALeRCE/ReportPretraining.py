@@ -65,7 +65,7 @@ class Report:
         path_to_training_dir, 
         path_to_dataset, 
         model_class, model_type, 
-        custom_parse_key_str,
+        include_weights_with_key,
         taxonomy, 
         seed, 
         device, 
@@ -80,7 +80,7 @@ class Report:
         self.device = device
         self.load_checkpoint = load_checkpoint 
         self.seed = seed
-        self.custom_parse_key_str = custom_parse_key_str
+        self.custom_parse_key_str = include_weights_with_key
         self.model_type = model_type
         self.checkpoint_src = path_to_training_dir
         self.batch_size = batch_size
@@ -126,6 +126,9 @@ class Report:
             dataloader = pl_datal.test_dataloader()
         return dataloader
     
+    def _load_weights(self, model, ordered_dict):
+        model.load_state_dict(ordered_dict, strict=True)
+        return model
     def _predict(self,dataloader, modality):
         target = None
         preds_out = None
@@ -422,7 +425,9 @@ class ReportPretraining(Report):
         taxonomy,
         model_class, 
         model_type, 
-        custom_parse_key_str,
+        include_weights_with_key,
+        exclude_weights_with_key,
+        parse_from_name,
         seed = 0, 
         device="cpu", 
         batch_size=128, 
@@ -436,12 +441,15 @@ class ReportPretraining(Report):
                         model_type=model_type,
                         model_class=model_class,
                         taxonomy=taxonomy,
-                        custom_parse_key_str=custom_parse_key_str,
+                        include_weights_with_key=include_weights_with_key,
+                        exclude_weights_with_key=exclude_weights_with_key,
                         seed=seed,
                         device= device,
                         batch_size=batch_size,
                         load_checkpoint=load_checkpoint)
-        self.model = self._init_model(model_class)
+        self.model = self._init_model(model_class,include_weights_with_key,
+                                      exclude_keys_with_substring=exclude_weights_with_key,
+                                      remove_string=parse_from_name)
         self.taxonomy = taxonomy
         self.figsize =figsize
         self.marker_size = marker_size
@@ -479,10 +487,14 @@ class ReportPretraining(Report):
         plt.show()
         
 
-    def _init_model(self,model ):
+    def _init_model(self,model, 
+                    include_keys_with_substring:list, 
+                    exclude_keys_with_substring:list, 
+                    remove_string:str):
         from torch import device, load
         from collections import OrderedDict
         model = model(**self.cfg.lc) if self.model_type =='lc' else model(**self.cfg.tab)
+        
         if self.checkpoint_src is not None or self.load_checkpoint:
             print(glob.glob(self.checkpoint_src))
             checkpoint_path_clip = glob.glob(f"{self.checkpoint_src}*pretrain_ckpt*")
@@ -490,14 +502,15 @@ class ReportPretraining(Report):
             checkpoint_clip = load(
                 checkpoint_path_clip[-1], map_location=device(self.device)
             )
-            od_atat = OrderedDict()
+            od_ = OrderedDict()
             for key in checkpoint_clip["state_dict"].keys():
-                if 'model' not in key:
+                if any([ex in key for ex in exclude_keys_with_substring]):
                     continue
-                od_atat[key.replace(f"{self.custom_parse_key_str}", "")] = checkpoint_clip[
+                od_[key.replace(f"{remove_string}", "")] = checkpoint_clip[
                     "state_dict"
                 ][key]
-            model.load_state_dict(od_atat, strict=True)
+
+            model = self._load_weights(model, od_)
         else:
             print('NO CKPT LOADED')
         return model

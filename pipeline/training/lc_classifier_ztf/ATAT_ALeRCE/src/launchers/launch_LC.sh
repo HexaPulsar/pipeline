@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=0,3
  
 #!/bin/bash
 
-expname='new_window_dataset_v5'
+expname='3ENC_baseline'
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
 export EXPERIMENT_NAME=class_${expname}_MLP_1E_trans
@@ -32,5 +32,5 @@ python training.py \
   ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
   ++ATATConfig.datamodule.train_use_sampler=1\
   hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
-  ++ATATConfig.checkpoint=$CHECKPOINT
+ # ++ATATConfig.checkpoint=$CHECKPOINT
 

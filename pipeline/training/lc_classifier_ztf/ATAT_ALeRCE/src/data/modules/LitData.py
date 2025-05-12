@@ -28,6 +28,7 @@ class LitData(pl.LightningDataModule):
     train_shuffle: bool = True
     num_workers: int = 8
     pin_memory: bool = True
+    drop_last: bool = False
     def __post_init__(self):
         super().__init__()
 
@@ -39,11 +40,14 @@ class LitData(pl.LightningDataModule):
                 for t in np.unique(hier_class)
             ]
         )
+        print(class_sample_count)
         weight = 1.0 / class_sample_count
+        print(np.unique(weight))
         samples_weight = np.array([weight[t] for t in hier_class])
         samples_weight = torch.from_numpy(samples_weight)
         
         return samples_weight
+    
     def get_real_classes_weights(self,labels):
         class_sample_count = np.array(
             [
@@ -52,24 +56,58 @@ class LitData(pl.LightningDataModule):
             ]
         )
         weight = 1.0 / class_sample_count
+        #print(weight)
         samples_weight = np.array([weight[t] for t in labels])
+
         samples_weight = torch.from_numpy(samples_weight)
         samples_weight = samples_weight
          
 
         return samples_weight
     
+    def conditional_weights(self,labels):
+        hier_class = map_label_tensor(labels)
+        H_class_sample_count = np.array(
+            [
+                len(np.where(hier_class == t)[0])
+                for t in np.unique(hier_class)
+            ]
+        )
+        print(H_class_sample_count)
+        prob_superclass = H_class_sample_count/len(labels)
+
+       
+        hierarchy_samples_weight = np.array([prob_superclass[t] for t in hier_class])
+        hierarchy_weights = torch.from_numpy(hierarchy_samples_weight)
+
+        class_sample_count = np.array(
+            [
+                len(np.where(labels == t)[0])
+                for t in np.unique(labels)
+            ]
+        )
+       
+        prob_subclass = class_sample_count/len(labels)
+        print(prob_subclass)
+        subclass_samples_weight = np.array([prob_subclass[t] for t in labels])
+        subclass_weights = torch.from_numpy(subclass_samples_weight)
+
+        print(np.unique(hierarchy_weights * subclass_weights))
+        return hierarchy_weights * subclass_weights
+    
     def train_dataloader(self):
-        hier_importance = 0.0
-        class_importance = 1.0
+        hier_importance = 1.0
+        class_importance = 0.0
         assert hier_importance + class_importance == 1.0
         dataset_used = ATATDataset(set_type="train", **self.dataset)
         if self.train_use_sampler:
             print('using sampler')
-            samples_weight = (self.get_hier_weights(dataset_used.labels)*hier_importance + self.get_real_classes_weights(dataset_used.labels)*class_importance)
-            sampler = WeightedRandomSampler(
-                samples_weight.type("torch.DoubleTensor"), len(samples_weight)
-            )
+            #samples_weight = self.conditional_weights(dataset_used.labels)#,(self.get_hier_weights(dataset_used.labels)*hier_importance + self.get_real_classes_weights(dataset_used.labels)*class_importance)
+            #samples_weight = (self.get_hier_weights(dataset_used.labels)*hier_importance + self.get_real_classes_weights(dataset_used.labels)*class_importance)
+            
+            #sampler = WeightedRandomSampler(
+            #    samples_weight.type("torch.DoubleTensor"), len(samples_weight)
+            #)a
             sampler = MPerClassSampler(
                 dataset_used.labels,
                 m=64,
@@ -82,7 +120,7 @@ class LitData(pl.LightningDataModule):
                 batch_size=self.batch_size,
                 sampler=sampler,
                 shuffle=None,
-                drop_last=True,
+                drop_last=self.drop_last,
                 num_workers= self.num_workers,
                 pin_memory=self.pin_memory
             )
@@ -93,7 +131,7 @@ class LitData(pl.LightningDataModule):
                 batch_size=self.batch_size,
                 sampler=None,
                 shuffle=self.train_shuffle,
-                drop_last=False,
+                drop_last=self.drop_last,
                 num_workers= self.num_workers,
                 pin_memory=self.pin_memory
             )
@@ -106,7 +144,7 @@ class LitData(pl.LightningDataModule):
                 batch_size=self.batch_size,
                 sampler=None,
                 shuffle=False,
-                drop_last=False,
+                drop_last=self.drop_last,
                 num_workers= self.num_workers,
                 pin_memory=self.pin_memory
             )
@@ -119,7 +157,7 @@ class LitData(pl.LightningDataModule):
                 batch_size=self.batch_size,
                 sampler=None,
                 shuffle=False,
-                drop_last=False,
+                drop_last=self.drop_last,
                 num_workers= self.num_workers,
                 pin_memory=self.pin_memory
             )

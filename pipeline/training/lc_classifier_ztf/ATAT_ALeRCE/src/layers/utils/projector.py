@@ -11,12 +11,13 @@ class VICRegProjector(nn.Module):
         f = list(map(int, shape.split("-")))
         for i in range(len(f) - 2):
             layers.append(nn.Linear(f[i], f[i + 1]))
-            layers.append(nn.LayerNorm(f[i + 1]))
+            layers.append(nn.BatchNorm1d(f[i + 1]))
             layers.append(nn.GELU())
         layers.append(nn.Linear(f[-2], f[-1], bias=False))
         self.projection_x = nn.Sequential(*layers)
         self.projection_y = nn.Sequential(*layers)
         self.vicreg = vicreg
+        
     def forward(self, emb_x,emb_y):
         return self.vicreg(self.projection_x(emb_x),self.projection_y(emb_y))
 
@@ -31,7 +32,7 @@ class CLIPProjector(nn.Module):
             # nn.LayerNorm(input_size),
             nn.Linear(input_size, hidden_size, bias=False),
             nn.GELU(),
-            nn.BatchNorm1d(hidden_size),
+            #nn.LayerNorm(hidden_size),
             nn.Linear(hidden_size, output_size, bias=False),
         )
 

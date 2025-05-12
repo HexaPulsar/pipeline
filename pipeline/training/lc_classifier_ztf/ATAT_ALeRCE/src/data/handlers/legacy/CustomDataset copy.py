@@ -66,6 +66,7 @@ class ATATDataset(BaseDataset):
         self.time_alert = h5_.get("time_detection")
         self.target = h5_.get("labels")
         self.labels =  torch.from_numpy(self.target[:][self.these_idx]).long()
+        self.use_QT = True
         logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
         
         if self.use_metadata:

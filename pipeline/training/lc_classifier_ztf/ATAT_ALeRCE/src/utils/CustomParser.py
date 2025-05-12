@@ -35,7 +35,7 @@ class BaseDatasetArgs:
     time_alert_key:str = 'time_alert'
     mask_key:str = 'mask'
     feature_key:str  = 'feat_cols'
-    metadata_key:str = 'md_cols'
+    metadata_key:str = 'metadata_feat'
     label_key:str= 'labels'
     
 
@@ -69,9 +69,9 @@ class TabularArgs:
     embedding_size_sub:int = 256
     num_heads:int = 4
     num_encoders:int = 3
-    encoder_type:str ='Linear'
     length_size:int = 0
-    list_time_to_eval = None
+    dropout: float = 0.01
+
      
 @dataclass
 class LightcurveArgs:

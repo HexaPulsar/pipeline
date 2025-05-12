@@ -7,6 +7,24 @@ import torch.nn.functional as F
 from copy import deepcopy
 from .WindowApply import WindowApply
 from scipy.ndimage import gaussian_filter1d
+
+class Roll:
+    def __init__(self, num_bands):
+        self.num_bands = num_bands
+    def __call__(self,sample):
+        for band in self.num_bands:
+            seq_roll = torch.randint(0,200,size = (1,))
+            sample['data'][:,band] = torch.roll(sample['data'][:,band],shift= (seq_roll), dim = 0)
+            sample['time'][:,band] = torch.roll(sample['time'][:,band],shift= (seq_roll), dim = 0)
+            sample['mask'][:,band] = torch.roll(sample['data'][:,band],shift= (seq_roll), dim = 0)
+        return sample
+
+class InverseLC:
+    def __call__(self,sample):
+        sample['data'] = -sample['data']
+        return sample
+
+
 class ShiftData(WindowApply):
     def __init__(self,num_bands,window = -1):
         super().__init__()
@@ -102,21 +120,44 @@ class SinData(WindowApply):
 
 
 
-class GaussianNoise(WindowApply):
-    def  __init__(self, num_bands, window = 10):
+class GaussianNoise:
+    def  __init__(self, num_bands, window = 10,std = 0.1):
         super().__init__()
         self.num_bands = num_bands
         self.window = window
+        self.std = std
        
     def __call__(self, sample):
         for i in range(self.num_bands):
             band_data = sample['data'][:,i]
             band_mask = band_data!=0
-            max_sample_n = band_mask.sum(axis = 0)
-            noise = torch.normal(0,1, size=(band_data.size(0),)).to(device=band_data.device, non_blocking=True) 
-            band_data = (band_data + noise* band_data.mean()) * band_mask
-            if self.window > 0:
-                sample['data'][:,i] = self.apply_to_window(band_data, sample['data'][:,i], self.window, max_sample_n)
-            else:
-                sample["data"][:,i] = band_data
+            noise = torch.normal(0,self.std, size=(band_data.size(0),)).to(device=band_data.device, non_blocking=True) 
+            band_data = band_data + noise * band_mask
+
+            sample["data"][:,i] = band_data
+        return sample
+
+
+
+class Shuffle:
+    def  __init__(self, num_bands):
+        super().__init__()
+        self.num_bands = num_bands
+       
+    def __call__(self, sample):
+        for i in range(self.num_bands):
+            sample["data"][:,i] = torch.permute(sample['data'][:,i],dims = (0,))
+        return sample
+
+
+class ClipSignal:
+    def  __init__(self, num_bands, min = -10, max = 10):
+        super().__init__()
+        self.num_bands = num_bands
+        self.min = min
+        self.max = max
+       
+    def __call__(self, sample):
+        for i in range(self.num_bands):
+            sample["data"][:,i] = torch.clip(sample['data'][:,i],min = self.min, max = self.max)
         return sample

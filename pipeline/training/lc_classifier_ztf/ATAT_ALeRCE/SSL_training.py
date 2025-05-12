@@ -6,9 +6,12 @@ warnings.filterwarnings("ignore")
 
 from src.data.modules.LitPretrain import LitPretrain
 from src.models.PretrainModule import PretrainModule
+from src.models.PretrainMMModule import PretrainMMModule
 
 from src.augmentations import LightCurveTransform as LC
+#from src.augmentations import TabularTransformations as TAB
 from src.layers.transformer.lightcurve import LightCurveTransformer
+from src.layers.transformer.tabular import TabularTransformer
 from src.layers.utils.projector import VICRegProjector
 from src.losses.VICReg import VICReg
 from pytorch_lightning import Trainer
@@ -17,11 +20,11 @@ from omegaconf import DictConfig, OmegaConf
 from src.utils.CustomParser import ATATConfig
 from  hydra.utils import instantiate
 
-from torchvision.transforms import RandomChoice
+from torchvision.transforms import RandomChoice, RandomApply,RandomAdjustSharpness,RandomSolarize
 
 import numpy as np
 
-@hydra.main(version_base=None, config_path="./src/configs/ELASTICC", config_name= 'ssl_training')
+@hydra.main(version_base=None, config_path="./src/configs/ZTF", config_name= 'ssl_training')
 def main(cfg:ATATConfig):
     cfg = instantiate(cfg).ATATConfig
     logger = logging.getLogger()
@@ -44,31 +47,65 @@ def main(cfg:ATATConfig):
     assert cfg.experiment_type == 'LC' , cfg.experiment_type
     cfg.datamodule.dataset.experiment_type = cfg.experiment_type
     WINDOW_1 = -1
-    transforms = [  RandomChoice([LC.MaskFirstN(mask_first= [0,1,2]),
-                                LC.SobelFilterMask('above', threshold = 0.1),
-                                LC.SobelFilterMask('above', threshold = 0.3),
-                               # LC.SobelFilterMask('above', threshold = 0.5),
-                                LC.SobelFilterMask('below', threshold = 0.1),
-                               # LC.SobelFilterMask('below', threshold = 0.01),
-                               # LC.SobelFilterMask('below', threshold = 0.001),
+    transforms = [  
+                    LC.TimeFactor(num_bands=cfg.lc.num_bands, window = -1,factor = list(np.linspace(0.9999,1.001,100)) ),
+                    LC.TimeShift(),
+                    LC.GaussianNoise(num_bands=cfg.lc.num_bands, std = 1e-5),
+                                   
+                    RandomChoice([ LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.05),
+                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.01),
+                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 1e-5),
+                                   LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.1),
+                                     ]),
+                   
+                    LC.CutFirstN(2,mask_first= [-1,0,1,2,4,8,15,32,64]),
+                    LC.ZScoreUndersample(min_samples=150, thr = None, inject_gauss_noise=False),
 
+                    LC.TimeFactor(num_bands=cfg.lc.num_bands, window = -1,factor = list(np.linspace(0.9999,1.001,100)) ),
 
-                                ]),
-                                
-                    #RandomChoice([LC.GaussianNoise(num_bands=cfg.lc.num_bands,window = WINDOW_1),
-                    #            LC.ShiftData(num_bands=cfg.lc.num_bands,window=WINDOW_1),]),
-                    #RandomChoice([
-                    #                LC.TimeFactor(cfg.lc.num_bands, window=WINDOW_1,factor = list(np.linspace(0.95,1.05,100))),
-                    #                LC.TimePoissonNoise(num_bands=cfg.lc.num_bands, rate =1.5 ,window = WINDOW_1),
-                    #                LC.Exptime(num_bands=cfg.lc.num_bands,window = WINDOW_1), ]),
+                    LC.TimeShift(),
+                    LC.GaussianNoise(num_bands=cfg.lc.num_bands, std = 1e-5),
+       
+                    RandomChoice([ LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.05),
+                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 1e-5),
+                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.01),
+                                   LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.1),
+                                     ]),
+                   
+                    LC.CutFirstN(2,mask_first= [-1,0,1,2,4,8,16,32,64]),
+                    LC.ZScoreUndersample(min_samples=150, thr = None, inject_gauss_noise=False),
+
+                    #RandomChoice([#LC.RandomSobelFilterMask('magnitude', keep='above',threshold_range = (0.1,0.2)),
+                                  #LC.OnlyMaskPadding(),
+                                  #LC.MaskFirstN(2,mask_first= [-1,0,1,2]),
+                                #])
                     ]
+    #transforms = [TAB.GaussianNoise(0,1e-2),
+                  #TAB.Scale(),
+                  #TAB.Jitter(),
+                  #TAB.Shift()
+    #              ]
+    p_ = 0.1
+    transforms = [RandomApply([t], p = p_) for t in transforms]
+    transforms +=[LC.TimeNormalization()]
     cfg.datamodule.dataset.transforms_1 = transforms
-    cfg.datamodule.dataset.transforms_2 = []
+    cfg.datamodule.dataset.transforms_2 = [LC.TimeNormalization()] #transforms
     pl_datal = LitPretrain(**cfg.datamodule)
     if cfg.experiment_type == 'LC':
         transformer = LightCurveTransformer(**cfg.lc)
-        projector = VICRegProjector(VICReg(5,55,50),'128-256-256')
+        projector = VICRegProjector(VICReg(25,25,1),'128-512-512')
         pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate)
+    if cfg.experiment_type == 'MD':
+        transformer = TabularTransformer(**cfg.tab)
+        projector = VICRegProjector(VICReg(1,49,1),'128-128-128')
+        pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate)
+
+    if cfg.experiment_type == 'LC_MD':
+        projector = VICRegProjector(VICReg(100,100,1),'128-128-128')
+        pl_model = PretrainMMModule(model_lc= LightCurveTransformer(**cfg.lc),
+                                  model_tab = TabularTransformer(**cfg.tab),
+                                  loss=projector,
+                                  lr = cfg.learning_rate)
 
     #elif args.general['experiment_type'] == 'md':
     #    pl_model = LitPreTrainVICREGTAB(**args.all_args)

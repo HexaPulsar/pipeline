@@ -39,7 +39,7 @@ def elasticc_confusion_matrix(
     cm = confusion_matrix(y_true, y_pred)
     # Only use the labels that appear in the data
     classes = classes[unique_labels(y_true, y_pred)]
-
+    
     if normalize:
         normalize_factor = cm.sum(axis=1)[:, np.newaxis]
         cm = cm.astype("float") / normalize_factor

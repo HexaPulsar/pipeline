@@ -11,10 +11,11 @@ import pytorch_lightning as pl
 from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR
 import torchmetrics.classification
 from tqdm import tqdm  
-
+from src.utils.data.AlerceDictionaries import ZTF_TAXONOMY
 
 import matplotlib.pyplot as plt
 import io
+import seaborn as sns
 
 
 import torch
@@ -22,43 +23,81 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import glob
+from copy import deepcopy 
+from io import BytesIO
+from PIL import Image
+import torchvision.transforms as T
 
-    
+
+
 class ClassifierModule(pl.LightningModule):
-    def __init__(self,model,classifier, loss, load_ckpt = None, freeze_transformer = False, **kwargs):
+    def __init__(self,model,classifier, loss,
+                 experiment_type:str, 
+                 lc_load_ckpt = None, 
+                 tab_load_ckpt = None, 
+                 freeze_transformer = False,
+                  weight_str_parse= 'model.', **kwargs):
         super().__init__()
         self.gradients_ = None
 
         self.model = model
-        self.classifier  =classifier
+        self.classifier  = classifier
         self.init_model()
 
         self.warmup = 0
         self.loss = loss
-        self.load_ckpt = load_ckpt
         self.learning_rate = kwargs['learning_rate']
         self.freeze_transformer = freeze_transformer
-        metrics = torchmetrics.MetricCollection({
-            'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=classifier.num_classes),
-            'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=classifier.num_classes, average="macro"),
-        'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=classifier.num_classes, average="macro")
-        })
+ 
+        parse_exp_type = experiment_type.split('_')
+        self.modalities = []
+        self.modalities+= ['LC'] if 'LC' in parse_exp_type else []
+        self.modalities+= ['TAB'] if 'MD' in parse_exp_type or 'FEAT' in parse_exp_type else []
+        self.modalities+= ['MIX'] if ('MD' in parse_exp_type or 'FEAT' in parse_exp_type) and ('LC' in parse_exp_type) else []
         
-        self.train_metrics = metrics.clone(prefix='train/')
-        self.valid_metrics = metrics.clone(prefix='validation/')
+        
+        metrics = torchmetrics.MetricCollection({
+                'acc': torchmetrics.classification.Accuracy(task="multiclass", num_classes=22),
+                'f1': torchmetrics.classification.F1Score(task="multiclass", num_classes=22, average="macro"),
+            'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=22, average="macro"),
+            })
+        self.validation_cm = torchmetrics.classification.ConfusionMatrix(task="multiclass", num_classes=22, normalize='true')
+        if 'LC' in self.modalities:
+            self.LC_train_metrics = metrics.clone(prefix=f'{'training/LC/'}')
+            self.LC_valid_metrics = metrics.clone(prefix=f'{'validation/LC/'}')
+        if 'TAB' in self.modalities:
+            self.TAB_train_metrics = metrics.clone(prefix=f'{'training/TAB/'}')
+            self.TAB_valid_metrics = metrics.clone(prefix=f'{'validation/TAB/'}')
+        if 'MIX' in self.modalities:
+            self.MIX_train_metrics = metrics.clone(prefix=f'{'training/MIX/'}')
+            self.MIX_valid_metrics = metrics.clone(prefix=f'{'validation/MIX/'}')
 
-        if self.load_ckpt is not None:
+
+
+        if lc_load_ckpt is not None:
             print("LOADING CKPT!!!")
-            _ckpt = glob.glob(self.load_ckpt+ "*.ckpt")[0]
+            _ckpt = glob.glob(lc_load_ckpt+ "*.ckpt")[0]
             checkpoint_ = torch.load(_ckpt)
             weights = OrderedDict()
             for key in checkpoint_["state_dict"].keys():
-                if 'projection' in key:
+                if 'loss' in key:
                     continue
                 else:
-                    weights[key.replace("model.", "")] = checkpoint_["state_dict"][key]
+                    weights[key.replace(f'{weight_str_parse}', "")] = checkpoint_["state_dict"][key]
             self.model.load_state_dict(weights, strict=True)
-            print("loaded chekcpoint")
+            print("loaded LC chekcpoint")
+        if tab_load_ckpt is not None:
+            print("LOADING CKPT!!!")
+            _ckpt = glob.glob(tab_load_ckpt+ "*.ckpt")[0]
+            checkpoint_ = torch.load(_ckpt)
+            weights = OrderedDict()
+            for key in checkpoint_["state_dict"].keys():
+                if 'model.' in key and 'lc' not in key:
+                    weights[key.replace( 'model.', "")] = checkpoint_["state_dict"][key]
+                else:
+                    continue
+            self.model.transformer_tab.load_state_dict(weights, strict=True)
+            print("loaded TAB chekcpoint")
         if self.freeze_transformer:
             for param in self.model.parameters():
                 param.requires_grad = False
@@ -66,7 +105,7 @@ class ClassifierModule(pl.LightningModule):
     def init_model(self):
         for name, p in self.named_parameters():
             if p.dim() > 1:
-                nn.init.xavier_normal_(p)
+                nn.init.normal_(p,std = 0.1)
                 
     def gradfilter_ema(self,
         m: nn.Module,
@@ -90,79 +129,133 @@ class ClassifierModule(pl.LightningModule):
 
     def training_step(self, batch_data, batch_idx):
         labels = batch_data.pop('labels')
-        emb = self.model(**batch_data) 
-        pred = self.classifier(emb)
-        if pred is None:
-            raise ValueError("Invalid prediction.")
-
-        self.train_metrics(pred,  labels.long())
-        self.log_dict(self.train_metrics, on_step=True, on_epoch=True)
-        loss = 0
-        loss_dic = {}
-        for y, y_type in zip([pred], ["lc"]):
-            if y is not None:
-                partial_loss = self.loss(y,  labels.long())
-                loss += partial_loss
-                loss_dic.update({f"loss_train/{y_type}": partial_loss})
-        
-        loss_dic.update({f"loss_train/total": loss})
+        embs = self.model(**batch_data) 
          
-        self.log_dict(loss_dic)
-        return loss
-     
+        preds = self.classifier(embs)
+        # pred can be a single tensor or a dict of tensors depending on how many modalities or classifier type
+        if isinstance(preds,dict):
+            loss = 0
+            if 'LC' in preds.keys():
+                self.LC_train_metrics(preds['LC'], labels.long())
+                self.log_dict(self.LC_train_metrics, on_step=True, on_epoch=True)
+                partial_loss = self.loss(preds['LC'],  labels.long())
+                loss+=partial_loss
+            if 'TAB' in preds.keys():
+                self.TAB_train_metrics(preds['TAB'], labels.long())
+                self.log_dict(self.TAB_train_metrics, on_step=True, on_epoch=True)
+                partial_loss = self.loss(preds['TAB'],  labels.long())
+                loss+=partial_loss
+            if 'MIX' in preds.keys():
+                self.MIX_train_metrics(preds['MIX'], labels.long())
+                self.log_dict(self.MIX_train_metrics, on_step=True, on_epoch=True)
+                partial_loss = self.loss(preds['MIX'],  labels.long())
+                loss+=partial_loss
+            self.log("loss_train/total", loss,on_step=True, on_epoch=True)
+            return loss
+        else:
+            if 'LC' in self.modalities:
+                self.LC_train_metrics(preds, labels.long())
+                self.log_dict(self.LC_train_metrics, on_step=True, on_epoch=True)
+                loss = self.loss(preds,  labels.long())
+            if 'TAB' in self.modalities:
+                self.TAB_train_metrics(preds, labels.long())
+                self.log_dict(self.TAB_train_metrics, on_step=True, on_epoch=True)
+                loss = self.loss(preds,  labels.long())
+            if 'MIX' in self.modalities:
+                self.MIX_train_metrics(preds, labels.long())
+                self.log_dict(self.MIX_train_metrics, on_step=True, on_epoch=True)
+                loss = self.loss(preds,  labels.long())
+            self.log(f"loss_train/total",loss,on_step=True, on_epoch=True)
+            return loss
+        
+    def on_validation_epoch_start(self):
+        self.epoch_labels = None
+        return super().on_validation_epoch_start()
+    
     def validation_step(self, batch_data, batch_idx):
         labels = batch_data.pop('labels')
-        emb = self.model(**batch_data) 
-        pred = self.classifier(emb)
-        if pred is None:
-            raise ValueError("Invalid prediction.")
+        embs = self.model(**batch_data) 
+         
+        
+        preds = self.classifier(embs)
+        # pred can be a single tensor or a dict of tensors depending on how many modalities or classifier type
+        if isinstance(preds,dict):
+            loss = 0
+            if 'LC' in preds.keys():
+                self.LC_valid_metrics(preds['LC'], labels.long())
+                self.log_dict(self.LC_valid_metrics, on_step=False, on_epoch=True)
+                partial_loss = self.loss(preds['LC'],  labels.long())
+                loss+=partial_loss
+            if 'TAB' in preds.keys():
+                self.TAB_valid_metrics(preds['TAB'], labels.long())
+                self.log_dict(self.TAB_valid_metrics, on_step=False, on_epoch=True)
+                partial_loss = self.loss(preds['TAB'],  labels.long())
+                loss+=partial_loss
+            if 'MIX' in preds.keys():
+                self.MIX_valid_metrics(preds['MIX'], labels.long())
+                self.log_dict(self.MIX_valid_metrics, on_step=False, on_epoch=True)
+                partial_loss = self.loss(preds['MIX'],  labels.long())
+                loss+=partial_loss
+                self.epoch_labels = (
+                torch.concat([self.epoch_labels, labels.detach()])
+                if self.epoch_labels is not None
+                else labels.detach()
+                )
+                self.validation_cm(preds['MIX'],labels.long())
 
-
-        self.valid_metrics(pred,  labels.long())
-        self.log_dict(self.valid_metrics, on_epoch=True, sync_dist=True)
-
-        loss = 0
-        loss_dic = {}
-        for y, y_type in zip([pred], ["lc"]):
-            
-            partial_loss = self.loss(y,  labels.long())
-            loss += partial_loss
-            loss_dic.update({f"loss_validation/{y_type}": partial_loss})
-
-        loss_dic.update({f"loss_validation/total": loss})
-        self.log_dict(loss_dic,sync_dist= True)
+        else:
+            if 'LC' in self.modalities:
+                self.LC_valid_metrics(preds, labels.long())
+                self.log_dict(self.LC_valid_metrics, on_step=False, on_epoch=True)
+                loss = self.loss(preds,  labels.long())
+            if 'TAB' in self.modalities:
+                self.TAB_valid_metrics(preds, labels.long())
+                self.log_dict(self.TAB_valid_metrics, on_step=False, on_epoch=True)
+                loss = self.loss(preds,  labels.long())
+            if 'MIX' in self.modalities:
+                self.MIX_valid_metrics(preds, labels.long())
+                self.log_dict(self.MIX_valid_metrics, on_step=False, on_epoch=True)
+                loss = self.loss(preds,  labels.long())
+                self.epoch_labels = (
+                torch.concat([self.epoch_labels, labels.detach()])
+                if self.epoch_labels is not None
+                else labels.detach()
+                )
+                self.validation_cm(preds['MIX'],labels.long())
+        self.log(f"loss_validation/total",loss,on_step=False, on_epoch=True)
+        
         return loss
-     
-    def test_step(self, batch_data, batch_idx):
-        input_dict = self.get_input_data(batch_data)
-
-        pred = self.model(**input_dict)
         
 
-        if pred is None:
-            raise ValueError("Invalid prediction.")
+    def on_validation_epoch_end(self):
+        if 'MIX' in self.modalities:
+            cm = self.validation_cm.compute().cpu().numpy().astype(float)
+            fig = plt.figure(figsize=(12, 10)) 
+            sns.heatmap(np.round(cm, decimals=2), annot=True, cmap=plt.cm.Blues, ax=fig.add_subplot(111))
+            plt.xticks(ticks=range(0, 22), rotation=45, labels=ZTF_TAXONOMY().keys())
+            plt.yticks(ticks=range(0, 22), rotation=45, labels=ZTF_TAXONOMY().keys())
+            plt.title(f"F1-Score: {self.MIX_valid_metrics['f1'].compute().item()}")
+            plt.tight_layout()
 
-        """ labels """
-        y_true = batch_data["labels"].long()
-
-        loss = 0
-        loss_dic = {}
-        for y, y_type in zip([pred], ["lc"]):
-            partial_loss = self.loss(y, y_true)
-            loss += partial_loss
-            loss_dic.update({f"loss_test/{y_type}": partial_loss})
-
-        loss_dic.update({f"loss_test/total": loss})
-        self.log_dict(loss_dic,sync_dist=True)
-
-        return loss_dic
-        if self.use_lightcurves_err:
-            input_dict.update({"data_err": batch_data["data_err"].float()})
+            # Convert the Matplotlib figure to a tensor
+            buf = BytesIO()
+            fig.savefig(buf, format='png',dpi = 100,pad_inches = 0.05) #png
+            buf.seek(0)
+            image = Image.open(buf)
+            image_tensor = T.ToTensor()(image)  # Convert PIL image to torch tensor (C, H, W)
+            self.logger.experiment.add_image('validation cm', image_tensor, self.global_step)
+            plt.close(fig)  # Close the figure to free memory
+        return super().on_validation_epoch_end()
+    def test_step(self, batch_data, batch_idx):
+        pass
 
     def configure_optimizers(self):
-       
-        
-        optimizer = optim.AdamW(self.parameters(), 
+        #optimizer = optim.AdamW([
+           # {'params': self.model.transformer_tab.parameters(), 'lr': 1e-5},  # low learning rate
+            #{'params': self.model.transformer_lc.parameters(), 'lr': 1e-3}       # higher learning rate
+        #])
+
+        optimizer =optimizer = optim.AdamW(self.parameters(),   
                                 lr = self.learning_rate)
         constant = ConstantLR(optimizer,1)  
         cosine = CosineAnnealingWarmRestarts(optimizer,T_0=1200,eta_min=1e-5)                                         

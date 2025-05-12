@@ -16,7 +16,7 @@ class LightCurveTransformer(nn.Module):
         num_harmonics= 64,
         pe_type= 'tm',
         num_bands= 2,
-        dropout = 0.01,
+        dropout = 0.00,
         ):
         self.input_size = input_size
         self.embedding_size = embedding_size
@@ -45,19 +45,15 @@ class LightCurveTransformer(nn.Module):
                 norm_first=True,
             ),
             num_layers=self.num_encoders,
-            norm=nn.LayerNorm(self.embedding_size),
+            #norm=nn.LayerNorm(self.embedding_size),
         )
         self.token_lc = Token(self.embedding_size)
         self.register_buffer('ones', torch.ones(1,1,1,dtype = float))
-
-    
-    
     def embedding_light_curve(self, x, t, mask=None, **kwargs):
         x_mod, m_mod, t_mod = self.time_encoder(**{"x": x, "t": t, "mask": mask})
         x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)
         m_mod = torch.cat(
-            [
-                self.dropout(self.ones.repeat(x.size(0),1,1)).bool(),
+            [   self.ones.repeat(x.size(0),1,1).bool(),
                 m_mod,
             ],
             axis=1,

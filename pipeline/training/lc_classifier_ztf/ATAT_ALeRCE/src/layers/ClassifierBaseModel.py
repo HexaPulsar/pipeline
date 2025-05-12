@@ -18,19 +18,11 @@ class ClassifierBaseModel(nn.Module):
     def init_model(self):
         for name, p in self.named_parameters():
             if p.dim() > 1:
-                nn.init.xavier_normal_(p)
+                nn.init.normal_(p,std = 0.1)
 
     def forward(self, data, time, mask=None, labels= None):
         emb = self.model(data, time, mask)
         return self.classifier(emb)
 
-class MultimodalClassifier(nn.Module):
-    def __init__(self, lightcuve_classifier,tabular_classifier, multimodal_classifier):
-        self.lightcuve_classifier= lightcuve_classifier
-        self.tabular_classifier = tabular_classifier
-        self.multimodal_classifier = multimodal_classifier
-    
-    def forward(self,lc_emb,tab_emb):
-        torch.concat()
-        return loss
-        pass
+    def predict_embedding(self, data, time, mask=None, labels= None):
+        return self.model(data, time, mask)

@@ -1,72 +1,74 @@
 import torch
 import torch.nn as nn
-from ..classifiers import TokenClassifier, MixedClassifier
+from ..utils.Token import Token
 
-from ..embeddings import Embedding
-from ..tokenEmbeddings import Token
-from .projector import VICRegProjector,CLIPProjector
 
+import torch
+import torch.nn as nn
+
+
+class Embedding(nn.Module):
+    def __init__(self, length_size, embedding_size, **kwargs):
+        super(Embedding, self).__init__()
+
+        self.tab_W_feat = nn.Parameter(torch.randn(1, length_size, embedding_size))
+        self.tab_b_feat = nn.Parameter(torch.randn(1, length_size, embedding_size))
+
+    def forward(self, f): 
+        return self.tab_W_feat * f + self.tab_b_feat
 
 
 class TabularTransformer(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self,
+        embedding_size= 128,
+        embedding_size_sub= 512,
+        num_heads= 4,
+        num_encoders= 3,
+        length_size=7,
+        num_bands= 2,
+        dropout = 0.00,):
 
-        super(TabularTransformer, self).__init__()
+        self.embedding_size = embedding_size
+        self.embedding_size_sub = embedding_size_sub
+        self.num_heads = num_heads
+        self.num_encoders= num_encoders
+        self.num_bands = num_bands
+        self.length_size =length_size
+        
+        super().__init__()
         self.embedding_tab = Embedding(
-            **kwargs
+            self.length_size,self.embedding_size
         )  # nn.Linear(kwargs['TAB_ARGS']['length_size'],kwargs['TAB_ARGS']['embedding_size']) #
         self.transformer_tab = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(
-                d_model=kwargs["embedding_size"],
-                nhead=kwargs["num_heads"],
-                dim_feedforward=kwargs["embedding_size_sub"],
+                d_model=self.embedding_size,
+                nhead=self.num_heads,
+                dim_feedforward=self.embedding_size_sub,
                 activation="gelu",
-                dropout=0.00,
+                dropout=dropout,
                 batch_first=True,
                 norm_first=True,
             ),
-            num_layers=kwargs["num_encoders"],
-            norm=nn.LayerNorm(kwargs["embedding_size"]),
+            num_layers=self.num_encoders,
         )
-        self.token_tab = Token(**kwargs)
-        self.register_buffer("m_token", torch.ones(1, 1, 1).bool())
-
+        self.token_tab = Token(self.embedding_size)
+        self.register_buffer('ones', torch.ones(1,1,1,dtype = float))
+        self.dropout = nn.Dropout(dropout)
     def embedding_feats(self, f, tab_mask=None):
         f_mod = self.embedding_tab(**{"f": f})
-        if tab_mask is not None:
-            return torch.cat([self.token_tab(f.shape[0]), f_mod], axis=1), torch.cat(
-                [self.m_token.repeat(tab_mask.shape[0], 1, 1), tab_mask], axis=1
-            )
-
-        return torch.cat([self.token_tab(f.shape[0]), f_mod], axis=1), None
+        return torch.cat([self.token_tab(f.shape[0]), f_mod], axis=1)
 
     def forward(self, tabular_feat, tab_mask=None, **kwargs):
-        f_mod, tab_mask = self.embedding_feats(
+        
+        f_mod=  self.embedding_feats(
             **{"f": tabular_feat, "tab_mask": tab_mask}
         )
-        if tab_mask is not None:
-            tab_mask = ~(tab_mask.squeeze(-1))
-            # print(mask.shape)
-        f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": tab_mask})
-        return f_emb[:,0,:]
-
-
-class TabularClassifier(nn.Module):
-    def __init__(self, **kwargs):
-        super(TabularClassifier, self).__init__()
-        self.TAB = TabularTransformer(**kwargs["tab"])
-        self.classifier_tab = MixedClassifier(
-            kwargs["tab"]["embedding_size"],
-            num_classes=kwargs["general"]["num_classes"],
-            dropout=0.1,
-        )
-        self.init_model()
-
-    def init_model(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_normal_(p)
-
-    def forward(self, tabular_feat, tab_mask=None, **kwargs):
-        tab_emb = self.TAB(tabular_feat, tab_mask)
-        return self.classifier_tab(tab_emb)
+        tab_mask = torch.ones(f_mod.shape[:2], device = f_mod.device)
+        #dropout token dims
+        tab_mask = self.dropout(tab_mask)
+        tab_mask[0,:]  = 1
+        tab_mask = ~((tab_mask).bool())
+        f_mod = f_mod /f_mod.norm(dim = 1,keepdim=True)
+        f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": tab_mask})[:,0,:]
+        #f_emb = self.transformer_tab(**{"src": f_mod})[:,0,:]
+        return self.dropout(f_emb)

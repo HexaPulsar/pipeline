@@ -24,22 +24,24 @@ class TimeFilmModified(nn.Module):
             
             self.linear_proj = nn.Sequential(nn.Linear(in_features = input_size,out_features = embedding_size,bias = False))
             self.embedding_size = embedding_size
-            self.dropout = nn.Dropout(p=1e-5)
-
+            self.dropout = nn.Dropout(p=0.0)
     def get_sin_cos(self, t,mask):
         return torch.sin(t) , torch.cos(t)
 
     def gelu_drop(self,coeffs):
         return nn.functional.gelu(self.dropout(coeffs))
+    
     def forward(self, x, t,mask):
         if self.linear_proj_only:
             return self.linear_proj(x)
         else:
             sin_emb, cos_emb = self.get_sin_cos(self.const * self.ar*t.repeat(1,1,self.n_harmonics),mask)
-            alpha = torch.matmul(sin_emb, self.alpha_sin) + torch.matmul(cos_emb, self.alpha_cos)
-            
-            beta = torch.matmul(sin_emb, self.beta_sin) + torch.matmul(cos_emb, self.beta_cos)
-            return self.dropout(self.linear_proj(x))  * alpha +  beta # + x.repeat(1,1,self.embedding_size)
+            alpha = (torch.matmul(sin_emb, self.alpha_sin) + torch.matmul(cos_emb, self.alpha_cos)/2)
+            beta = (torch.matmul(sin_emb, self.beta_sin) + torch.matmul(cos_emb, self.beta_cos))/2
+            alpha = self.dropout(torch.clip(alpha,-1,1))
+            #beta = self.dropout(torch.clip(beta,-1,1))
+            x =  self.linear_proj(x)
+            return x* alpha +  beta # + x.repeat(1,1,self.embedding_size)
         
     
 class SpringEncoder(nn.Module):
@@ -82,7 +84,7 @@ class SpringEncoder(nn.Module):
         m_batch = torch.ones_like(k_batch)
         # Time values
         t_values = torch.linspace(1e-5, self.dt * self.steps, self.steps, device=x0.device)
-        
+
         # Set initial conditions
         x_values[:,:, 0] = x0
         v_values[:,:, 0] = v0

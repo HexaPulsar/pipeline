@@ -60,6 +60,31 @@ class Taxonomy:
                         '#90d2d8',
 
                        ] 
+        self.colors = [
+                        '#FFEC1F',
+                        '#FBAC23',
+                        '#F68128',
+                        '#F25A2C',
+                        '#ED3731',
+                        '#96034A',
+                        '#D747CF',
+                        '#BE4BD2',
+                        '#8954C9',
+                        '#554FCF',
+                        '#2845E6',
+                        '#351FFF',
+                        '#1D2996',
+                        '#1F78FF',
+                        '#1FA9FF',
+                        '#1FCEFF',
+                        '#0CE9C0',
+                        '#0CCA55',
+                        '#2F8B04',
+                        '#84FF1F',
+                        '#FFC71F',
+                        
+                        '#FFEC1F',
+                        ]
     def __call__(self,group:str = None):
         if group is None:
             return self.pool

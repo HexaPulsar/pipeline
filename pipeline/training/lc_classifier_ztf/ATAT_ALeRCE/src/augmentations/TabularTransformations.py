@@ -79,23 +79,17 @@ class Scale:
 
         return sample
 
-class GaussianNoise: 
-    def __init__(self):
-        self.mean = 0
-        self.std = 0
+class TABGaussianNoise: 
+    def __init__(self, mean,std):
+        self.mean = mean
+        self.std = std
         
     def __call__(self, sample):
         x = sample['tabular_feat']  # Shape: [bs, seqlen, channels]
-        mask = (x != 0)
-
-        self.std =  torch.FloatTensor(1).uniform_(0, 0.1).to(device = x.device).item()
         # Generate Gaussian noise for each channel independently
-        noise = torch.normal(0.5, self.std, size=x.shape).to(device = x.device)
-
-        # Apply noise only to the non-
-        # zero values
-        x_with_noise = x + noise*mask
-        x_with_noise = torch.clip(x_with_noise, 0,1.1)
+        noise = torch.normal(self.mean, self.std, size=x.shape).to(device = x.device)
+        x_with_noise = x + noise
+        #x_with_noise = torch.clip(x_with_noise, 0,1.0)
         sample['tabular_feat'] = x_with_noise
         return sample
     

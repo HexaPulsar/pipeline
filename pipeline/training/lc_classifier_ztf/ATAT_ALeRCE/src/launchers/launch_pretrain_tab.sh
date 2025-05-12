@@ -1,26 +1,29 @@
 
 cd ../../
-export CUDA_VISIBLE_DEVICES=0 
-pwd
-# Define variables
-EXPERIMENT_TYPE="md"
-EXPERIMENT_NAME="pretrain_md_v0"
-DATASET_NAME="ztf_ff"
+export CUDA_VISIBLE_DEVICES=0,3
 
-DATA_ROOT="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/h5file/no_contamination.h5"
- 
-# Run the Python script with variables
-python SSL_training.py \
-  --experiment_type_general "$EXPERIMENT_TYPE" \
-  --experiment_name_general "$EXPERIMENT_NAME" \
-  --name_dataset_general "$DATASET_NAME" \
-  --data_root_general "$DATA_ROOT" \
-  --patience_general 15 \
-  --lr_general 5e-6 \
-  --batch_size_general 256 \
-  --use_sampler_general 0 \
-  --num_encoders 1 \
-  --embedding_size 128 \
-  --embedding_size_sub 512 \
-  --num_heads 4 \
-  --num_epochs_general 300
+# Set experiment variables correctly
+export EXPERIMENT_TYPE='MD'
+export EXPERIMENT_NAME='3ENC_v0'
+export EXPERIMENT_OUTPUT_PATH="./results/ZTF_ff/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
+export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
+
+# Ensure directories exist
+mkdir -p "$EXPERIMENT_OUTPUT_PATH"
+export HYDRA_FULL_ERROR=1
+# Run the Python script with Hydra
+
+python SSL_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.experiment_type=$EXPERIMENT_TYPE\
+  ++ATATConfig.experiment_name=$EXPERIMENT_NAME \
+  ++ATATConfig.log_filename=$LOG_FILENAME \
+  ++ATATConfig.save_dir_path=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.datamodule.dataset.experiment_type=$EXPERIMENT_TYPE\
+  ++ATATConfig.loggers.tensorboard.save_dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.loggers.csv.save_dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH
+  #++ATATConfig.trainer.val_check_interval=0.2
+
+    
+  

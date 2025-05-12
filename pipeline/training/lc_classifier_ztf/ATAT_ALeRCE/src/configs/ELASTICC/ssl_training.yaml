@@ -4,21 +4,21 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 5e-4
+  learning_rate: 1e-3
   num_classes: 19
-  checkpoint: None
+  checkpoint: null
   lc: 
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
     embedding_size: 128
     embedding_size_sub: 512
     num_heads: 4
-    num_encoders: 3
+    num_encoders: 1
     Tmax: 1000.0
     pe_type: 'tm'
     num_harmonics: 4
     num_bands: 6
-    dropout: 0.2
+    dropout: 1e-5
     
   tab: null
   mode: &mode 'min'
@@ -59,8 +59,8 @@ ATATConfig:
     gradient_clip_val: 0.0
     num_sanity_val_steps: 0
     min_epochs: 1
-    log_every_n_steps: 10
-    val_check_interval: 0.5
+    log_every_n_steps: 1
+    val_check_interval: 0.2
 
   callbacks:
     learning_rate:

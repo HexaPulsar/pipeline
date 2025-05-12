@@ -32,10 +32,18 @@ class VICReg(nn.Module):
          
         repr_loss = F.mse_loss(x, y, reduce='mean')
         
-        loss_dict.update({'prenorm_corr_xy': (torch.corrcoef(x).mean() +torch.corrcoef(y).mean())/2})
+        #loss_dict.update({'CORR/prenorm_x': torch.corrcoef(x).flatten()})
+        #loss_dict.update({'CORR/prenorm_y':  torch.corrcoef(y).flatten()})
+
         x = x - x.mean(dim=0)
         y = y - y.mean(dim=0) 
-        loss_dict.update({'post_norm_xy': (torch.corrcoef(x).mean() +torch.corrcoef(y).mean())/2})
+        #loss_dict.update({'CORR/postnorm_x': torch.corrcoef(x).flatten()})
+        #loss_dict.update({'CORR/postnorm_y':  torch.corrcoef(y).flatten()})
+
+
+
+        loss_dict.update({'CORR/off_x': off_diagonal( ((x.T @ x) / (x.size(0) - 1)))})
+        loss_dict.update({'CORR/off_y': off_diagonal( ((y.T @ y) / (y.size(0) - 1)))})
         std_loss = (self.calculate_std_loss(x) +  self.calculate_std_loss(y))/2
         cov_loss = self.calculate_cov_loss(x) + self.calculate_cov_loss(y)
         loss_dict.update({'loss':  (self.inv * (repr_loss)

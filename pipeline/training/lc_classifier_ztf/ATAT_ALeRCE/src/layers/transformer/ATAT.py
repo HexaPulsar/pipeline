@@ -8,34 +8,24 @@ from .embeddings import Embedding
 from .transformer.torchimpl import Transformer
 from .classifiers import TokenClassifier, MixedClassifier
 from .tokenEmbeddings import Token
- 
-
+from .lightcurve import LightCurveTransformer 
+from .tabular import TabularTransformer
 
 class ATAT(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self,experiment_type:str,
+                 lc_args:dict = None, 
+                 tab_args:dict = None, 
+                 classifier_args: dict = None, **kwargs):
         super(ATAT, self).__init__()
-
-        self.general_ = kwargs["general"]
-        self.lightcv_ = kwargs["lc"]
-        self.feature_ = kwargs["ft"]
+        self.modalities = experiment_type.split('_')
 
         # Lightcurve Transformer
         if self.general_["use_lightcurves"]:
-            self.time_encoder = TimeHandler(**kwargs["lc"])
-            self.transformer_lc = Transformer(**kwargs["lc"])
-            self.classifier_lc = TokenClassifier(
-                num_classes=self.general_["num_classes"], **kwargs["lc"]
-            )
-            self.token_lc = Token(**kwargs["lc"])
-            self.register_buffer('m_token', torch.ones(1, 1, 1).float())
+            self.transformer_lc = LightCurveTransformer()
         # Tabular Transformer
         if self.general_["use_metadata"] or self.general_["use_features"]:
-            self.embedding_ft = Embedding(**kwargs["ft"])
-            self.transformer_ft = Transformer(**kwargs["ft"])
-            self.classifier_ft = TokenClassifier(
-                num_classes=self.general_["num_classes"], **kwargs["ft"]
-            )
-            self.token_ft = Token(**kwargs["ft"])
+            self.transformer_ft = TabularTransformer()
+             
 
         # Mixed Classifier (Lightcurve and tabular)
         if self.general_["use_lightcurves"] and any(
@@ -46,26 +36,7 @@ class ATAT(nn.Module):
             self.classifier_mix = MixedClassifier(
                 input_dim=input_dim, **kwargs["general"]
             )
-
-        # init model params
-        self.init_model()
-
-    def init_model(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                #nn.init.normal_(p, 0, 0.02)
-                nn.init.xavier_normal(p)
-
-    def embedding_feats(self, f): 
-        f_mod = self.embedding_ft(**{"f": f})
-        token_ft = self.token_ft(f.shape[0])
-        return torch.cat([token_ft, f_mod], dim=1)
-
-    def embedding_light_curve(self, x, t, mask=None, **kwargs):
-        x_mod, m_mod, t_mod = self.time_encoder(**{"x": x, "t": t, "mask": mask})
-        x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)
-        m_mod = torch.cat([self.m_token.repeat(x.shape[0],1,1), m_mod], axis=1)
-        return x_mod, m_mod, t_mod
+  
 
     def forward(
         self,
@@ -76,9 +47,8 @@ class ATAT(nn.Module):
         mask=None,
         **kwargs
     ):
-        x_cls, f_cls, m_cls = None, None, None
-
-        if self.general_["use_lightcurves"]:
+        output= {} 
+        if 'LC' in self.modalities:
             if self.general_["use_lightcurves_err"]:
                 data = torch.stack((data, data_err), dim=data.dim() - 1)
 
@@ -86,21 +56,18 @@ class ATAT(nn.Module):
                 **{"x": data, "t": time, "mask": mask}
             )
             x_emb = self.transformer_lc(**{"x": x_mod, "mask": ~(m_mod).unsqueeze(-1).bool()})
-            x_cls = self.classifier_lc(x_emb[:, 0, :])
-
-        if self.general_["use_metadata"] or self.general_["use_features"]:
+            output['LC'] =  self.classifier_lc(x_emb)
+        if 'MD' in self.modalities or 'FEAT' in self.modalities:
             f_mod = self.embedding_feats(**{"f": tabular_feat})
             f_emb = self.transformer_ft(**{"x": f_mod, "mask": None})
-            f_cls = self.classifier_ft(f_emb[:, 0, :])
-
-        if self.general_["use_lightcurves"] and (
-            self.general_["use_metadata"] or self.general_["use_features"]
-        ):
-            m_cls = self.classifier_mix(
-                torch.cat([f_emb[:, 0, :], x_emb[:, 0, :]], axis=1)
+            output['TAB'] = self.classifier_ft(f_emb)
+            
+        if all(['LC' in self.modalities, 
+                ('MD' in self.modalities or 'FEAT' in self.modalities)]):
+            output['MM'] =self.classifier_mix(
+                torch.cat([f_emb, x_emb], axis=1)
             )
-
-        return x_cls, f_cls, m_cls
+        return output
 
     def predict_mix(self, data, time, tabular_feat, mask, **kwargs):
         return

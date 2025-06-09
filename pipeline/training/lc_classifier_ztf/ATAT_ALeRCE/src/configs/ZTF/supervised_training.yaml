@@ -6,65 +6,83 @@ ATATConfig:
   log_filename: 'default.log'
   learning_rate: 1e-3
   num_classes: 22
+  
   lc: 
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
-    embedding_size: 128
-    embedding_size_sub: 512
+    embedding_size: 64
+    embedding_size_sub: 64
     num_heads: 4
-    num_encoders: 1
-    Tmax: 1000.0
+    num_encoders: 3
+    Tmax: 2000.0
     pe_type: 'tm'
-    num_harmonics: 4
+    num_harmonics: 128
     num_bands: 2
-    dropout: 1e-5
+    dropout: 0.01
+    checkpoint: null
     
   tab: 
     _target_: src.utils.CustomParser.TabularArgs
     embedding_size: 128
-    embedding_size_sub: 512
+    embedding_size_sub: 128
     num_heads: 4
     num_encoders: 3
-    length_size: 6
-    dropout: 0.0
-  mode: &mode 'max'
-  monitor: &monitor "validation/LC/f1" #"validation/LC/f1"
+    length_size: 6 #187
+    dropout: 0.01
+    checkpoint: null
+  
+  #mode: &mode 'max'
+  mode: &mode 'min'
+  #monitor: &monitor "validation/LC/f1" #"validation/LC/f1"
+  monitor: &monitor "loss_validation/total" #"validation/LC/f1"
+ 
   datamodule:
     _target_: src.utils.CustomParser.DataModuleArgs
     dataset:
       _target_: src.utils.CustomParser.ATATDatasetArgs 
       experiment_type: *experiment_type
-      data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
-      #data_root: '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_FILES/ztf_ff_raw/h5_dataset/ztf_ff_raw.h5'
+     # data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
+      data_root: '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5'
       seed: 0
       train_apply_transform: True
       validation_apply_transform: false
       transforms: []  # List of transform modules
-      train_key: 'training'
-      validation_key: 'validation'
-      test_key: 'test'
-      observation_key: flux 
-      observation_err_key: flux_err
+      train_key: training
+      validation_key: validation
+      test_key: test
+      observation_key: 'flux' 
+      observation_err_key: 'flux_err'
       time_key: time
       time_alert_key: time_alert 
       mask_key: mask
-      feature_key: feat_cols
+      mask_photometry_key: ''
+      mask_detection_key: ''
+      #feature_key: feat_cols
+      feature_key: extracted_features
       metadata_key: metadata_feat
       label_key: labels
-    train_use_sampler: true
+    train_use_sampler: False
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 1024
+    batch_size: 512
+
+  vicreg:
+    projector_shape:  '128-512-512'
+    inv_coeff: null
+    var_coeff: null
+    cov_coeff: null
 
   trainer:
-    max_epochs: 50
+    max_epochs: 500
     devices: 'auto'
     accelerator: 'gpu'
-    gradient_clip_val: 0.0
+    #gradient_clip_val: 1.0
     num_sanity_val_steps: 0
     min_epochs: 1
     log_every_n_steps: 1
+    #accumulate_grad_batches: 4
+
     #check_val_every_n_epoch: 5
 
   callbacks:
@@ -76,7 +94,7 @@ ATATConfig:
       mode: *mode
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
-      patience: 15 # number of checks with no improvement after which training will be stopped
+      patience: 20 # number of checks with no improvement after which training will be stopped
       verbose: False # verbosity mode
       strict: True # whether to crash the training if monitor is not found in the validation metrics
       check_finite: True # when set True, stops training when the monitor becomes NaN or infinite

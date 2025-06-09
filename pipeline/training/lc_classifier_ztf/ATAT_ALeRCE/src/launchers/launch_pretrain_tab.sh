@@ -3,9 +3,9 @@ cd ../../
 export CUDA_VISIBLE_DEVICES=0,3
 
 # Set experiment variables correctly
-export EXPERIMENT_TYPE='MD'
-export EXPERIMENT_NAME='3ENC_v0'
-export EXPERIMENT_OUTPUT_PATH="./results/ZTF_ff/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export EXPERIMENT_TYPE='FEAT'
+export EXPERIMENT_NAME='test_1_feat'
+export EXPERIMENT_OUTPUT_PATH="./results/AUGS/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 

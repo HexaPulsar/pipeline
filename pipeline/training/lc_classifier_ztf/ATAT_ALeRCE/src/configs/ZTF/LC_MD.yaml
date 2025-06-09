@@ -10,10 +10,10 @@ ATATConfig:
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
     embedding_size: 128
-    embedding_size_sub: 512
+    embedding_size_sub: 256
     num_heads: 4
     num_encoders: 3
-    Tmax: 1000.0
+    Tmax: 2000.0
     pe_type: 'tm'
     num_harmonics: 4
     num_bands: 2
@@ -21,11 +21,11 @@ ATATConfig:
   tab:
     _target_: src.utils.CustomParser.TabularArgs
     embedding_size: 128
-    embedding_size_sub: 512
+    embedding_size_sub: 128
     num_heads: 4
     num_encoders: 3
-    length_size: 6
-    dropout: 1e-5 
+    length_size: 187 #6
+    dropout: 1e-5
   mode: &mode 'max'
   monitor: &monitor "validation/MIX/f1"
   datamodule:
@@ -47,6 +47,8 @@ ATATConfig:
       time_key: time
       time_alert_key: time_alert 
       mask_key: mask
+      mask_photometry_key: ''
+      mask_detection_key: ''
       feature_key: extracted_feat
       metadata_key: metadata_feat
       label_key: labels
@@ -55,16 +57,21 @@ ATATConfig:
     num_workers: 8
     pin_memory: true
     batch_size: 512
-
+  vicreg:
+    shape_projector_1:  '256-512-512'
+    shape_projector_2:  '256-512-512'
+    inv_coeff: 100
+    var_coeff: 100
+    cov_coeff: 1 
   trainer:
-    max_epochs: 500
+    max_epochs: 100
     devices: 'auto'
     accelerator: 'gpu'
-    gradient_clip_val: 0.0
+    gradient_clip_val: 1.0
     num_sanity_val_steps: 0
     min_epochs: 1
-    log_every_n_steps: 10
-    #check_val_every_n_epoch: 5
+    accumulate_grad_batches: 4
+    log_every_n_steps: 1
 
   callbacks:
     learning_rate:

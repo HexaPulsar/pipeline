@@ -4,28 +4,28 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 1e-5
+  learning_rate: 1e-3
   num_classes: 22
   lc:
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
     embedding_size: 128
-    embedding_size_sub: 512
+    embedding_size_sub: 256
     num_heads: 4
-    num_encoders: 3
-    Tmax: 1000.0
+    num_encoders: 1
+    Tmax: 2000.0
     pe_type: 'tm'
     num_harmonics: 4
     num_bands: 2
-    dropout: 0.1
+    dropout: 1e-5
   tab:
     _target_: src.utils.CustomParser.TabularArgs
     embedding_size: 128
-    embedding_size_sub: 512
+    embedding_size_sub: 128
     num_heads: 4
-    num_encoders: 3
+    num_encoders: 1
     length_size: 6
-    dropout: 0.1
+    dropout: 1e-5
   mode: &mode 'min'
   monitor: &monitor "loss_validation/loss"
   datamodule:
@@ -33,15 +33,13 @@ ATATConfig:
     dataset:
       _target_: src.utils.CustomParser.SSLDatasetArgs 
       experiment_type: *experiment_type
-      data_root:
-      - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_FILES/2020/no_bogus_no_ast_2020.h5
-      - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_FILES/2021/no_bogus_no_ast_2021.h5
-      - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_FILES/2022/no_bogus_no_ast_2022.h5
-      - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_FILES/2023/no_bogus_no_ast_2023.h5
+      data_root: 
+        - '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2020/unlabeled_ztf_events_2020.h5'
+        - '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2023/unlabeled_ztf_events_2023.h5'
       seed: 0
       train_apply_transform: true
       validation_apply_transform: true
-      train_key: 'train'
+      train_key: 'training'
       validation_key: 'validation'
       test_key: 'test'
       observation_key: flux 
@@ -49,9 +47,10 @@ ATATConfig:
       time_key: time
       time_alert_key: time_alert 
       mask_key: mask
-      feature_key: extracted_feat
-      metadata_key: md_cols
-      label_key: labels
+      mask_photometry_key: ''
+      mask_detection_key:  ''
+      feature_key: extracted_features
+      metadata_key: metadata_feat
       transforms_1: []
       transforms_2: []
     train_use_sampler: false
@@ -59,15 +58,21 @@ ATATConfig:
     num_workers: 8
     pin_memory: true
     batch_size: 256
-
+  vicreg:
+    shape_projector_1:  '256-512-512'
+    shape_projector_2:  '256-512-512'
+    inv_coeff: 1
+    var_coeff: 1000
+    cov_coeff: 1 
   trainer:
-    max_epochs: 300
+    max_epochs: 100
     devices: 'auto'
     accelerator: 'gpu'
-    gradient_clip_val: 0.0
+    gradient_clip_val: 1.0
     num_sanity_val_steps: 0
     min_epochs: 1
-    log_every_n_steps: 100
+    accumulate_grad_batches: 4
+    log_every_n_steps: 1
 
   callbacks:
     learning_rate:
@@ -78,7 +83,7 @@ ATATConfig:
       mode: *mode
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
-      patience: 5 # number of checks with no improvement after which training will be stopped
+      patience: 15 # number of checks with no improvement after which training will be stopped
       verbose: False # verbosity mode
       strict: True # whether to crash the training if monitor is not found in the validation metrics
       check_finite: True # when set True, stops training when the monitor becomes NaN or infinite

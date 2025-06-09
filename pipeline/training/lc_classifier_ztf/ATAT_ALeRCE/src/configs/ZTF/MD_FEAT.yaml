@@ -4,35 +4,28 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 1e-3
+  learning_rate: 1e-4
   num_classes: 22
-
   lc:
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
     embedding_size: 128
-    embedding_size_sub: 128
+    embedding_size_sub: 256
     num_heads: 4
     num_encoders: 3
     Tmax: 2000.0
     pe_type: 'tm'
-    num_harmonics: 128
+    num_harmonics: 4
     num_bands: 2
-    dropout: 0.0 
-    checkpoint: null
-    freeze_weights: False
-
+    dropout: 1e-5
   tab:
     _target_: src.utils.CustomParser.TabularArgs
-    embedding_size: 32
-    embedding_size_sub: 32
+    embedding_size: 128
+    embedding_size_sub: 128
     num_heads: 4
-    num_encoders: 1
-    length_size: 187
-    dropout: 0.00
-    checkpoint: null
-    freeze_weights: False
-
+    num_encoders: 3
+    length_size: 187 #6
+    dropout: 1e-5
   mode: &mode 'max'
   monitor: &monitor "validation/TAB/f1"
   datamodule:
@@ -46,17 +39,17 @@ ATATConfig:
       train_apply_transform: True
       validation_apply_transform: false
       transforms: []  # List of transform modules
-      train_key: training
-      validation_key: validation
-      test_key: test
-      observation_key: 'flux' 
-      observation_err_key: 'flux_err'
+      train_key: 'training'
+      validation_key: 'validation'
+      test_key: 'test'
+      observation_key: flux 
+      observation_err_key: flux_err
       time_key: time
       time_alert_key: time_alert 
       mask_key: mask
       mask_photometry_key: ''
       mask_detection_key: ''
-      feature_key: extracted_feat_2048
+      feature_key: extracted_feat
       metadata_key: metadata_feat
       label_key: labels
     train_use_sampler: true
@@ -64,24 +57,21 @@ ATATConfig:
     num_workers: 8
     pin_memory: true
     batch_size: 512
-
   vicreg:
-    projector_shape:  '128-512-512'
-    inv_coeff: null
-    var_coeff: null
-    cov_coeff: null
-
+    shape_projector_1:  '256-1024-1024'
+    shape_projector_2:  '256-1024-1024'
+    inv_coeff: 100
+    var_coeff: 100
+    cov_coeff: 1 
   trainer:
-    max_epochs: 100
+    max_epochs: 50
     devices: 'auto'
     accelerator: 'gpu'
-    #gradient_clip_val: 1.0
+    gradient_clip_val: 1.0
     num_sanity_val_steps: 0
     min_epochs: 1
+    accumulate_grad_batches: 4
     log_every_n_steps: 1
-    #accumulate_grad_batches: 4
-
-    #check_val_every_n_epoch: 5
 
   callbacks:
     learning_rate:
@@ -118,7 +108,6 @@ ATATConfig:
       save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
 
   loggers:
-    
     tensorboard:
       _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
       name: 'tensorboard'

@@ -1,11 +1,11 @@
 
 cd ../../
-export CUDA_VISIBLE_DEVICES=0,3
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC_MD'
-export EXPERIMENT_NAME='baseline'
-export EXPERIMENT_OUTPUT_PATH="./results/ZTF_ff/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export EXPERIMENT_NAME='test_0'
+export EXPERIMENT_OUTPUT_PATH="./results/AUGS/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 
@@ -14,7 +14,7 @@ mkdir -p "$EXPERIMENT_OUTPUT_PATH"
 export HYDRA_FULL_ERROR=1
 # Run the Python script with Hydra
 
-python SSL_LC_MD_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
+python SSL_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
   ++ATATConfig.experiment_type=$EXPERIMENT_TYPE\
   ++ATATConfig.experiment_name=$EXPERIMENT_NAME \
   ++ATATConfig.log_filename=$LOG_FILENAME \

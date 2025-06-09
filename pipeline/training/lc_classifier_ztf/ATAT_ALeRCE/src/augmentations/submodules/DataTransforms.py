@@ -8,17 +8,6 @@ from copy import deepcopy
 from .WindowApply import WindowApply
 from scipy.ndimage import gaussian_filter1d
 
-class Roll:
-    def __init__(self, num_bands):
-        self.num_bands = num_bands
-    def __call__(self,sample):
-        for band in self.num_bands:
-            seq_roll = torch.randint(0,200,size = (1,))
-            sample['data'][:,band] = torch.roll(sample['data'][:,band],shift= (seq_roll), dim = 0)
-            sample['time'][:,band] = torch.roll(sample['time'][:,band],shift= (seq_roll), dim = 0)
-            sample['mask'][:,band] = torch.roll(sample['data'][:,band],shift= (seq_roll), dim = 0)
-        return sample
-
 class InverseLC:
     def __call__(self,sample):
         sample['data'] = -sample['data']
@@ -44,16 +33,41 @@ class ShiftData(WindowApply):
         return sample
     
     
+class CutBand:
+    def __init__(self, num_bands):
+        self.num_bands =num_bands
+
+    def __call__(self, sample):
+        nonzero = torch.count_nonzero(sample['data'], dim = 1)
+        if all([nonzero[0] < 6, nonzero[1] < 6]):
+            return sample
+        elif nonzero[0] < 6 and nonzero[1] >=6:
+            sample['data'][:,0] = 0
+            sample['time'][:,0] = 0
+            sample['mask'][:,0] = 0
+            return sample
+        elif nonzero[0] >= 6 and nonzero[1] <6:
+            sample['data'][:,1] = 0
+            sample['time'][:,1] = 0
+            sample['mask'][:,1] = 0
+            return sample
+        else:
+            band = np.random.choice(list(range(self.num_bands)))
+            sample['data'][:, band] = 0
+            sample['time'][:, band] = 0
+            sample['mask'][:, band] = 0
+            return sample
+    
 class GaussianFilter:
-    def __init__(self, num_bands,filter_std):
+    def __init__(self, num_bands,filter_std:list):
         self.num_bands =num_bands
         self.filter_std = filter_std
     def __call__(self,sample):
-        
         for i in range(self.num_bands):
-            filtered_signal = gaussian_filter1d(sample['data'][:,i], self.filter_std)
-            filtered_signal = torch.tensor(filtered_signal)* (sample['data'] != 0)[:,i]
-            sample['data'][:,i] = filtered_signal
+            choose_filter_std = np.random.choice(self.filter_std)
+            nonzero = torch.count_nonzero(sample['data'][:,i])
+            filtered_signal = gaussian_filter1d(sample['data'][:nonzero, i], choose_filter_std)
+            sample['data'][:nonzero,i] = torch.tensor(filtered_signal, dtype = torch.float)
         return sample
         
     

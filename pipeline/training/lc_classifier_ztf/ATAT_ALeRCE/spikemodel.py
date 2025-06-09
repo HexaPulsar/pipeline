@@ -1,4 +1,5 @@
 
+from torchmetrics import Accuracy, F1Score, ConfusionMatrix
 from ReportPretraining import QuickLoader
 import torch
 import torch.nn as nn
@@ -12,7 +13,14 @@ from tqdm import tqdm
 # imports
 import snntorch as snn
 from snntorch import surrogate
-from torchmetrics.classification import F1Score, Accuracy, ConfusionMatrix
+from src.augmentations import LightCurveTransform as LC
+
+# pytorch
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torchvision.transforms import RandomChoice, RandomApply,RandomAdjustSharpness,RandomSolarize
 
 # pytorch
 import torch
@@ -110,52 +118,30 @@ class ANGEL(nn.Module):
         x = self.classifier(x)
         return x
     # shape of outs should be [(bsz,spikeout),[bsz, spikeout]]
-
-class test_transforms:
+ 
+transforms = [  
+                    #LC.TimeShift(),
+                    #LC.ZeroOutTime(),
+                    #LC.GaussianNoise(num_bands=cfg.lc.num_bands, std = 1e-3),
+                    #LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.05),
+                    #LC.CutFirstN(2,mask_first= [-1,0,1,2,4,8,15,32,64]),
+                    RandomChoice([LC.WindowSelect(2, window_size=w_) for w_ in list(range(10, 210, 10))]),
+                    RandomChoice([LC.MaskWindow(2, window_size= w_) for w_ in list(range(10, 210, 10))]),
+                    LC.GaussianFilter(num_bands=2,filter_std = [1e-5,1e-4,1e-3,1e-2, 0.1]),
+                    RandomApply([LC.RandomSobelFilterMask('magnitude', keep='above',threshold_range = (0.1,0.2)),
+                                ], p= 0.1),
+                    #TAB.TABGaussianNoise(0,1e-2), 
+                    #TAB.TABScale(),
+                    #TAB.TABRandomShift()
+                  ]
     
-    def __call__(self, sample):
-        x = sample['data']
-        if torch.rand(1) <=0.5:
-            x = x + np.random.normal(0,x.std(), x.shape)
-         
-        if torch.rand(1) <= 0.5:
-            x = x + torch.normal(0,1, size = (1,)).item() 
-        if torch.rand(1) <= 0.5:
-            x[np.random.randint(10,199):200,0] = 0
-            x[np.random.randint(10,199):200,1] = 0
-        if torch.rand(1) <= 0.5:
-            x = torch.roll(x,shifts= torch.randint(0,200, size = (1,)).item(), dims = 0)
-            
-       # if torch.rand(1) <= 0.5:
-      #      x = torch.roll(x,shifts= torch.randint(0,1, size = (1,)).item(), dims = 1)
-            
-        sample['data'] =  x
-        return sample
-    
-from scipy import interpolate
-
-class resample:
-    def __call__(self, sample):
-        for i in range(2):
-            data = sample['data'][:,i]
-            time = sample['time'][:,i] 
-            f = interpolate.interp1d(time, data, kind='nearest', 
-                                    bounds_error=False, fill_value=0)
-            t_min = min(time)
-            t_max = max(time)
-            time_step = t_max /(data.size(0)) # Regular interval (e.g., every 0.5 time units)
-            time_regular = np.arange(t_min, t_max, time_step)
-            data_regular = f(time_regular)
-            sample['data'][:,i]  = torch.tensor(data_regular)[:200]
-            sample['time'][:,i] = torch.tensor(time_regular)[:200]
-        return sample
-        
-tr = [#resample(),
-      test_transforms()
-      ]
-ql = QuickLoader(batch_size=512, transforms = tr, train_apply_transform=True)
+tr = [RandomApply([t],p = 0.5) for t in transforms]
+p_ = 0.5
+tr = [RandomApply([t], p = p_) for t in tr]
+ql = QuickLoader(batch_size=2048, transforms = tr, train_apply_transform=True, use_sampler = True)
 train_dataloader = ql.train
 validation_dataloader = ql.validation
+      
 def train_model():
     # Set device
     device = torch.device("cuda:2" if torch.cuda.is_available() else 
@@ -175,7 +161,7 @@ def train_model():
     # Initialize metrics
     f1_metric = F1Score(task="multiclass", num_classes=22, average="macro").to(device)
     accuracy_metric = Accuracy(task="multiclass", num_classes=22).to(device)
-    
+    #cm_metric = ConfusionMatrix('multiclass',num_classes=22, normalize='all')
     # Early stopping parameters
     num_epochs = 1000
     patience = 100
@@ -191,6 +177,7 @@ def train_model():
         
         for data in train_dataloader:
             inputs = data['data'].float().to(device)
+            inputs /inputs.norm(dim = 1,keepdim=True)
             labels = data['labels'].long().to(device)
             
             optimizer.zero_grad()
@@ -214,6 +201,8 @@ def train_model():
             
             for data in validation_dataloader:
                 inputs = data['data'].float().to(device)
+                inputs /inputs.norm(dim = 1,keepdim=True)
+                
                 labels = data['labels'].long().to(device)
                 
                 outputs = model(inputs)

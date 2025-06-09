@@ -57,12 +57,13 @@ def main(cfg:ATATConfig):
                     #RandomApply([LC.ZScoreUndersample(min_samples=50, thr = None, inject_gauss_noise=False)],p = 0.5),
                     #RandomApply([LC.CutFirstN(2,mask_first= [-1,0,1,2])],p = 0.5),
                     ]
-    cfg.datamodule.dataset.transforms_1 = transforms
-    cfg.datamodule.dataset.transforms_2 = transforms
+    transforms +=[LC.TimeNormalization()]
+    cfg.datamodule.dataset.transforms_1 = [LC.TimeNormalization()]
+    cfg.datamodule.dataset.transforms_2 = []
     cfg.datamodule.dataset.experiment_type = cfg.experiment_type
     pl_datal = LitPretrain(**cfg.datamodule)
     if cfg.experiment_type == 'LC_MD':
-        projector = VICRegProjector(VICReg(25,25,1),'128-32-32')
+        projector = VICRegProjector(VICReg(25,25,1),'128-512-512')
         pl_model = PretrainMMModule(model_lc= LightCurveTransformer(**cfg.lc),
                                   model_tab = TabularTransformer(**cfg.tab),
                                   loss=projector,

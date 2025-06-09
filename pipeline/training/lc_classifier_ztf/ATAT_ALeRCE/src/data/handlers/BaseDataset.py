@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import Dataset
 from dataclasses import dataclass
 from joblib import load
-
+import numpy as np
 
 class BaseDataset(Dataset):
     def __init__(self,
@@ -20,12 +20,14 @@ class BaseDataset(Dataset):
         observation_key:str =  'flux',
         observation_err_key: str = 'flux_err',
         mask_key = 'mask',
+        mask_photometry_key = '',
+        mask_detection_key = '',
         time_key = 'time',
         time_alert_key = 'time_alert',
         label_key = 'labels',
         feature_key = 'ft_cols',
         metadata_key = 'metadata_feat',
-        list_time_to_eval = [2048]):
+        list_time_to_eval = ['']):
 
         """loading dataset from H5 file"""
         """ dataset is composed for all samples, where self.these__idx dart to samples for each partition"""
@@ -36,8 +38,6 @@ class BaseDataset(Dataset):
             name =  self.validation_key
         else:
             name = self.test_key
-        print(self.experiment_type)
-
         self.use_lightcurves  = True if 'LC' in self.experiment_type else False
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
@@ -47,10 +47,9 @@ class BaseDataset(Dataset):
         self.feature_key = feature_key
 
         self.list_time_to_eval = list_time_to_eval
+
         h5_ = h5py.File("{}".format(self.data_root))
-        #print(h5_.keys())
         assert all([metadata_key in h5_.keys()]), 'metadata_key {} not in dataset keys. dataset keys are {}'.format(self.metadata_key, h5_.keys())
-        print(h5_.keys())
         get_data = (h5_.get("test") if self.set_type == "test" else h5_.get("%s_%s" % (name, self.seed)))
         assert get_data is not None, '{}_{} not a key of the dataset'.format(name,self.seed)
         self.these_idx = get_data[:]
@@ -84,6 +83,11 @@ class BaseDataset(Dataset):
         self.data = h5_.get(self.observation_key)
         self.data_err = h5_.get(self.observation_err_key)
         self.mask = h5_.get(self.mask_key)
+
+        if self.mask_photometry_key !='':
+            self.mask_photometry = h5_.get(self.mask_photometry_key) if self.mask_photometry_key in h5_.keys() else None
+        if self.mask_detection_key !='':
+            self.mask_detection = h5_.get(self.mask_photometry_key) if self.mask_detection_key in h5_.keys() else None
         self.time = h5_.get(self.time_key)
         self.time_alert = h5_.get(self.time_alert_key)
         if 'labels' in h5_.keys():
@@ -101,23 +105,37 @@ class BaseDataset(Dataset):
             )
             self.metadata_feat = self.get_tabular_data(
                 metadata_feat, path_QT, "metadata"
-            )
+            ) 
         if self.use_features:
-            self.extracted_feat = dict()
+            #self.extracted_feat = dict()
+            #print(h5_.keys())
+            #input()
+            extracted_feat = h5_.get("{}".format(self.feature_key))[:]
+            #print(extracted_feat.shape)
+            path = '/'.join(self.data_root.split('/')[:-1])
+            add = 'features_qt'
+            add = 'fold'
+            path_QT = f"{path}/features/{add}_{self.seed}.joblib".format(
+                self.data_root, self.seed
+            )   
+            data = self.get_tabular_data(
+                        extracted_feat, path_QT, self.feature_key    
+                    )
             
-            #self.list_time_to_eval = [str(i) for i in self.list_time_to_eval]
-            for time_eval in self.list_time_to_eval:
-                path = self.data_root.replace('dataset.h5','')
-                path_QT = f"{path}/features/fold_{self.seed}.joblib"
-                extracted_feat = h5_.get("{}_{}".format(self.feature_key,time_eval))[:]
-                self.extracted_feat.update(
-                    {
-                        f'extracted_feat_{time_eval}': self.get_tabular_data(
-                            extracted_feat, path_QT, f"features_{time_eval}"    
-                        )
-                    }
-                )
-            print(self.extracted_feat.keys())
+            self.extracted_feat = data
+
+                #else:
+                #    path = self.data_root.replace('dataset.h5','')
+                ##    path_QT = f"{path}/features/fold_{self.seed}.joblib"
+                #    extracted_feat = h5_.get("{}_{}".format(self.feature_key,time_eval))[:]
+                #    
+                #    self.extracted_feat.update(
+                #        {
+                #            f'extracted_feat_{time_eval}': self.get_tabular_data(
+                #                extracted_feat, path_QT, f"features_{time_eval}"    
+                #            )
+                #        }
+                #)
 
                 #print(self.extracted_feat[f"features_{time_eval}"].shape)
 
@@ -125,6 +143,12 @@ class BaseDataset(Dataset):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")
         if self.use_QT:
             QT = load(path_QT)
-            tabular_data = QT.transform(tabular_data)
+          
+            #tabular_data = QT.transform(tabular_data)
+            
+            tabular_data = QT.transform(tabular_data.squeeze(-1))
+            tabular_data  = np.nan_to_num(tabular_data,nan = -9999)
+
+    
         return torch.from_numpy(tabular_data).float()
     

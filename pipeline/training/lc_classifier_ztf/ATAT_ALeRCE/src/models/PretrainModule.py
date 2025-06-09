@@ -34,6 +34,9 @@ class PretrainModule(pl.LightningModule):
         for name, p in self.model.named_parameters():
             if p.dim() > 1:
                 nn.init.xavier_normal_(p)
+            else:
+                if 'token_lc.token' in name:
+                        nn.init.uniform_(p)
         
     def gradfilter_ema(self,
         m: nn.Module,
@@ -54,40 +57,47 @@ class PretrainModule(pl.LightningModule):
     def on_after_backward(self) -> None:
         self.gradients = self.gradfilter_ema(m=self.model,
                                         grads = self.gradients_)
+
     def training_step(self, batch, batch_idx):
         x = self.model(**batch[0])
         y = self.model(**batch[1])
         loss_dict = self.loss(x,y)
         with torch.no_grad():
             for key,value in loss_dict.items():
-                if 'CORR' in key:
+                if 'emb_corr' in key:
                     self.logger.experiment.add_histogram(key, value,self.global_step)
+                elif 'percent' in key:
+                    self.log(f'{key}', value ,on_epoch=False,on_step=True)
                 else:
                     self.log(f'loss_train/{key}', value ,on_epoch=False,on_step=True)
-            if batch_idx % 10 == 0:
+           # if batch_idx % 10 == 0:
                 #for harmonic in range(4):
                 #    self.logger.experiment.add_histogram(f'HARMONICS/alpha_cos_harmonics_{harmonic}',self.model.time_encoder.time_encoders[harmonic].alpha_cos,self.global_step)
                 #    self.logger.experiment.add_histogram(f'HARMONICS/alpha_sin_harmonics_{harmonic}',self.model.time_encoder.time_encoders[harmonic].alpha_sin,self.global_step) 
                 
-                self.logger.experiment.add_histogram(f'token/x',self.model.token_lc.token,self.global_step)
-                self.logger.experiment.add_histogram(f'token/y',self.model.token_lc.token,self.global_step)
+                #self.logger.experiment.add_histogram(f'token/x',self.model.token_lc.token,self.global_step)
+                #self.logger.experiment.add_histogram(f'token/x',self.model.token_lc.token,self.global_step)
+                #self.log("tmax_", self.model.time_encoder.time_encoders.0.Tmax.item() ,on_epoch=False,on_step=True)
+                #self.log('tmax_1', self.model.time_encoder.time_encoders.1.Tmax ,on_epoch=False,on_step=True)
 
                 #self.logger.experiment.add_histogram(f'token/x',self.model.token_tab.token,self.global_step)
                 #self.logger.experiment.add_histogram(f'token/y',self.model.token_tab.token,self.global_step)
 
-                self.logger.experiment.add_histogram(f'out_emb/x',x,self.global_step)
-                self.logger.experiment.add_histogram(f'out_emb/y',y,self.global_step)
+                #self.logger.experiment.add_histogram(f'out_emb/x',x,self.global_step)
+                #self.logger.experiment.add_histogram(f'out_emb/y',y,self.global_step)
                 #self.logger.experiment.add_histogram(f'cos_similarity',cosine_similarity(x,y),self.global_step)
         return loss_dict['loss']
      
+    
     def validation_step(self, batch, batch_idx):
-        loss_dict = self.loss( self.model(**batch[0]),self.model(**batch[1]))
+        embs = self.model(**batch[0])
+        loss_dict = self.loss( embs ,self.model(**batch[1]))
         with torch.no_grad():
            for key,value in loss_dict.items():
-                if 'CORR' not in key:
+                if 'emb_corr' not in key:
                     self.log(f'loss_validation/{key}', value ,on_epoch=True,on_step=False)
         return loss_dict['loss']
-    
+
     def test_step(self, batch, batch_idx):
         return 0
     
@@ -95,7 +105,7 @@ class PretrainModule(pl.LightningModule):
     def configure_optimizers(self):
         warmup = 0
         optimizer = optim.AdamW(self.parameters(), lr=self.lr)
-        #cosine = CosineAnnealingWarmRestarts(optimizer, T_0=int(1e4)//2, eta_min=5e-6)
+        cosine = CosineAnnealingWarmRestarts(optimizer, T_0=100, eta_min=1e-8)
         constant = ConstantLR(optimizer,1)  
         scheduler = SequentialLR(
                     optimizer,

@@ -24,9 +24,11 @@ class TabularTransformer(nn.Module):
         embedding_size_sub= 512,
         num_heads= 4,
         num_encoders= 3,
-        length_size=7,
+        length_size=6,
         num_bands= 2,
-        dropout = 0.00,):
+        dropout = 0.00,
+        checkpoint = None, 
+        freeze_weights = False,):
 
         self.embedding_size = embedding_size
         self.embedding_size_sub = embedding_size_sub
@@ -54,21 +56,19 @@ class TabularTransformer(nn.Module):
         self.token_tab = Token(self.embedding_size)
         self.register_buffer('ones', torch.ones(1,1,1,dtype = float))
         self.dropout = nn.Dropout(dropout)
-    def embedding_feats(self, f, tab_mask=None):
+
+
+    def embedding_feats(self, f):
         f_mod = self.embedding_tab(**{"f": f})
+        f_mod = f_mod /f_mod.norm(dim = 1,keepdim=True)
+
         return torch.cat([self.token_tab(f.shape[0]), f_mod], axis=1)
 
     def forward(self, tabular_feat, tab_mask=None, **kwargs):
         
         f_mod=  self.embedding_feats(
-            **{"f": tabular_feat, "tab_mask": tab_mask}
+            **{"f": tabular_feat}
         )
-        tab_mask = torch.ones(f_mod.shape[:2], device = f_mod.device)
-        #dropout token dims
-        tab_mask = self.dropout(tab_mask)
-        tab_mask[0,:]  = 1
-        tab_mask = ~((tab_mask).bool())
-        f_mod = f_mod /f_mod.norm(dim = 1,keepdim=True)
-        f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": tab_mask})[:,0,:]
-        #f_emb = self.transformer_tab(**{"src": f_mod})[:,0,:]
-        return self.dropout(f_emb)
+
+        f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": tab_mask})
+        return f_emb[:,0,:]

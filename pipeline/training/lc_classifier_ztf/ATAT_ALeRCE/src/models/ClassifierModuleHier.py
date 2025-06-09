@@ -29,29 +29,9 @@ from PIL import Image
 import torchvision.transforms as T
 
 
-class HierLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.hier_loss = nn.CrossEntropyLoss()
-        self.class_loss = nn.CrossEntropyLoss()
-        
-    def map_label_tensor(self,labels):
-        mapping_dict = {
-            0: 1, 1: 1, 3: 1, 5: 1, 8: 1,
-            2: 2, 6: 2, 7: 2, 10: 2, 11: 2, 12: 2, 13: 2, 14: 2, 15: 2,
-            4: 0, 9: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0
-        }
-        mapping_tensor = torch.tensor([mapping_dict.get(int(label), -1) for label in labels], device = labels.device)
-        return mapping_tensor
-    
-    def forward(self, preds ,labels):
-
-        loss = self.hier_loss(preds[0],  self.map_label_tensor(labels.long())) + self.class_loss(preds[1],  labels.long())
-        loss = loss/2
-        return loss
         
 
-class ClassifierModule(pl.LightningModule):
+class ClassifierModuleHier(pl.LightningModule):
     def __init__(self,model,classifier, loss,
                  experiment_type:str, 
                  lc_load_ckpt = None, 
@@ -161,14 +141,16 @@ class ClassifierModule(pl.LightningModule):
         embs = self.model(**batch_data) 
         preds = self.classifier(embs)
         loss = 0
+
         if 'LC' in preds.keys():
             partial_loss = self.loss(preds['LC'],  labels.long())
             loss+=partial_loss
-            self.LC_train_metrics(preds['LC'], labels.long())
+            class_preds = self.modify_logits(preds['LC'][0],preds['LC'][1])
+
+            self.LC_train_metrics(class_preds, labels.long())
             self.log_dict(self.LC_train_metrics, on_step=True, on_epoch=True)
             
         if 'TAB' in preds.keys():
-            
             self.TAB_train_metrics(preds['TAB'], labels.long())
             self.log_dict(self.TAB_train_metrics, on_step=True, on_epoch=True)
             partial_loss = self.loss(preds['TAB'],  labels.long())
@@ -185,6 +167,19 @@ class ClassifierModule(pl.LightningModule):
     def on_validation_epoch_start(self):
         self.epoch_labels = None
         return super().on_validation_epoch_start()
+    def modify_logits(self,hier_preds, class_preds):
+        mapping_dict  = {0:[4,9,16,17,18,19,20,21],
+                         1:[0,1,3,5,8],
+                         2:[2,6,7,10,11,12,13,14,15]}
+        hier_classes = torch.argmax(hier_preds, dim = -1).int()
+        for i in range((class_preds).shape[0]):   
+
+            correct_logits =  mapping_dict[int(hier_classes[i].item())]
+            classes = set(range(hier_preds.shape[-1]))
+            class_preds[i,list(classes- set(correct_logits))] = 0
+           # print(class_preds[i,:])
+           # input()
+        return class_preds
     
     def validation_step(self, batch_data, batch_idx):
         labels = batch_data.pop('labels')
@@ -195,9 +190,13 @@ class ClassifierModule(pl.LightningModule):
         if 'LC' in preds.keys():
             partial_loss = self.loss(preds['LC'],  labels.long())
             loss+=partial_loss
-            self.LC_valid_metrics(preds['LC'], labels.long())
+            #coherence
+            class_preds = self.modify_logits(preds['LC'][0],preds['LC'][1])
+
+
+            self.LC_valid_metrics(class_preds, labels.long())
             self.log_dict(self.LC_valid_metrics, on_step=False, on_epoch=True)
-            self.validation_cm(preds['LC'],labels.long())
+            self.validation_cm(class_preds,labels.long())
         if 'TAB' in preds.keys():
             self.TAB_valid_metrics(preds['TAB'], labels.long())
             self.log_dict(self.TAB_valid_metrics, on_step=False, on_epoch=True)

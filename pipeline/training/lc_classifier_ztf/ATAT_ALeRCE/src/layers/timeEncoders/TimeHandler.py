@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn 
-from .TimeFilmModified import TimeFilmModified,SpringEncoderSTEP,SpringEncoderANA
+from .TimeFilmModified import TimeFilmModified
 from .PosEmbedding import PosEmbedding
 from .PosEmbeddingMLP import PosEmbeddingMLP
 from .PosEmbeddingRNN import PosEmbeddingRNN
@@ -23,7 +23,6 @@ class   TimeHandler(nn.Module):
     ):
         super(TimeHandler, self).__init__() 
         dict_PEs = {
-            "spring": SpringEncoderANA,
             "tm": TimeFilmModified,
             "pe": PosEmbedding,
             "pe_cad": PosEmbeddingCadence,
@@ -54,7 +53,7 @@ class   TimeHandler(nn.Module):
 
             t_band = t[slices_t]
             m_band = mask[slices_m]
-
+            #x_band = x_band /x_band.norm(dim = 1,keepdim=True)
             x_mod.append(x_band)
             t_mod.append(t_band)
             m_mod.append(m_band)

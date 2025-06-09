@@ -9,6 +9,7 @@ from .BaseDataset import BaseDataset
 from typing import Literal, Union, Optional
 from torchvision.transforms import Compose
 from copy import deepcopy
+from src.augmentations import LightCurveTransform as LC
 
 class Cut200:
     def __init__(self,num_bands:int,seqlen:int, sampling_type:str = 'overlap_100'):
@@ -68,36 +69,20 @@ class NormalizeTime:
         new =time - torch.min(time[time != 0]) if torch.any(time != 0) else time
         sample['time'] = np.where(new < 0, 0,new)
         return sample
-from scipy import ndimage, datasets 
+#cut_lc = Cut200(2,200, 'static')
 
-class SobelFilterMask:
-    def __init__(self,keep:Literal['below', 'above'] = 'above',threshold = 0.1):
-        self.threshold = threshold
-        self.keep = keep
-    def __call__(self, sample):
-        
-        
-        signal = sample['data']
-        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
-        sobel_h = torch.tensor(sobel_h) * (signal!=0)
-        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
-        sobel_v = torch.tensor(sobel_v)* (signal!=0)
-        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)  
-         
-        if magnitude.max() > 1:
-            magnitude = (magnitude/magnitude.max()) * (signal !=0)
-        
-        if self.keep == 'below': 
-            new_mask = (torch.tensor(magnitude)<= self.threshold).bool() & sample['mask'].clone()
-        if self.keep == 'above':
-            new_mask =  (torch.tensor(magnitude)>= self.threshold).bool() & sample['mask'].clone()
- 
-        if new_mask.sum().item() < 6:
-            return sample
-        else:
-            sample['mask'] = new_mask
-            return sample
-    
+def select_window(array, num_bands = 2,window_size=200, start_index=None):
+   
+
+    band_len = max(np.count_nonzero(array, axis = 0))
+    if band_len - window_size > 0:
+        start = torch.randint(0, band_len - window_size, size = (1,))
+        return start, start+ window_size
+    if band_len - window_size == 0:
+        return 0, 200
+    if band_len - window_size < 0:
+        return 0, 200
+
 @dataclass
 class ATATDataset(BaseDataset):
     data_root:str
@@ -112,6 +97,8 @@ class ATATDataset(BaseDataset):
     observation_key:str 
     observation_err_key: str 
     mask_key :str
+    mask_photometry_key:str
+    mask_detection_key:str
     time_key :str
     time_alert_key :str
     label_key :str
@@ -126,9 +113,12 @@ class ATATDataset(BaseDataset):
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
         self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False
-        self.lc_cutter = Compose([NormalizeTime(),Cut200(2,200), ])
+        logging.debug(f'{self.transforms}')
+        logging.info(f'Apply train transforms: {self.train_apply_transform}')
+        logging.info(f'Apply validation transforms: {self.validation_apply_transform}')
+        print(self.seed)
 
-
+        self.window_normalizer = LC.TimeNormalization()
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -139,30 +129,28 @@ class ATATDataset(BaseDataset):
             "labels":  self.target[_idx]
         }
         if self.use_lightcurves:
-            data_dict.update({"data":torch.tensor(self.data[_idx,:,:],dtype =  torch.float),
-                              "time":torch.tensor(self.time[_idx,:,:],dtype =  torch.float),
-                              "mask":torch.tensor(self.mask[_idx,:,:],dtype = bool)})
+           # flux = torch.tensor(self.data[_idx,:,:])
+            #a,b  =select_window(flux, window_size=6)
+            a = 0
+            b = 200
+            data_dict.update({"data":torch.tensor(self.data[_idx,a:b,:],dtype =  torch.float)})
+            data_dict.update({"time":torch.tensor(self.time[_idx,a:b,:],dtype =  torch.float),
+                              "mask":torch.tensor(self.mask[_idx,a:b,:],dtype = bool)})
+            if self.mask_photometry_key != '':
+                data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,a:b,:],dtype = bool)})
+            if self.mask_photometry_key != '':
+                data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,a:b,:],dtype = bool)})
 
         if self.use_lightcurves_err:
-            data_dict.update({"data_err":torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
+            data_dict.update({"data_err":torch.tensor(self.data_err[_idx,a:b,:],dtype =  torch.float)})
 
         if self.use_metadata:
-            data_dict.update({"metadata_feat":torch.tensor(self.metadata_feat[_idx],dtype =  torch.float),})
+            data_dict.update({"metadata_feat":self.metadata_feat[_idx],})
 
         if self.use_features:
             data_dict.update(
-                {"extracted_feat": torch.tensor(self.extracted_feat[f'extracted_feat_{self.list_time_to_eval[-1]}'][_idx], dtype = torch.float)}
+                {"extracted_feat": self.extracted_feat[_idx]}
             )
-
-        if all([self.train_apply_transform, self.set_type == 'train',self.transforms is not None]):
-            data_dict = self.transforms(data_dict)
-        if all([self.validation_apply_transform, self.set_type == 'validation',self.transforms is not None]):
-            data_dict = self.transforms(data_dict)
-        #if self.set_type is not 'test':
-        #    data_dict = self.lc_cutter(data_dict)
-        #else:
-        #    static = Cut200(2,200, sampling_type='static')
-        #    data_dict = static(data_dict)
 
         tabular_features = []
          
@@ -173,6 +161,13 @@ class ATATDataset(BaseDataset):
             tabular_features.append(data_dict["extracted_feat"].unsqueeze(1))
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+
+
+        if all([self.train_apply_transform, self.set_type == 'train',self.transforms is not None]):
+            data_dict = self.transforms(data_dict)
+        if all([self.validation_apply_transform, self.set_type == 'validation',self.transforms is not None]):
+            data_dict = self.transforms(data_dict)
+
         return data_dict
 
     def __len__(self): 

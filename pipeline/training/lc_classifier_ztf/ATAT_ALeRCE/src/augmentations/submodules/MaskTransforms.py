@@ -77,12 +77,12 @@ class CutFirstN:
                     sample['mask'] = sample['data']!=0
                     return sample 
 
-
-class MaskWindow:
-    def __init__(self,num_bands, window = 2):
-        self.window = window
+class MaskBand:
+    def __init__(self,num_bands):
         self.num_bands = num_bands
     def __call__(self,sample):
+        band_th = torch.randint(0,2)
+        band = sample['data']
         for band in range(self.num_bands):
             obs_count  = torch.count_nonzero(sample['mask'][:,band])
             if all([obs_count <6 + self.window]):
@@ -92,6 +92,48 @@ class MaskWindow:
             start, end = int(seq_window[0]), int(seq_window[1])  # Explicitly convert to Python integers
             sample['mask'][start:end,band] = 0
             return sample
+
+
+class MaskWindow:
+    def __init__(self,num_bands:int,window_size:int):
+        self.num_bands = num_bands
+        self.window_size = window_size
+    def __call__(self,sample:dict): 
+        for i in range(self.num_bands):
+            nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
+            intersection_check = nonzero_measures- self.window_size
+            if  np.count_nonzero((sample['data'][:,i]) < self.window_size):
+                continue
+            else:
+                if intersection_check == 0:
+                    start = 0
+                else:
+                    start = torch.randint(0,intersection_check ,size = (1,)) 
+
+                end = start + self.window_size
+                new_mask = torch.zeros_like(sample['data'][:,i], dtype = bool)
+                new_mask[start:end] = 1
+                sample['mask'][:,i]= new_mask
+        #assert sample['mask'].sum() !=0
+        return sample
+
+
+class MaXMask:
+    def __init__(self,num_bands:int,window_size:int, range= 5):
+        self.num_bands = num_bands
+        self.window_size = window_size
+        self.range = range
+    def __call__(self,sample:dict): 
+        for i in range(self.num_bands):
+            get_max_idx = torch.argmax(sample['data'][:,i])
+            if get_max_idx < self.range:
+                sample['mask'][0:get_max_idx+self.range] = 1
+                
+            elif get_max_idx >= self.range:
+                sample['mask'][ get_max_idx-self.range :get_max_idx+self.range] = 1
+
+        #assert sample['mask'].sum() !=0
+        return sample
 
 class ThreeTimeMask:
     "Callable implementation of threetimemask function to integrate with the torchvision.transforms"
@@ -205,7 +247,7 @@ class RandomSobelFilterMask:
             sobel_v = (sobel_v/sobel_v.max())* (signal !=0)
         
         magnitude = np.sqrt(sobel_h**2 + sobel_v**2)  
-        magnitude = torch.tensor(magnitude)* (signal!=0)
+        magnitude = magnitude* (signal!=0)
         
         threshold = torch.FloatTensor(1).uniform_(self.threshold_range[0],self.threshold_range[1]).to(signal.device)
         

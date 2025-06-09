@@ -61,13 +61,17 @@ class Taxonomy:
 
                        ] 
         self.colors = [
-                        '#FFEC1F',
-                        '#FBAC23',
-                        '#F68128',
-                        '#F25A2C',
-                        '#ED3731',
-                        '#96034A',
-                        '#D747CF',
+                        #'#FFEC1F',
+                        
+                        '#FBAC23', #agn
+                        '#F68128', #qso
+                        '#D747CF', # EA
+                        '#F25A2C', #yso
+                        #####
+                        '#ED3731', # cvnova
+                        #
+                        '#96034A', #blacar
+                        
                         '#BE4BD2',
                         '#8954C9',
                         '#554FCF',

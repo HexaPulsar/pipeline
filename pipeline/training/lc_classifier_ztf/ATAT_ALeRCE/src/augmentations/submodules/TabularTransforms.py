@@ -8,9 +8,11 @@ class TABGaussianNoise:
         self.std = std
        
     def __call__(self, sample):
+        
         band_data = sample['tabular_feat']
         noise = torch.normal(0,self.std, size=(band_data.size(0),)).to(device=band_data.device, non_blocking=True) 
         band_data = band_data + noise
         band_data = torch.clip(band_data,0,1)
         sample["tabular_feat"] = band_data
         return sample
+

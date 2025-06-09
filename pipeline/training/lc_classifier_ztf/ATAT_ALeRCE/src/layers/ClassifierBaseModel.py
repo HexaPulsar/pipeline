@@ -12,7 +12,7 @@ class ClassifierBaseModel(nn.Module):
         self.model = model
         self.classifier = classifier
         self.loss = loss
-        self.init_model()
+        #self.init_model()
         
 
     def init_model(self):
@@ -23,6 +23,7 @@ class ClassifierBaseModel(nn.Module):
     def forward(self, data, time, mask=None, labels= None):
         emb = self.model(data, time, mask)
         return self.classifier(emb)
-
-    def predict_embedding(self, data, time, mask=None, labels= None):
-        return self.model(data, time, mask)
+     
+    def get_embeddings(self, data, time, mask=None, labels= None):
+    # emb = emb / emb.norm(dim = -1, keepdim = True)
+        return {"LC":self.model(data, time, mask)}

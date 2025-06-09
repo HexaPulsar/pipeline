@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
-
+import numpy as np
 def off_diagonal(x):
     n, m = x.shape
     assert n == m
@@ -16,6 +16,7 @@ class VICReg(nn.Module):
         self.inv = inv_coeff
         self.var = var_coeff
         self.cov = cov_coeff
+        print('COEFFS: {} {} {}'.format(self.inv, self.var, self.cov))
     @staticmethod
     def calculate_cov_loss(embedding):
         cov_ = (embedding.T @ embedding) / (embedding.size(0) - 1)
@@ -23,27 +24,24 @@ class VICReg(nn.Module):
     @staticmethod
     def calculate_std_loss(embedding):
         var_ = embedding.var(dim = 0)
-        std_ = torch.sqrt(var_ + 0.0001)
+        std_ = torch.sqrt(var_ + 1e-4)
         return torch.mean(F.relu(1.0 - std_))
     
     def forward(self, x, y):
-        batch_size, embedding_size = x.shape
         loss_dict = {}
          
         repr_loss = F.mse_loss(x, y, reduce='mean')
-        
-        #loss_dict.update({'CORR/prenorm_x': torch.corrcoef(x).flatten()})
-        #loss_dict.update({'CORR/prenorm_y':  torch.corrcoef(y).flatten()})
-
+        corr_x = torch.corrcoef(x).mean(dim = 1).flatten()
+        corr_y = torch.corrcoef(y).mean(dim = 1).flatten()
+        loss_dict.update({'CORR/emb_corr_x': corr_x })
+        loss_dict.update({'CORR/emb_corr_y':  corr_y})
+        loss_dict.update({'CORR/75_percentile_x': np.percentile(abs(corr_x).cpu().detach().numpy(), 75) })
+        loss_dict.update({'CORR/75_percentile_y':  np.percentile(abs(corr_y).cpu().detach().numpy(), 75)})
+        loss_dict.update({'CORR/99_percentile_x': np.percentile(abs(corr_x).cpu().detach().numpy(), 99) })
+        loss_dict.update({'CORR/99_percentile_y':  np.percentile(abs(corr_y).cpu().detach().numpy(), 99)})
         x = x - x.mean(dim=0)
         y = y - y.mean(dim=0) 
-        #loss_dict.update({'CORR/postnorm_x': torch.corrcoef(x).flatten()})
-        #loss_dict.update({'CORR/postnorm_y':  torch.corrcoef(y).flatten()})
-
-
-
-        loss_dict.update({'CORR/off_x': off_diagonal( ((x.T @ x) / (x.size(0) - 1)))})
-        loss_dict.update({'CORR/off_y': off_diagonal( ((y.T @ y) / (y.size(0) - 1)))})
+        
         std_loss = (self.calculate_std_loss(x) +  self.calculate_std_loss(y))/2
         cov_loss = self.calculate_cov_loss(x) + self.calculate_cov_loss(y)
         loss_dict.update({'loss':  (self.inv * (repr_loss)
@@ -58,5 +56,6 @@ class VICReg(nn.Module):
                 'weighted_inv': self.inv * repr_loss,
                 'weighted_1mvar': self.var * std_loss,
                 'weighted_cov': self.cov * cov_loss, 
+                #'CORR_median': 
             })
         return loss_dict

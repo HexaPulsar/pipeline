@@ -28,6 +28,8 @@ class SSLDataset(BaseDataset):
     observation_key:str 
     observation_err_key: str 
     mask_key :str
+    mask_photometry_key:str
+    mask_detection_key:str
     time_key :str
     time_alert_key :str
     label_key :str
@@ -35,6 +37,7 @@ class SSLDataset(BaseDataset):
     metadata_key: str
     transforms_1: Optional[list] = None
     transforms_2: Optional[list] = None
+    list_time_to_eval = ['']
 
     def __post_init__(self):
         super().__init__(**{key:value for key,value in self.__dict__.items() if key not in ['transforms_1','transforms_2']})
@@ -54,7 +57,7 @@ class SSLDataset(BaseDataset):
         """ idx_ is to map a valid index over all samples in dataset  """
         _idx = self.these_idx[idx]
         if all([self.use_lightcurves,self.use_metadata,self.use_features]):
-            return  self.get_lc_md_ftd(_idx)
+            return  self.get_lc_md_ft(_idx)
         elif all([self.use_metadata,self.use_lightcurves]):
             return self.get_lc_md(_idx)
         elif self.use_lightcurves:
@@ -80,22 +83,22 @@ class SSLDataset(BaseDataset):
     def get_lc(self,_idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
-
         data_dict = {}
         aug_data_dict = {}
-            
         data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        
-
         aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        
+        if self.mask_photometry_key != '':
+                data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
+                aug_data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
+        if self.mask_photometry_key != '':
+                data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
+                aug_data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
         data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
-
         return (data_dict, aug_data_dict)
     
     def get_md(self,_idx):
@@ -126,25 +129,45 @@ class SSLDataset(BaseDataset):
         return (data_dict, aug_data_dict)
     
     def get_lc_md(self,_idx):
-        
         data_dict = {}
-        #aug_data_dict = {}
-            
+        aug_data_dict = {}
         data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        
-        
-        #if self.output_augmented_batch:
-        #    aug_data_dict = {}
-        #    aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
-        #                      "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
-        #                        "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-       
+        aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
+                            "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
+                            "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
+        #if self.mask_photometry_key != '':
+        #        data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
+        #        aug_data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
+        #if self.mask_photometry_key != '':
+        ##        data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
+         #       aug_data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
         
         tabular_features = []
-        #aug_tabular_features = []
+        aug_tabular_features = []
+
         data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
+        aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
+        tabular_features.append(data_dict["metadata_feat"])
+        aug_tabular_features.append(aug_data_dict["metadata_feat"])
+       
+        if tabular_features:
+            data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+            aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
+        
+        data_dict = self.transforms_1(data_dict)
+        aug_data_dict = self.transforms_2(aug_data_dict)
+        return (data_dict, aug_data_dict)
+    
+    def get_ft(self,_idx):
+        data_dict = {}
+        aug_data_dict = {}
+        tabular_features = []
+        #aug_tabular_features = []
+        data_dict.update({"metadata_feat": self.extracted_feat[_idx]})
+        aug_data_dict.update({"metadata_feat": self.extracted_feat[_idx]})
+
         tabular_features.append(data_dict["metadata_feat"])
         
         #if self.output_augmented_batch:
@@ -154,6 +177,7 @@ class SSLDataset(BaseDataset):
          
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+            aug_data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             #if self.output_augmented_batch:
             #    aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
         
@@ -161,51 +185,40 @@ class SSLDataset(BaseDataset):
         #if self.output_augmented_batch:
         #    aug_data_dict = self.transforms_2(aug_data_dict)
         #return (data_dict, aug_data_dict) if self.output_augmented_batch else data_dict
-        data_dict = self.transforms_1(data_dict)
-        aug_data_dict = self.transforms_2(aug_data_dict)
-        return data_dict
-    
-    def get_ft(self,_idx):
-
-        pass
+        return (data_dict, aug_data_dict)
     def get_lc_md_ft(self,_idx):
         
         data_dict = {}
         aug_data_dict = {}
- 
-        if self.use_lightcurves:
-            data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
-                              "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
-                                "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        if self.output_augmented_batch:
-            aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
-                              "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
-                                "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-
+        data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
+                            "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
+                            "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
+        aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
+                            "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
+                            "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
+       
         tabular_features = []
         aug_tabular_features = []
-        if self.use_metadata:
-            data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
-            tabular_features.append(data_dict["metadata_feat"])
-            if self.output_augmented_batch:
-            
-                aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx].clone()})
-                aug_tabular_features.append(aug_data_dict["metadata_feat"])
-            
-        if self.use_features: 
-            data_dict.update({"extracted_feat": self.feat_feat[_idx]})
-            tabular_features.append(data_dict["extracted_feat"])
-            if self.output_augmented_batch:
-            
-                aug_data_dict.update({"extracted_feat": self.feat_feat[_idx].clone()})
-                aug_tabular_features.append(aug_data_dict["extracted_feat"])
+  
+        #data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
+        #aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
+
+        tabular_features.append(torch.tensor(self.metadata_feat[_idx], dtype = torch.float))
+        aug_tabular_features.append(torch.tensor(self.metadata_feat[_idx], dtype = torch.float))
+       
         
-        if tabular_features:
-            data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
-            if self.output_augmented_batch:
-                aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
+        data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+        aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
+        
+        #data_dict.update({"extracted_feat": self.feat_feat[_idx]})
+        #aug_data_dict.update({"extracted_feat": self.feat_feat[_idx].clone()})
+        tabular_features.append(torch.tensor(self.extracted_feat['extracted_feat'][_idx], dtype = torch.float))
+        aug_tabular_features.append(torch.tensor(self.extracted_feat['extracted_feat'][_idx], dtype = torch.float))
+
+        data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+        aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
         
         data_dict = self.transforms_1(data_dict)
-        if self.output_augmented_batch:
-            aug_data_dict = self.transforms_2(aug_data_dict)
-        return (data_dict, aug_data_dict) if self.output_augmented_batch else data_dict
+        aug_data_dict = self.transforms_2(aug_data_dict)
+       
+        return (data_dict, aug_data_dict)

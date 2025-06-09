@@ -40,12 +40,9 @@ class LitData(pl.LightningDataModule):
                 for t in np.unique(hier_class)
             ]
         )
-        print(class_sample_count)
         weight = 1.0 / class_sample_count
-        print(np.unique(weight))
         samples_weight = np.array([weight[t] for t in hier_class])
         samples_weight = torch.from_numpy(samples_weight)
-        
         return samples_weight
     
     def get_real_classes_weights(self,labels):
@@ -56,15 +53,10 @@ class LitData(pl.LightningDataModule):
             ]
         )
         weight = 1.0 / class_sample_count
-        #print(weight)
         samples_weight = np.array([weight[t] for t in labels])
-
         samples_weight = torch.from_numpy(samples_weight)
-        samples_weight = samples_weight
-         
-
         return samples_weight
-    
+
     def conditional_weights(self,labels):
         hier_class = map_label_tensor(labels)
         H_class_sample_count = np.array(
@@ -73,7 +65,6 @@ class LitData(pl.LightningDataModule):
                 for t in np.unique(hier_class)
             ]
         )
-        print(H_class_sample_count)
         prob_superclass = H_class_sample_count/len(labels)
 
        
@@ -88,11 +79,10 @@ class LitData(pl.LightningDataModule):
         )
        
         prob_subclass = class_sample_count/len(labels)
-        print(prob_subclass)
+
         subclass_samples_weight = np.array([prob_subclass[t] for t in labels])
         subclass_weights = torch.from_numpy(subclass_samples_weight)
 
-        print(np.unique(hierarchy_weights * subclass_weights))
         return hierarchy_weights * subclass_weights
     
     def train_dataloader(self):
@@ -102,19 +92,18 @@ class LitData(pl.LightningDataModule):
         dataset_used = ATATDataset(set_type="train", **self.dataset)
         if self.train_use_sampler:
             print('using sampler')
-            #samples_weight = self.conditional_weights(dataset_used.labels)#,(self.get_hier_weights(dataset_used.labels)*hier_importance + self.get_real_classes_weights(dataset_used.labels)*class_importance)
-            #samples_weight = (self.get_hier_weights(dataset_used.labels)*hier_importance + self.get_real_classes_weights(dataset_used.labels)*class_importance)
-            
-            #sampler = WeightedRandomSampler(
-            #    samples_weight.type("torch.DoubleTensor"), len(samples_weight)
-            #)a
-            sampler = MPerClassSampler(
-                dataset_used.labels,
-                m=64,
-                batch_size=self.batch_size,
-                length_before_new_iter=len(dataset_used),
+            samples_weight = self.get_real_classes_weights(dataset_used.labels)
+            self.samples_weight = samples_weight
+            sampler = WeightedRandomSampler(
+               samples_weight.type("torch.DoubleTensor"), len(samples_weight)
             )
-            
+            #hier_class = map_label_tensor(dataset_used.labels)
+            #sampler = MPerClassSampler(
+            #    hier_class,
+            ##    m=256,
+            #    batch_size=self.batch_size,
+            #    length_before_new_iter=len(dataset_used),
+            #)
             loader = DataLoader(
                 dataset_used,
                 batch_size=self.batch_size,
@@ -125,7 +114,8 @@ class LitData(pl.LightningDataModule):
                 pin_memory=self.pin_memory
             )
         else:
-            print('notusingsampler')
+            samples_weight = self.get_real_classes_weights(dataset_used.labels)
+            self.samples_weight = samples_weight
             loader = DataLoader(
                 dataset_used,
                 batch_size=self.batch_size,
@@ -138,7 +128,12 @@ class LitData(pl.LightningDataModule):
         return loader
 
     def val_dataloader(self):
+        
         dataset_used = ATATDataset(set_type="validation", **self.dataset)
+        print('notusingsampler')
+        samples_weight = self.get_real_classes_weights(dataset_used.labels)
+        self.samples_weight = samples_weight
+        print(samples_weight)
         loader =loader = DataLoader(
                 dataset_used,
                 batch_size=self.batch_size,

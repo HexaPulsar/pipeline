@@ -47,7 +47,7 @@ class Shift:
 
         return sample
     
-class RandomShift:
+class TABRandomShift:
     def __init__(self, min_scale=0.99, max_scale=1.01):
         self.min_scale = min_scale
         self.max_scale = max_scale
@@ -63,8 +63,8 @@ class RandomShift:
 
         return sample
 
-class Scale:
-    def __init__(self, min_scale=0.99, max_scale=1.01):
+class TABScale:
+    def __init__(self, min_scale=0.999, max_scale=1.001):
         self.min_scale = min_scale
         self.max_scale = max_scale
 

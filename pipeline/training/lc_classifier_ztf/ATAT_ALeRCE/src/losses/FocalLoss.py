@@ -96,7 +96,8 @@ class FocalLoss(nn.Module):
         # Apply alpha if provided (per-class weighting)
         if self.alpha is not None:
             alpha_t = alpha#.gather(0, targets)
-            ce_loss = alpha_t.unsqueeze(1) * ce_loss
+            #ce_loss = alpha_t.unsqueeze(1) * ce_loss
+            ce_loss = alpha_t * ce_loss
 
         # Apply focal loss weight
         loss = focal_weight.unsqueeze(1) * ce_loss

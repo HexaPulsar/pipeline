@@ -8,6 +8,18 @@ from .submodules import *
 import torch
 
 
+class Roll:
+    def __init__(self, num_bands):
+        self.num_bands = num_bands
+    def __call__(self,sample):
+        for band in range(self.num_bands):
+            seq_roll = torch.randint(0,200,size = (1,))
+            
+            sample['data'][:,band] = torch.roll(sample['data'][:,band],shifts= (seq_roll,), dims = 0)
+            sample['time'][:,band] = torch.roll(sample['time'][:,band],shifts= (seq_roll,), dims = 0)
+            sample['mask'][:,band] = torch.roll(sample['mask'][:,band],shifts= (seq_roll,), dims = 0)
+        return sample
+
 import torch
 class ZScoreUndersample:
     """samplear elementos de la curva excluyendo aquellas observaciones que no estan contenidas en abs(zscore) > thr"""
@@ -25,6 +37,7 @@ class ZScoreUndersample:
         self.thr = thr
         self.min_samples = min_samples
         self.inject_gauss_noise = inject_gauss_noise
+        
     def __call__(self,sample):
         data = sample['data'] 
         time = sample['time']
@@ -65,31 +78,61 @@ class ZScoreUndersample:
         sample['time']  = new_time
         sample['mask'] = (new_data!=0).bool()
         return sample
+
+class BandPermute:
+    def __init__(self, num_bands):
+        self.num_bands = num_bands
+    def __call__(self,sample):
+        shift_ = torch.randint(0,self.num_bands,size  =(1,))
+        
+        sample['data'] = torch.roll(sample['data'], shifts=(shift_,), dims=-1)
+        sample['time'] = torch.roll(sample['time'], shifts=(shift_,), dims=-1)
+        sample['mask'] = torch.roll(sample['mask'], shifts=(shift_,), dims=-1)
+        return sample
+        
+
+class TimeNormalization:
+    def __call__(self,sample):
+
+        time = sample['time']
+        mask_min = 9999999999.0 * (time == 0).float()
+        # Compute minimum over non-zero time values by adding the mask
+        t_min = torch.min(time.float() + mask_min)
+
+        # Normalize and keep zeros in place
+        sample['time'] = (time.float() - t_min) * (time != 0).float()
+        return sample
     
 class WindowSelect:
     def __init__(self,num_bands:int,window_size:int):
         self.num_bands = num_bands
         self.window_size = window_size
+        self.window_normalizer = TimeNormalization()
     def __call__(self,sample:dict): 
-        
-        
         for i in range(self.num_bands):
-             
             nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
             intersection_check = nonzero_measures- self.window_size
-            if  ((sample['data'][:,i]!=0 ).sum()<= self.window_size):
-                #print('triggered interesection check')
+            if  torch.count_nonzero((sample['data'][:,i])<= self.window_size):
                 continue
             else:
-                start = torch.randint(0,intersection_check ,size = (1,)) 
+                if intersection_check == 0:
+                    start = 0
+                else:
+                    start = torch.randint(0,intersection_check ,size = (1,)) 
                 end = start + self.window_size
                 new_mask = torch.zeros_like(sample['data'][:,i])
                 new_mask[start:end] = 1
                 sample['mask'][:,i]= new_mask
                 sample["data"][:,i] = sample['mask'][:,i] * sample["data"][:,i]
                 sample["time"][:,i] = sample['mask'][:,i] * sample["time"][:,i]
-                
-        assert sample['mask'].sum() !=0
+        #sample['time'] = self.window_normalizer(sample)
+        time = sample['time']
+        mask_min = 9999999999.0 * (time == 0).float()
+        # Compute minimum over non-zero time values by adding the mask
+        t_min = torch.min(time.float() + mask_min)
+
+        # Normalize and keep zeros in place
+        sample['time'] = (time.float() - t_min) * (time != 0).float()
         return sample
 
     

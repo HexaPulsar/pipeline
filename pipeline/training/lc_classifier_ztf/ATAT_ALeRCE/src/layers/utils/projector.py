@@ -4,17 +4,24 @@ import torch.nn as nn
 
 class VICRegProjector(nn.Module):
     def __init__(
-        self,vicreg, shape:str = '128-128-128', norm_seqdim=False, norm_embdim = False, **kwargs
+        self,vicreg, shape_projector_1:str = '128-128-128',  shape_projector_2:str = '128-128-128', norm_seqdim=False, norm_embdim = False, **kwargs
     ):
         super(VICRegProjector, self).__init__()
         layers = []
-        f = list(map(int, shape.split("-")))
+        f = list(map(int, shape_projector_1.split("-")))
         for i in range(len(f) - 2):
             layers.append(nn.Linear(f[i], f[i + 1]))
             layers.append(nn.BatchNorm1d(f[i + 1]))
             layers.append(nn.GELU())
         layers.append(nn.Linear(f[-2], f[-1], bias=False))
         self.projection_x = nn.Sequential(*layers)
+        layers = []
+        f = list(map(int, shape_projector_2.split("-")))
+        for i in range(len(f) - 2):
+            layers.append(nn.Linear(f[i], f[i + 1]))
+            layers.append(nn.BatchNorm1d(f[i + 1]))
+            layers.append(nn.GELU())
+        layers.append(nn.Linear(f[-2], f[-1], bias=False))
         self.projection_y = nn.Sequential(*layers)
         self.vicreg = vicreg
         

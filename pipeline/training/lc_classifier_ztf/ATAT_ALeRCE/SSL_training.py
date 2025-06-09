@@ -7,7 +7,8 @@ warnings.filterwarnings("ignore")
 from src.data.modules.LitPretrain import LitPretrain
 from src.models.PretrainModule import PretrainModule
 from src.models.PretrainMMModule import PretrainMMModule
-
+from src.models.PretrainModuleFusion import PretrainModuleFusion
+from src.layers.transformer.Combinator import Combinator
 from src.augmentations import LightCurveTransform as LC
 #from src.augmentations import TabularTransformations as TAB
 from src.layers.transformer.lightcurve import LightCurveTransformer
@@ -19,8 +20,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from src.utils.CustomParser import ATATConfig
 from  hydra.utils import instantiate
-
-from torchvision.transforms import RandomChoice, RandomApply,RandomAdjustSharpness,RandomSolarize
+from torchvision.transforms import RandomChoice, RandomApply, Compose
 
 import numpy as np
 
@@ -44,77 +44,69 @@ def main(cfg:ATATConfig):
             handler,
         ],
     )
-    assert cfg.experiment_type == 'LC' , cfg.experiment_type
+    #assert cfg.experiment_type == 'LC' , cfg.experiment_type
     cfg.datamodule.dataset.experiment_type = cfg.experiment_type
-    WINDOW_1 = -1
+    
     transforms = [  
-                    LC.TimeFactor(num_bands=cfg.lc.num_bands, window = -1,factor = list(np.linspace(0.9999,1.001,100)) ),
-                    LC.TimeShift(),
-                    LC.GaussianNoise(num_bands=cfg.lc.num_bands, std = 1e-5),
-                                   
-                    RandomChoice([ LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.05),
-                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.01),
-                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 1e-5),
-                                   LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.1),
-                                     ]),
-                   
-                    LC.CutFirstN(2,mask_first= [-1,0,1,2,4,8,15,32,64]),
-                    LC.ZScoreUndersample(min_samples=150, thr = None, inject_gauss_noise=False),
-
-                    LC.TimeFactor(num_bands=cfg.lc.num_bands, window = -1,factor = list(np.linspace(0.9999,1.001,100)) ),
-
-                    LC.TimeShift(),
-                    LC.GaussianNoise(num_bands=cfg.lc.num_bands, std = 1e-5),
-       
-                    RandomChoice([ LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.05),
-                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 1e-5),
-                                    LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.01),
-                                   LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = 0.1),
-                                     ]),
-                   
-                    LC.CutFirstN(2,mask_first= [-1,0,1,2,4,8,16,32,64]),
-                    LC.ZScoreUndersample(min_samples=150, thr = None, inject_gauss_noise=False),
-
-                    #RandomChoice([#LC.RandomSobelFilterMask('magnitude', keep='above',threshold_range = (0.1,0.2)),
-                                  #LC.OnlyMaskPadding(),
-                                  #LC.MaskFirstN(2,mask_first= [-1,0,1,2]),
-                                #])
-                    ]
-    #transforms = [TAB.GaussianNoise(0,1e-2),
-                  #TAB.Scale(),
-                  #TAB.Jitter(),
-                  #TAB.Shift()
-    #              ]
-    p_ = 0.1
-    transforms = [RandomApply([t], p = p_) for t in transforms]
-    transforms +=[LC.TimeNormalization()]
-    cfg.datamodule.dataset.transforms_1 = transforms
-    cfg.datamodule.dataset.transforms_2 = [LC.TimeNormalization()] #transforms
+                #RandomChoice([LC.WindowSelect(2, window_size=w_) for w_ in list(range(10, 110, 10))]),
+                #RandomChoice([LC.MaskWindow(2, window_size= w_) for w_ in list(range(10, 110, 10))]),
+                RandomChoice([LC.MaskWindow(2, window_size= w_) for w_ in list(range(10, 210, 10))]),
+                LC.BandPermute(2),
+                #LC.CutBand(cfg.lc.num_bands),
+                LC.TimeShift(),
+                LC.ZeroOutTime(),
+                #LC.TimeFactor(2, 10,[-1, 0.5,0.9,1.01, 1.5]),
+                #LC.Factor([-1,1,0.5,1.5]),
+                LC.CutFirstN(2,mask_first=[-1,0,1,2,4,8,15,32,64,128]),
+                ]
+    p_ = 0.5
+    list_of_transforms = [RandomApply([t], p = p_) for t in transforms]
+    cfg.datamodule.dataset.transforms_1 = list_of_transforms
+    cfg.datamodule.dataset.transforms_2 = [] #list_of_transforms
     pl_datal = LitPretrain(**cfg.datamodule)
     if cfg.experiment_type == 'LC':
         transformer = LightCurveTransformer(**cfg.lc)
-        projector = VICRegProjector(VICReg(25,25,1),'128-512-512')
+        projector = VICRegProjector(VICReg(cfg.vicreg.inv_coeff,
+                                           cfg.vicreg.var_coeff,
+                                           cfg.vicreg.cov_coeff),
+                                           cfg.vicreg.shape_projector_1,
+                                           cfg.vicreg.shape_projector_2)
         pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate)
-    if cfg.experiment_type == 'MD':
+
+    if cfg.experiment_type == 'MD' or cfg.experiment_type == 'FEAT':
         transformer = TabularTransformer(**cfg.tab)
-        projector = VICRegProjector(VICReg(1,49,1),'128-128-128')
+        projector = VICRegProjector(VICReg(cfg.vicreg.inv_coeff,
+                                           cfg.vicreg.var_coeff,
+                                           cfg.vicreg.cov_coeff),
+                                           cfg.vicreg.shape_projector_1,
+                                           cfg.vicreg.shape_projector_2)
         pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate)
 
     if cfg.experiment_type == 'LC_MD':
-        projector = VICRegProjector(VICReg(100,100,1),'128-128-128')
-        pl_model = PretrainMMModule(model_lc= LightCurveTransformer(**cfg.lc),
-                                  model_tab = TabularTransformer(**cfg.tab),
+        projector =  VICRegProjector(VICReg(cfg.vicreg.inv_coeff,
+                                           cfg.vicreg.var_coeff,
+                                           cfg.vicreg.cov_coeff),
+                                           cfg.vicreg.shape_projector_1,
+                                           cfg.vicreg.shape_projector_2)
+        transformer_lc = LightCurveTransformer(**cfg.lc)
+        transformer_md = TabularTransformer(**cfg.tab)
+        model  = Combinator(transformer_lc,transformer_md)
+        pl_model = PretrainModuleFusion(model,
                                   loss=projector,
                                   lr = cfg.learning_rate)
-
-    #elif args.general['experiment_type'] == 'md':
-    #    pl_model = LitPreTrainVICREGTAB(**args.all_args)
-    #elif args.general['experiment_type'] == 'lc_md':
-    ##    pl_datal = LitPretrain(
-    #   output_augmented_batch = True,transform_1=transforms_1, transform_2=transforms_2, **args.general
-    #   )
-    #   pl_model = CLIPLCMD(**args.all_args)
-    
+    if cfg.experiment_type == 'LC_MD_FEAT':
+        projector =  VICRegProjector(VICReg(cfg.vicreg.inv_coeff,
+                                           cfg.vicreg.var_coeff,
+                                           cfg.vicreg.cov_coeff),
+                                           cfg.vicreg.shape_projector_1,
+                                           cfg.vicreg.shape_projector_2)
+        transformer_lc = LightCurveTransformer(**cfg.lc)
+        transformer_md = TabularTransformer(**cfg.tab)
+        model  = Combinator(transformer_lc,transformer_md)
+        pl_model = PretrainModuleFusion(model,
+                                  loss=projector,
+                                  lr = cfg.learning_rate)
+        
     trainer = Trainer(
         callbacks=list(cfg.callbacks.values()),
         logger= list(cfg.loggers.values()),

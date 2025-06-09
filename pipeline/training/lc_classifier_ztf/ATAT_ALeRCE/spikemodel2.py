@@ -12,12 +12,14 @@ from tqdm import tqdm
 # imports
 import snntorch as snn
 from snntorch import surrogate
+from src.augmentations import LightCurveTransform as LC
 
 # pytorch
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torchvision.transforms import RandomChoice, RandomApply,RandomAdjustSharpness,RandomSolarize
 
 class SpikeLayer(nn.Module):
     def __init__(self, input_size,hidden_size, output_size,spike_grad, beta, kernel_size = 1):
@@ -152,12 +154,38 @@ class resample:
             sample['time'][:,i] = torch.tensor(time_regular)[:200]
         return sample
         
-tr = [#resample(),
-      test_transforms()
+tr = [ LC.TimeFactor(num_bands=2, window = -1,factor = list(np.linspace(0.9999,1.001,100)) ),
+                    LC.TimeShift(),
+                    LC.GaussianNoise(num_bands=2, std = 1e-5),
+                                   
+                    RandomChoice([ LC.GaussianFilter(num_bands=2,filter_std = 0.05),
+                                    LC.GaussianFilter(num_bands=2,filter_std = 0.01),
+                                   LC.GaussianFilter(num_bands=2,filter_std = 0.1),
+                                     ]),
+                   
+                    LC.CutFirstN(2,mask_first= [-1,0,1,2,4,8,16,32,64,128]),
+                    LC.ZScoreUndersample(min_samples=150, thr = None, inject_gauss_noise=False),
+
+                    LC.TimeFactor(num_bands=2, window = -1,factor = list(np.linspace(0.9999,1.001,100)) ),
+
+                    LC.TimeShift(),
+                    LC.GaussianNoise(num_bands=2, std = 1e-5),
+       
+                    RandomChoice([ LC.GaussianFilter(num_bands=2,filter_std = 0.05),
+                                    LC.GaussianFilter(num_bands=2,filter_std = 0.01),
+                                   LC.GaussianFilter(num_bands=2,filter_std = 0.1), 
+                                     ]),
+                   
+                    LC.CutFirstN(2,mask_first= [-1,0,1,2,4,8,16,32,64,128]),
+                    LC.ZScoreUndersample(min_samples=150, thr = None, inject_gauss_noise=False),
       ]
+
+
 ql = QuickLoader(batch_size=512, transforms = tr, train_apply_transform=True)
 train_dataloader = ql.train
 validation_dataloader = ql.validation
+
+
 def train_model():
     # Set device
     device = torch.device("cuda:2" if torch.cuda.is_available() else 
@@ -217,6 +245,8 @@ def train_model():
             
             for data in validation_dataloader:
                 inputs = data['data'].float().to(device)
+                inputs = inputs/ inputs.max()
+
                 labels = data['labels'].long().to(device)
                 
                 outputs = model(inputs)

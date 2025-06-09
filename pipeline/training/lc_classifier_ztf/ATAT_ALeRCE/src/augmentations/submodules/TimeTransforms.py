@@ -6,18 +6,6 @@ import torch.nn.functional as F
 from copy import deepcopy
 from .WindowApply import WindowApply
 
-
-class TimeNormalization:
-    def __call__(self,sample):
-
-        time = sample['time']
-        mask_min = 9999999999.0 * (time == 0).float()
-        # Compute minimum over non-zero time values by adding the mask
-        t_min = torch.min(time.float() + mask_min)
-
-        # Normalize and keep zeros in place
-        sample['time'] = (time.float() - t_min) * (time != 0).float()
-        return sample
 class TimeFactor(WindowApply):
     def __init__(self,num_bands = 2,window = 10, factor =0.5):
         self.factor = factor
@@ -101,7 +89,13 @@ class TimePoissonNoise(WindowApply):
         return sample
     
     
-    
+
+
+class ZeroOutTime:
+    def __call__(self, sample):
+        sample["time"] = torch.zeros_like(sample['time'])
+        return sample
+
 
 class Exptime(WindowApply):
     def __init__(self,num_bands,window = 10,Tmax = 1000.0):

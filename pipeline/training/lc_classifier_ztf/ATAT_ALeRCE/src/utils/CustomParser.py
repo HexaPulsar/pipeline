@@ -34,6 +34,8 @@ class BaseDatasetArgs:
     time_key:str  = 'time'
     time_alert_key:str = 'time_alert'
     mask_key:str = 'mask'
+    mask_photometry_key:str = 'mask_photometry'
+    mask_detection_key:str = 'mask_detection'
     feature_key:str  = 'feat_cols'
     metadata_key:str = 'metadata_feat'
     label_key:str= 'labels'
@@ -52,7 +54,12 @@ class SSLDatasetArgs(BaseDatasetArgs):
     transforms_1: Optional[list] = None
     transforms_2: Optional[list] = None
 
-    
+@dataclass
+class VICRegArgs:
+    inv_coeff: int = 25
+    var_coeff: int = 25
+    cov_coeff: int = 1
+
 @dataclass 
 class DataModuleArgs:
     dataset: Any
@@ -71,6 +78,9 @@ class TabularArgs:
     num_encoders:int = 3
     length_size:int = 0
     dropout: float = 0.01
+    checkpoint: Optional[str] = None
+    freeze_weights:bool = False
+
 
      
 @dataclass
@@ -85,6 +95,8 @@ class LightcurveArgs:
     num_harmonics:int = 64
     num_bands:int = 2
     dropout: float = 0.01
+    checkpoint: Optional[str] = None
+    freeze_weights:bool = False
 
 @dataclass
 class VICRegArgs:
@@ -101,6 +113,7 @@ class ATATConfig:
     lc: Optional[LightcurveArgs]
     tab: Optional[TabularArgs]
     datamodule: DataModuleArgs
+    vicreg: VICRegArgs
     callbacks: dict
     loggers: dict
     trainer: dict
@@ -111,3 +124,25 @@ class ATATConfig:
     mode: str
     monitor: str 
     checkpoint: Optional[str] = None
+
+
+
+@dataclass 
+class PretrainingConfig:
+    experiment_type: str
+    experiment_name: str
+    lc: Optional[LightcurveArgs]
+    tab: Optional[TabularArgs]
+    datamodule: DataModuleArgs
+    vicreg: VICRegArgs
+    callbacks: dict
+    loggers: dict
+    trainer: dict
+    learning_rate: float  
+    save_dir_path: str
+    log_filename: str
+    num_classes:int 
+    mode: str
+    monitor: str 
+    checkpoint: Optional[str] = None
+

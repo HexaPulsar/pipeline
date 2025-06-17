@@ -1,16 +1,17 @@
 #!/bin/bash
 
 cd ../../
-export CUDA_VISIBLE_DEVICES=0,1,2,3 
+export CUDA_VISIBLE_DEVICES=1
 
 # Define variables
  
 #!/bin/bash
 seed=0
-expname=weighted_v7
+expname=baseline_norm
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
-export EXPERIMENT_NAME=class_${expname}_FL
+export DIR=LINEAR
+export EXPERIMENT_NAME=class_${expname}_noaugs
 export EXPERIMENT_OUTPUT_PATH="./results/200/LC/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifsier_ztf/ATAT_ALeRCE/src/configs"
@@ -32,7 +33,7 @@ python training.py \
   ++ATATConfig.loggers.csv.save_dir=$EXPERIMENT_OUTPUT_PATH\
   ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
   hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
-  #++ATATConfig.lc.checkpoint=$CHECKPOINT
+  #++ATATConfig.lc.checkpoint=$CHECKPOINT 
 
 
 

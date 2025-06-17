@@ -7,11 +7,11 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
  
 #!/bin/bash
 
-expname='32_size_feat'
+expname='baseline'
 # Set experiment variables correctly
-export EXPERIMENT_TYPE='MD_FEAT'
+export EXPERIMENT_TYPE='MD'
 export EXPERIMENT_NAME=class_${expname} #_linear_frozen
-export EXPERIMENT_OUTPUT_PATH="./results/AUGS/MD/$EXPERIMENT_NAME/"
+export EXPERIMENT_OUTPUT_PATH="./results/200/MD/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 

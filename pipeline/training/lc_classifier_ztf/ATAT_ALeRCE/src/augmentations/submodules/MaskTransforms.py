@@ -4,13 +4,24 @@ import numpy as np
 import torch 
 import torch.nn.functional as F
 from copy import deepcopy
-from .WindowApply import WindowApply
 
 class OnlyMaskPadding:
     def __call__(self,sample:dict): 
         sample['mask'] = (sample['data'] != 0)
         return sample
 
+
+
+class RandomMask:
+    def __init__(self,num_bands = 2, percentage_masked = 0.1):
+        self.num_bands = num_bands
+        self.percentage_masked = percentage_masked
+    def __call__(self,sample):
+
+
+        mask = (torch.rand(sample['data'].shape) <= self.percentage_masked).bool()
+        sample['mask'] = torch.bitwise_and(mask, sample['mask'])
+        return sample
 
 class MaskFirstN:
     def __init__(self,num_bands = 2,mask_first = 8):
@@ -32,8 +43,6 @@ class MaskFirstN:
             
             return sample
 
-
-
 class CutFromN:
     def __init__(self,num_bands = 2,cut_from_n = 8):
         self.num_bands = num_bands
@@ -54,7 +63,6 @@ class CutFromN:
                     sample['time'][mask_first:,i] = 0
                     sample['mask'] = sample['data']!=0
                     return sample 
-
 
 class CutFirstN:
     def __init__(self,num_bands = 2,mask_first = 8):
@@ -81,18 +89,16 @@ class MaskBand:
     def __init__(self,num_bands):
         self.num_bands = num_bands
     def __call__(self,sample):
-        band_th = torch.randint(0,2)
         band = sample['data']
         for band in range(self.num_bands):
             obs_count  = torch.count_nonzero(sample['mask'][:,band])
-            if all([obs_count <6 + self.window]):
+            if all([obs_count <=6 + self.window]):
                 return sample
             seq_window = np.random.randint(0, obs_count- self.window, size=(2,))
             seq_window.sort()
             start, end = int(seq_window[0]), int(seq_window[1])  # Explicitly convert to Python integers
             sample['mask'][start:end,band] = 0
             return sample
-
 
 class MaskWindow:
     def __init__(self,num_bands:int,window_size:int):
@@ -116,7 +122,6 @@ class MaskWindow:
                 sample['mask'][:,i]= new_mask
         #assert sample['mask'].sum() !=0
         return sample
-
 
 class MaXMask:
     def __init__(self,num_bands:int,window_size:int, range= 5):
@@ -155,29 +160,15 @@ class ThreeTimeMask:
         if self.use_features:
             sample["extracted_feat"] = self.extracted_feat[time_eval][sample['idx']]
         return sample
-  
-class MaskChannels: 
-    def __init__(self, band_to_mask:int):
-      
-        self.band_to_mask = band_to_mask
-    def __call__(self,sample):
-        
-        band_mask = deepcopy(sample['mask'])
-        band_mask[:,self.band_to_mask] = 0 #mask the channel corresponding to band_to_mask
-        if (sample['data'] * band_mask).sum() == 0: #if the lc sample only has values in one of the channels the band_mask could remove all values resulting in a zero input. 
-            #if sample['data] * band_mask .sum() is zero, transformer doesn't see a thing. we would like to avoid this.
-            return sample
-        else:
-            sample['mask'] = band_mask
-            return sample
    
 from scipy import ndimage, datasets 
+
+
 class SobelFilterMask:
     def __init__(self,keep:Literal['below', 'above'] = 'above',threshold = 0.1):
         self.threshold = threshold
         self.keep = keep
     def __call__(self, sample):
-        
         
         signal = sample['data']
         sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
@@ -199,7 +190,6 @@ class SobelFilterMask:
         else:
             sample['mask'] = new_mask
             return sample
-    
      
 class RangeSobelFilterMask:
     def __init__(self, threshold_range:tuple = (0.01,0.05)):
@@ -220,7 +210,6 @@ class RangeSobelFilterMask:
             magnitude <= self.threshold_range[1]
         )  
         return sample
-
 
 class RandomSobelFilterMask:
     def __init__(self,
@@ -270,7 +259,6 @@ class RandomSobelFilterMask:
         else:
             sample['mask'] = new_mask
             return sample
-    
     
 class RandomRangeSobelFilterMask:
     def __init__(self, threshold_range:tuple = (0.01,0.05)):

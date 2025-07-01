@@ -9,16 +9,26 @@ import torch
 
 
 class Roll:
-    def __init__(self, num_bands):
+    def __init__(self, num_bands, max_roll = 50, apply_to_classes:list = None):
         self.num_bands = num_bands
+        self.max_roll = max_roll
+        self.apply_to_classes = apply_to_classes
+
     def __call__(self,sample):
+        if self.apply_to_classes is None:
+            self.roll(sample)
+        else:
+            if sample['labels'] in self.apply_to_classes:
+                self.roll(sample)
+        return sample
+
+    def roll(self,sample):
         for band in range(self.num_bands):
-            seq_roll = torch.randint(0,200,size = (1,))
-            
+            seq_roll = torch.randint(0,self.max_roll,size = (1,))
             sample['data'][:,band] = torch.roll(sample['data'][:,band],shifts= (seq_roll,), dims = 0)
             sample['time'][:,band] = torch.roll(sample['time'][:,band],shifts= (seq_roll,), dims = 0)
             sample['mask'][:,band] = torch.roll(sample['mask'][:,band],shifts= (seq_roll,), dims = 0)
-        return sample
+
 
 import torch
 class ZScoreUndersample:
@@ -80,20 +90,26 @@ class ZScoreUndersample:
         return sample
 
 class BandPermute:
-    def __init__(self, num_bands):
+    def __init__(self, num_bands, apply_to_classes = None):
         self.num_bands = num_bands
+        self.apply_to_classes = apply_to_classes
     def __call__(self,sample):
-        shift_ = torch.randint(0,self.num_bands,size  =(1,))
-        
-        sample['data'] = torch.roll(sample['data'], shifts=(shift_,), dims=-1)
-        sample['time'] = torch.roll(sample['time'], shifts=(shift_,), dims=-1)
-        sample['mask'] = torch.roll(sample['mask'], shifts=(shift_,), dims=-1)
+        if self.apply_to_classes is None:
+           self.permute(sample)
+        else: 
+            if sample['labels'] in self.apply_to_classes:
+               self.permute(sample)
         return sample
-        
+    
+    def permute(self, sample):
+        shift_ = torch.randint(0,self.num_bands,size  =(1,))
+        sample['data'] = torch.roll(sample['data'], shifts=(shift_,), dims=0)
+        sample['time'] = torch.roll(sample['time'], shifts=(shift_,), dims=0)
+        sample['mask'] = torch.roll(sample['mask'], shifts=(shift_,), dims=0)
 
 class TimeNormalization:
     def __call__(self,sample):
-
+        
         time = sample['time']
         mask_min = 9999999999.0 * (time == 0).float()
         # Compute minimum over non-zero time values by adding the mask
@@ -104,35 +120,61 @@ class TimeNormalization:
         return sample
     
 class WindowSelect:
+    def __init__(self,num_bands:int,window_size:int,apply_to_classes=None):
+        self.num_bands = num_bands
+        self.window_size = window_size
+        self.apply_to_classes = apply_to_classes
+
+    def __call__(self,sample:dict): 
+        if self.apply_to_classes is None:
+            self.window_select(sample)
+        else:
+            self.window_select(sample)
+        return sample
+    
+    def window_select(self,  sample):
+        for i in range(self.num_bands):
+                nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
+                intersection_check = nonzero_measures - self.window_size
+                if  torch.count_nonzero((sample['data'][:,i])<= self.window_size):
+                    continue
+                else:
+                    if intersection_check == 0:
+                        start = 0
+                    else:
+                        start = torch.randint(0,intersection_check ,size = (1,)) 
+                    end = start + self.window_size
+                    sample["data"][:start,i] = 0
+                    sample["data"][end:,i] = 0
+                    sample["time"][:start,i] = 0
+                    sample["time"][end:,i] = 0
+                    sample['data'] = torch.roll(sample['data'], shifts=(-self.window_size,), dims = 1)
+                    sample['time'] = torch.roll(sample['time'], shifts=(-self.window_size,), dims = 1)
+                    sample['mask'] = sample['data'] != 0
+    
+
+class RandomSubsample:
     def __init__(self,num_bands:int,window_size:int):
         self.num_bands = num_bands
         self.window_size = window_size
-        self.window_normalizer = TimeNormalization()
-    def __call__(self,sample:dict): 
-        for i in range(self.num_bands):
-            nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
-            intersection_check = nonzero_measures- self.window_size
-            if  torch.count_nonzero((sample['data'][:,i])<= self.window_size):
-                continue
-            else:
-                if intersection_check == 0:
-                    start = 0
-                else:
-                    start = torch.randint(0,intersection_check ,size = (1,)) 
-                end = start + self.window_size
-                new_mask = torch.zeros_like(sample['data'][:,i])
-                new_mask[start:end] = 1
-                sample['mask'][:,i]= new_mask
-                sample["data"][:,i] = sample['mask'][:,i] * sample["data"][:,i]
-                sample["time"][:,i] = sample['mask'][:,i] * sample["time"][:,i]
-        #sample['time'] = self.window_normalizer(sample)
-        time = sample['time']
-        mask_min = 9999999999.0 * (time == 0).float()
-        # Compute minimum over non-zero time values by adding the mask
-        t_min = torch.min(time.float() + mask_min)
 
-        # Normalize and keep zeros in place
-        sample['time'] = (time.float() - t_min) * (time != 0).float()
+    def __call__(self,sample:dict): 
+        new_data = torch.zeros_like(sample['data'][:self.window_size,:])
+        new_time = torch.zeros_like(sample['data'][:self.window_size,:])
+        for band in range(self.num_bands):
+            nonzero_measures = torch.count_nonzero(sample['data'][:,band], dim = 0)
+            if  torch.count_nonzero((sample['data'][:,band])<= self.window_size):
+                sample['data'] = sample['data'][:self.window_size, band]
+                sample['time'] = sample['time'][:self.window_size, band]
+                sample['mask'] = sample['mask'][:self.window_size, band]
+            else:
+                indices = torch.randint(0, nonzero_measures, size=(self.window_size,))
+                indices.sort()
+                new_data = sample['data'][indices, band]
+                new_time = sample['time'][indices, band]
+                sample['data'] = new_data
+                sample['mask'] = (new_data !=0).bool()
+                sample['time'] = new_time
         return sample
 
     

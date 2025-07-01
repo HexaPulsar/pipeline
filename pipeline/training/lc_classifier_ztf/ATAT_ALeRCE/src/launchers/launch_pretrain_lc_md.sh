@@ -4,8 +4,8 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC_MD'
-export EXPERIMENT_NAME='test_0'
-export EXPERIMENT_OUTPUT_PATH="./results/AUGS/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export EXPERIMENT_NAME='test_1'
+export EXPERIMENT_OUTPUT_PATH="./results/200/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 

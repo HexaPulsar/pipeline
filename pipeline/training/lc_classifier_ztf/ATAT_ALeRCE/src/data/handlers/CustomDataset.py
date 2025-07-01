@@ -104,20 +104,22 @@ class ATATDataset(BaseDataset):
     label_key :str
     feature_key:  str
     metadata_key: str
-    transforms: Optional[list] = None
+    train_transforms: Optional[list] = None
+    val_transforms: Optional[list] = None
     list_time_to_eval = [2048]
+
     def __post_init__(self):
-        super().__init__(**{key:value for key,value in self.__dict__.items() if key != 'transforms'})
-        self.transforms = Compose(self.transforms) if self.transforms is not None else None
+        super().__init__(**{key:value for key,value in self.__dict__.items() if key not in ['train_transforms', 'val_transforms']})
+        self.train_transforms = Compose(self.train_transforms) if self.train_transforms is not None else None
+        self.val_transforms = Compose(self.val_transforms) if self.val_transforms is not None else None
         self.use_lightcurves  = True if 'LC' in self.experiment_type else False
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
         self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False
-        logging.debug(f'{self.transforms}')
+        logging.debug(f'{self.train_transforms}')
         logging.info(f'Apply train transforms: {self.train_apply_transform}')
         logging.info(f'Apply validation transforms: {self.validation_apply_transform}')
-        print(self.seed)
-
+        
         self.window_normalizer = LC.TimeNormalization()
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
@@ -129,20 +131,16 @@ class ATATDataset(BaseDataset):
             "labels":  self.target[_idx]
         }
         if self.use_lightcurves:
-           # flux = torch.tensor(self.data[_idx,:,:])
-            #a,b  =select_window(flux, window_size=6)
-            a = 0
-            b = 200
-            data_dict.update({"data":torch.tensor(self.data[_idx,a:b,:],dtype =  torch.float)})
-            data_dict.update({"time":torch.tensor(self.time[_idx,a:b,:],dtype =  torch.float),
-                              "mask":torch.tensor(self.mask[_idx,a:b,:],dtype = bool)})
+            data_dict.update({"data":torch.tensor(self.data[_idx,:,:],dtype =  torch.float)})
+            data_dict.update({"time":torch.tensor(self.time[_idx,:,:],dtype =  torch.float),
+                              "mask":torch.tensor(self.mask[_idx,:,:],dtype = bool)})
             if self.mask_photometry_key != '':
-                data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,a:b,:],dtype = bool)})
+                data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
             if self.mask_photometry_key != '':
-                data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,a:b,:],dtype = bool)})
+                data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
 
         if self.use_lightcurves_err:
-            data_dict.update({"data_err":torch.tensor(self.data_err[_idx,a:b,:],dtype =  torch.float)})
+            data_dict.update({"data_err":torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
 
         if self.use_metadata:
             data_dict.update({"metadata_feat":self.metadata_feat[_idx],})
@@ -151,7 +149,7 @@ class ATATDataset(BaseDataset):
             data_dict.update(
                 {"extracted_feat": self.extracted_feat[_idx]}
             )
-
+        
         tabular_features = []
          
         if self.use_metadata:
@@ -163,11 +161,10 @@ class ATATDataset(BaseDataset):
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
 
 
-        if all([self.train_apply_transform, self.set_type == 'train',self.transforms is not None]):
-            data_dict = self.transforms(data_dict)
-        if all([self.validation_apply_transform, self.set_type == 'validation',self.transforms is not None]):
-            data_dict = self.transforms(data_dict)
-
+        if all([self.set_type == 'train',self.train_transforms is not None]):
+            data_dict = self.train_transforms(data_dict)
+        if all([self.set_type == 'validation',self.val_transforms is not None]):
+            data_dict = self.val_transforms(data_dict)
         return data_dict
 
     def __len__(self): 

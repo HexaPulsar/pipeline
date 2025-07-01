@@ -1,107 +1,178 @@
 import torch
 import torch.nn as nn
-
-
-from .timeEncoders import TimeHandler
-from .embeddings import Embedding
-#from .transformer import Transformer
-from .transformer.torchimpl import Transformer
-from .classifiers import TokenClassifier, MixedClassifier
-from .tokenEmbeddings import Token
-from .lightcurve import LightCurveTransformer 
-from .tabular import TabularTransformer
-
-class ATAT(nn.Module):
-    def __init__(self,experiment_type:str,
-                 lc_args:dict = None, 
-                 tab_args:dict = None, 
-                 classifier_args: dict = None, **kwargs):
-        super(ATAT, self).__init__()
-        self.modalities = experiment_type.split('_')
-
-        # Lightcurve Transformer
-        if self.general_["use_lightcurves"]:
-            self.transformer_lc = LightCurveTransformer()
-        # Tabular Transformer
-        if self.general_["use_metadata"] or self.general_["use_features"]:
-            self.transformer_ft = TabularTransformer()
-             
-
-        # Mixed Classifier (Lightcurve and tabular)
-        if self.general_["use_lightcurves"] and any(
-            [self.general_["use_metadata"], self.general_["use_features"]]
+from ..timeEncoders import TimeHandler 
+from ..utils.Token import Token
+    
+class LightCurveTransformer(nn.Module):
+    def __init__(self,
+        input_size= 1,
+        embedding_size= 128,
+        embedding_size_sub= 128,
+        num_heads= 4,
+        num_encoders= 3,
+        Tmax= 1500.0,
+        num_harmonics= 64,
+        pe_type= 'tm',
+        num_bands= 2,
+        dropout = 0.00,
+        checkpoint = None, 
+        freeze_weights = False,
         ):
+        self.input_size = input_size
+        self.embedding_size = embedding_size
+        self.embedding_size_sub = embedding_size_sub
+        self.num_heads = num_heads
+        self.num_encoders= num_encoders
+        self.Tmax = Tmax
+        self.num_harmonics = num_harmonics
+        self.pe_type = pe_type
+        self.num_bands = num_bands
+        super().__init__()
+        self.time_encoder = TimeHandler(self.num_bands,
+                                        self.input_size,
+                                        self.embedding_size,
+                                        self.Tmax,
+                                        self.pe_type)
+        self.dropout = nn.Dropout(dropout)
+        self.transformer_lc = nn.TransformerEncoder(
+            encoder_layer=nn.TransformerEncoderLayer(
+                d_model=self.embedding_size,
+                nhead=self.num_heads,
+                dim_feedforward=self.embedding_size_sub,
+                activation="gelu",
+                dropout=dropout,
+                batch_first=True,
+                #norm_first=True,
+            ),
+            num_layers=self.num_encoders,
+            #norm=nn.LayerNorm(self.embedding_size),
 
-            input_dim = kwargs["lc"]["embedding_size"] + kwargs["ft"]["embedding_size"]
-            self.classifier_mix = MixedClassifier(
-                input_dim=input_dim, **kwargs["general"]
-            )
-  
+        )
+        self.token_lc = Token(self.embedding_size)
+        self.register_buffer('ones', torch.ones(1,1,1,dtype = torch.bool))
 
-    def forward(
-        self,
-        data=None,
-        data_err=None,
-        time=None,
-        tabular_feat=None,
-        mask=None,
-        **kwargs
-    ):
-        output= {} 
-        if 'LC' in self.modalities:
-            if self.general_["use_lightcurves_err"]:
-                data = torch.stack((data, data_err), dim=data.dim() - 1)
+    def load_weights(self):
+        pass
 
-            x_mod, m_mod, _ = self.embedding_light_curve(
-                **{"x": data, "t": time, "mask": mask}
-            )
-            x_emb = self.transformer_lc(**{"x": x_mod, "mask": ~(m_mod).unsqueeze(-1).bool()})
-            output['LC'] =  self.classifier_lc(x_emb)
-        if 'MD' in self.modalities or 'FEAT' in self.modalities:
-            f_mod = self.embedding_feats(**{"f": tabular_feat})
-            f_emb = self.transformer_ft(**{"x": f_mod, "mask": None})
-            output['TAB'] = self.classifier_ft(f_emb)
-            
-        if all(['LC' in self.modalities, 
-                ('MD' in self.modalities or 'FEAT' in self.modalities)]):
-            output['MM'] =self.classifier_mix(
-                torch.cat([f_emb, x_emb], axis=1)
-            )
-        return output
+    def embedding_light_curve(self, x, t, mask=None, **kwargs):
+        
+        x_mod, m_mod, t_mod = self.time_encoder(**{"x": x, "t": t, "mask": mask})
+        #x_mod = x_mod*m_mod
+        x_norm = torch.linalg.norm(x_mod, dim = (1,2), keepdim = True)
+        x_mod = x_mod / (x_norm + 1e-8)
+        #self.token_lc.token.item() = torch.clamp(self.token_lc.token.item(),0,1)
+        x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)
+        m_mod = torch.cat(
+            [   self.ones.repeat(x.size(0),1,1),
+                m_mod,
+            ],
+            axis=1,
+        )
+       
+        assert m_mod.dtype == torch.bool, 'm_mod type is {}'.format(m_mod.dtype)
+        return x_mod, m_mod, t_mod
 
-    def predict_mix(self, data, time, tabular_feat, mask, **kwargs):
-        return
+    def forward(self, data, time, mask, **kwargs):
+
         x_mod, m_mod, _ = self.embedding_light_curve(
             **{"x": data, "t": time, "mask": mask}
+        ) 
+       
+        x_emb = self.transformer_lc(
+            **{"src": x_mod, "src_key_padding_mask":~(m_mod.squeeze(-1))
+               }
+        ) 
+       
+        return self.dropout(x_emb)
+    
+
+
+
+class Embedding(nn.Module):
+    def __init__(self, length_size, embedding_size, **kwargs):
+        super(Embedding, self).__init__()
+
+        self.tab_W_feat = nn.Parameter(torch.randn(1, length_size, embedding_size))
+        self.tab_b_feat = nn.Parameter(torch.randn(1, length_size, embedding_size))
+
+    def forward(self, f): 
+        return self.tab_W_feat * f + self.tab_b_feat
+
+
+class TabularTransformer(nn.Module):
+    def __init__(self,
+        embedding_size= 128,
+        embedding_size_sub= 512,
+        num_heads= 4,
+        num_encoders= 3,
+        length_size=6,
+        num_bands= 2,
+        dropout = 0.00,
+        checkpoint = None, 
+        freeze_weights = False,):
+
+        self.embedding_size = embedding_size
+        self.embedding_size_sub = embedding_size_sub
+        self.num_heads = num_heads
+        self.num_encoders= num_encoders
+        self.num_bands = num_bands
+        self.length_size =length_size
+        
+        super().__init__()
+        self.embedding_tab = Embedding(
+            self.length_size,self.embedding_size
+        )  # nn.Linear(kwargs['TAB_ARGS']['length_size'],kwargs['TAB_ARGS']['embedding_size']) #
+        self.transformer_tab = nn.TransformerEncoder(
+            encoder_layer=nn.TransformerEncoderLayer(
+                d_model=self.embedding_size,
+                nhead=self.num_heads,
+                dim_feedforward=self.embedding_size_sub,
+                activation="gelu",
+                dropout=dropout,
+                batch_first=True,
+                norm_first=True,
+            ),
+            num_layers=self.num_encoders,
+        norm=nn.LayerNorm(self.embedding_size),
         )
-        x_emb = self.transformer_lc(**{"x": x_mod, "mask": m_mod})
+        self.token_tab = Token(self.embedding_size)
+        self.register_buffer('ones', torch.ones(1,1,1,dtype = float))
+        self.dropout = nn.Dropout(dropout)
 
-        f_mod = self.embedding_feats(**{"f": tabular_feat})
-        f_emb = self.transformer_ft(**{"x": f_mod, "mask": None})
+    def embedding_feats(self, f):
+        f_mod = self.embedding_tab(**{"f": f})
+        f_mod = torch.cat([self.token_tab(f.shape[0]), f_mod], axis=1)
+        f_mod = f_mod / torch.sqrt(torch.linalg.norm(f_mod, dim = 1, keepdim = True))
+        return f_mod
 
-        m_cls = self.classifier_mix(torch.cat([f_emb[:, 0, :], x_emb[:, 0, :]], axis=1))
-        m_cls = torch.softmax(m_cls, dim=1)
-        return m_cls
-
-    def predict_lc(self, data, time, mask, **kwargs):
-        return
-        x_mod, m_mod, _ = self.embedding_light_curve(
-            **{"x": data, "t": time, "mask": mask}
+    def forward(self, tabular_feat, tab_mask=None, **kwargs):
+        f_mod=  self.embedding_feats(
+            **{"f": tabular_feat}
         )
-        x_emb = self.transformer_lc(**{"x": x_mod, "mask": m_mod})
-        x_cls = self.classifier_lc(x_emb[:, 0, :])
-        x_cls = torch.softmax(x_cls, dim=1)
-        return x_cls
+        f_mod = self.dropout(f_mod)
+        f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": tab_mask})
+        
+        return self.dropout(f_emb[:,0,:])
+ 
 
-    def predict_tab(self, tabular_feat, **kwargs):
-        return
-        f_mod = self.embedding_feats(**{"f": tabular_feat})
-        f_emb = self.transformer_ft(**{"x": f_mod, "mask": None})
-        f_cls = self.classifier_ft(f_emb[:, 0, :])
-        f_cls = torch.softmax(f_cls, dim=1)
-        return f_cls
+class Combinator(nn.Module):
+    def __init__(self,  lc_model, tab_model,how ='concat', as_dict = True):
+        super().__init__()
+        self.transformer_lc = lc_model if lc_model is not None else None
+        self.transformer_tab = tab_model if tab_model is not None else None
+        self.how = how    
+        self.as_dict =  as_dict
 
-    def change_clf(self, num_nuevas_clases=22):
-        # Reemplazar el clasificador light curve
-        embedding_size_lc = self.classifier_lc.output_layer.in_features
-        self.classifier_lc = TokenClassifier(embedding_size_lc, num_nuevas_clases)
+    def forward(self,data,time,mask, tabular_feat = None,metadata_feat = None,extracted_feat = None, **kwargs):
+        
+        lc_emb = self.transformer_lc(data,time,mask)
+        ft_emb  = self.transformer_tab(tabular_feat)
+       # return torch.concat([lc_emb,ft_emb],axis  = -1)
+        if self.how == 'concat':
+            if self.as_dict:
+                return {'LC':lc_emb, "TAB" :ft_emb, "MIX": torch.concat([lc_emb,ft_emb],axis = -1)}
+            else: 
+                torch.concat([lc_emb,ft_emb],axis = -1)
+        elif self.how == 'sum':
+            return lc_emb+ft_emb
+   

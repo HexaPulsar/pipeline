@@ -5,10 +5,11 @@ import torch.optim as optim
 import torch
 from typing import Dict, Optional, Literal
 import pytorch_lightning as pl  
-from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR, LinearLR
+from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR, LinearLR, ExponentialLR
+
 import logging
 from sklearn.metrics.pairwise import cosine_similarity
-
+from lion_pytorch import Lion
 class PretrainModuleFusion(pl.LightningModule):
     def __init__(self,model,loss,lr = 0.001, **kwargs):
         """
@@ -25,22 +26,14 @@ class PretrainModuleFusion(pl.LightningModule):
         self.lr = lr
         self.model = model
         self.loss = loss
-        logging.debug('using learning rate {}'.format(self.lr))
+
         self.init_model()
         
     def init_model(self):
-        for name, p in self.loss.named_parameters():
+        for name, p in self.named_parameters():
             if p.dim() > 1:
-                nn.init.normal_(p, mean = 0.0, std = 0.1)
-        for name, p in self.model.named_parameters():
-            if p.dim() > 1:
-                nn.init.xavier_normal_(p)
-            else:
-                if 'token_lc.token' in name:
-                        nn.init.uniform_(p)
-                if 'token_tab.token' in name:
-                        nn.init.uniform_(p)
-        
+                nn.init.kaiming_uniform_(p)
+
     def gradfilter_ema(self,
         m: nn.Module,
         grads: Optional[Dict[str, torch.Tensor]] = None,
@@ -70,23 +63,11 @@ class PretrainModuleFusion(pl.LightningModule):
                 if 'emb_corr' in key:
                     self.logger.experiment.add_histogram(key, value,self.global_step)
                 elif 'percent' in key:
-                    self.log(f'{key}', value ,on_epoch=False,on_step=True)
+                    self.log(f'{key}', value ,on_epoch=False,on_step=True, sync_dist=True)
                 else:
-                    self.log(f'loss_train/{key}', value ,on_epoch=False,on_step=True)
-            #if batch_idx % 10 == 0:
-                #for harmonic in range(4):
-                #    self.logger.experiment.add_histogram(f'HARMONICS/alpha_cos_harmonics_{harmonic}',self.model.time_encoder.time_encoders[harmonic].alpha_cos,self.global_step)
-                #    self.logger.experiment.add_histogram(f'HARMONICS/alpha_sin_harmonics_{harmonic}',self.model.time_encoder.time_encoders[harmonic].alpha_sin,self.global_step) 
-                
-                #self.logger.experiment.add_histogram(f'token/x',self.model.transformer_lc.token_lc.token,self.global_step)
-                #self.logger.experiment.add_histogram(f'token/y',self.model.transformer_lc.token_lc.token,self.global_step)
+                    self.log(f'loss_train/{key}', value ,on_epoch=False,on_step=True, sync_dist=True)
 
-                #self.logger.experiment.add_histogram(f'token/x',self.model.token_tab.token,self.global_step)
-                #self.logger.experiment.add_histogram(f'token/y',self.model.token_tab.token,self.global_step)
-
-                #self.logger.experiment.add_histogram(f'out_emb/x',x,self.global_step)
-                #self.logger.experiment.add_histogram(f'out_emb/y',y,self.global_step)
-                #self.logger.experiment.add_histogram(f'cos_similarity',cosine_similarity(x,y),self.global_step)
+        self.log(f'Tmax_0',self.model.time_encoder.time_encoders[0].Tmax,on_step = True, sync_dist=True)
         return loss_dict['loss']
      
     
@@ -102,12 +83,14 @@ class PretrainModuleFusion(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         return 0
     
-
     def configure_optimizers(self):
         warmup = 0
-        optimizer = optim.AdamW(self.parameters(), lr=self.lr)
-        #cosine = CosineAnnealingWarmRestarts(optimizer, T_0=4*int(1e3), eta_min=1e-6)
+        #optimizer = optim.AdamW(self.parameters(), lr=self.lr)
+        #cosine = CosineAnnealingWarmRestarts(optimizer, T_0=100, eta_min=1e-8)
+        optimizer = Lion(self.parameters(), lr=self.lr, weight_decay=1e-2)
         constant = ConstantLR(optimizer,1)  
+        #w = LinearLR(optimizer, start_factor=1e-8, total_iters=warmup)
+        e = ExponentialLR(optimizer, gamma=0.9999)
         scheduler = SequentialLR(
                     optimizer,
                     schedulers=[constant,constant],

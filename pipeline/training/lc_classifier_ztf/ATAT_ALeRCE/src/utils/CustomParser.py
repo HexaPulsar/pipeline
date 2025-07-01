@@ -1,13 +1,6 @@
-import argparse
-import yaml
-import os
-import hydra
-from omegaconf import DictConfig, OmegaConf
-from dataclasses import dataclass,asdict
-import logging
+
+from dataclasses import dataclass
 from typing import Union, Optional, Any
-from src.data.handlers.CustomDataset import ATATDataset
-from src.data.handlers.SSLDataset import SSLDataset
 
 @dataclass
 class ZTFConfig:
@@ -39,14 +32,12 @@ class BaseDatasetArgs:
     feature_key:str  = 'feat_cols'
     metadata_key:str = 'metadata_feat'
     label_key:str= 'labels'
-    
 
 @dataclass
 class ATATDatasetArgs(BaseDatasetArgs):
     experiment_type: str = ''
-    transforms:Optional[list] = None
-    
-    
+    train_transforms:Optional[list] = None
+    val_transforms:Optional[list] = None
     
 @dataclass
 class SSLDatasetArgs(BaseDatasetArgs):
@@ -64,11 +55,11 @@ class VICRegArgs:
 class DataModuleArgs:
     dataset: Any
     train_use_sampler:bool = True 
+    val_use_sampler:bool = False 
     train_shuffle:bool=True
     num_workers:int=8
     pin_memory:bool =True   
     batch_size: int = 32
-
 
 @dataclass
 class TabularArgs:
@@ -81,8 +72,6 @@ class TabularArgs:
     checkpoint: Optional[str] = None
     freeze_weights:bool = False
 
-
-     
 @dataclass
 class LightcurveArgs:
     input_size:int =  1
@@ -105,7 +94,6 @@ class VICRegArgs:
     var_coeff: float
     cov_coeff: float
      
- 
 @dataclass 
 class ATATConfig:
     experiment_type: str
@@ -113,7 +101,7 @@ class ATATConfig:
     lc: Optional[LightcurveArgs]
     tab: Optional[TabularArgs]
     datamodule: DataModuleArgs
-    vicreg: VICRegArgs
+    vicreg: Optional[VICRegArgs]
     callbacks: dict
     loggers: dict
     trainer: dict
@@ -122,27 +110,7 @@ class ATATConfig:
     log_filename: str
     num_classes:int 
     mode: str
-    monitor: str 
+    monitor: Optional[str] 
     checkpoint: Optional[str] = None
 
-
-
-@dataclass 
-class PretrainingConfig:
-    experiment_type: str
-    experiment_name: str
-    lc: Optional[LightcurveArgs]
-    tab: Optional[TabularArgs]
-    datamodule: DataModuleArgs
-    vicreg: VICRegArgs
-    callbacks: dict
-    loggers: dict
-    trainer: dict
-    learning_rate: float  
-    save_dir_path: str
-    log_filename: str
-    num_classes:int 
-    mode: str
-    monitor: str 
-    checkpoint: Optional[str] = None
-
+ 

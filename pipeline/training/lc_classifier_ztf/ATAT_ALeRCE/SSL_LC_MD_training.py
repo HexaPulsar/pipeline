@@ -9,7 +9,7 @@ from src.models.PretrainModule import PretrainModule
 from src.models.PretrainMMModule import PretrainMMModule
 
 from src.augmentations import LightCurveTransform as LC
-from src.layers.transformer.lightcurve import LightCurveTransformer
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.layers.transformer.ATAT import LightCurveTransformer
 from src.layers.transformer.tabular import TabularTransformer
 from src.layers.utils.projector import VICRegProjector
 from src.losses.VICReg import VICReg

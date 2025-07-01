@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from dataclasses import dataclass
 from joblib import load
 import numpy as np
-
+import pandas as pd
 class BaseDataset(Dataset):
     def __init__(self,
         data_root:str,
@@ -79,7 +79,7 @@ class BaseDataset(Dataset):
         f"{'='*30}"
         )
         #assert self.use_lightcurves == True
-        logging.info(log_message)
+        #logging.info(log_message)
         self.data = h5_.get(self.observation_key)
         self.data_err = h5_.get(self.observation_err_key)
         self.mask = h5_.get(self.mask_key)
@@ -92,7 +92,10 @@ class BaseDataset(Dataset):
         self.time_alert = h5_.get(self.time_alert_key)
         if 'labels' in h5_.keys():
             self.target = h5_.get(self.label_key)
-            self.labels =  torch.from_numpy(self.target[:][self.these_idx]).long()
+            self.labels =  torch.from_numpy(self.target[:][self.these_idx].astype(int))
+        #if 'nonzero_count' in h5_.keys():
+        #    self.target = h5_.get('nonzero_count')
+        #    self.nz_count =  torch.from_numpy(self.target[:][self.these_idx])
         logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
 
         if self.use_metadata:
@@ -145,10 +148,21 @@ class BaseDataset(Dataset):
             QT = load(path_QT)
           
             #tabular_data = QT.transform(tabular_data)
-            
-            tabular_data = QT.transform(tabular_data.squeeze(-1))
-            tabular_data  = np.nan_to_num(tabular_data,nan = -9999)
+            tabular_data = pd.DataFrame(tabular_data.squeeze(-1))
+           # isnan = tabular_data.isna()
+            #
+            tabular_data = QT.transform(tabular_data)
+                                # tabular_data = QT.transform(tabular_data.squeeze(-1))
+                                # tabular_data  = np.nan_to_num(tabular_data,nan = -9999)
+                                    # df = qt.transform(df.fillna(12345)) + 0.1
+            #tabular_data[isnan] = 0.0
+            #tabular_data = tabular_data.reshape(tabular_data.shape[0],tabular_data.shape[1])
+                              #feats = np.concatenate([feat for feat in collect_feats])
+            #print(tabular_data.shape)
+            #input()
+            tabular_data = np.nan_to_num(tabular_data,-0.1)
 
-    
+            assert np.isnan(tabular_data).sum() == 0
+           # print(tabular_data.isnan())
         return torch.from_numpy(tabular_data).float()
     

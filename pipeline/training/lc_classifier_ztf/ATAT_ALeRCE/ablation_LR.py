@@ -1,6 +1,6 @@
 # %%
 from ReportPretraining import ReportPretraining, ReportZeroshot, InitBaseModel, InitDataLoader
-from src.layers.transformer.lightcurve import LightCurveTransformer
+from pipeline.training.lc_classifier_ztf.ATAT_ALeRCE.src.layers.transformer.ATAT import LightCurveTransformer
 import umap.plot
 from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY,ZTF_TAXONOMY
 import glob

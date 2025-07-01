@@ -25,6 +25,7 @@ class LitData(pl.LightningDataModule):
     batch_size: int
     dataset: ATATDatasetArgs
     train_use_sampler: bool = True
+    val_use_sampler: bool = False
     train_shuffle: bool = True
     num_workers: int = 8
     pin_memory: bool = True
@@ -46,14 +47,18 @@ class LitData(pl.LightningDataModule):
         return samples_weight
     
     def get_real_classes_weights(self,labels):
+
         class_sample_count = np.array(
             [
                 len(np.where(labels == t)[0])
                 for t in np.unique(labels)
             ]
         )
+       # print('class_sampler_count', class_sample_count)
         weight = 1.0 / class_sample_count
-        samples_weight = np.array([weight[t] for t in labels])
+        uniques = np.unique(labels).astype(int)
+        d = {key: value for key, value in zip(uniques, weight)}
+        samples_weight = np.array([d[labels[i].item()] for i in range(len(labels))])
         samples_weight = torch.from_numpy(samples_weight)
         return samples_weight
 
@@ -85,13 +90,10 @@ class LitData(pl.LightningDataModule):
 
         return hierarchy_weights * subclass_weights
     
-    def train_dataloader(self):
-        hier_importance = 1.0
-        class_importance = 0.0
-        assert hier_importance + class_importance == 1.0
+    def train_dataloader(self): 
         dataset_used = ATATDataset(set_type="train", **self.dataset)
         if self.train_use_sampler:
-            print('using sampler')
+            print('-    Using sampler')
             samples_weight = self.get_real_classes_weights(dataset_used.labels)
             self.samples_weight = samples_weight
             sampler = WeightedRandomSampler(
@@ -128,21 +130,46 @@ class LitData(pl.LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        
         dataset_used = ATATDataset(set_type="validation", **self.dataset)
-        print('notusingsampler')
-        samples_weight = self.get_real_classes_weights(dataset_used.labels)
-        self.samples_weight = samples_weight
-        print(samples_weight)
-        loader =loader = DataLoader(
+        if self.val_use_sampler:
+
+            print('using sampler')
+            samples_weight = self.get_real_classes_weights(dataset_used.labels)
+            self.samples_weight = samples_weight
+            sampler = WeightedRandomSampler(
+               samples_weight.type("torch.DoubleTensor"), len(samples_weight)
+            )
+            #hier_class = map_label_tensor(dataset_used.labels)
+            #sampler = MPerClassSampler(
+            #    hier_class,
+            ##    m=256,
+            #    batch_size=self.batch_size,
+            #    length_before_new_iter=len(dataset_used),
+            #)
+            loader = DataLoader(
                 dataset_used,
                 batch_size=self.batch_size,
-                sampler=None,
+                sampler=sampler,
                 shuffle=False,
                 drop_last=self.drop_last,
                 num_workers= self.num_workers,
                 pin_memory=self.pin_memory
             )
+        else:
+            
+            print('not using sampler')
+            samples_weight = self.get_real_classes_weights(dataset_used.labels)
+            self.samples_weight = samples_weight
+            #print(samples_weight)
+            loader =loader = DataLoader(
+                    dataset_used,
+                    batch_size=self.batch_size,
+                    sampler=None,
+                    shuffle=False,
+                    drop_last=self.drop_last,
+                    num_workers= self.num_workers,
+                    pin_memory=self.pin_memory
+                )
         return loader
 
     def test_dataloader(self):

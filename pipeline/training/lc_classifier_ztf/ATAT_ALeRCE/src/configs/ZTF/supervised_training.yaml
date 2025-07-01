@@ -10,43 +10,44 @@ ATATConfig:
   lc: 
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
-    embedding_size: 64
-    embedding_size_sub: 64
+    embedding_size: 32
+    embedding_size_sub: 32
     num_heads: 4
     num_encoders: 3
-    Tmax: 2000.0
+    Tmax: 3000.0
     pe_type: 'tm'
-    num_harmonics: 128
+    num_harmonics: 4
     num_bands: 2
     dropout: 0.01
     checkpoint: null
     
   tab: 
     _target_: src.utils.CustomParser.TabularArgs
-    embedding_size: 128
-    embedding_size_sub: 128
+    embedding_size: 32
+    embedding_size_sub: 32
     num_heads: 4
     num_encoders: 3
-    length_size: 6 #187
+    length_size: 187 #187
     dropout: 0.01
     checkpoint: null
   
   #mode: &mode 'max'
   mode: &mode 'min'
-  #monitor: &monitor "validation/LC/f1" #"validation/LC/f1"
-  monitor: &monitor "loss_validation/total" #"validation/LC/f1"
+
+  monitor: null
  
   datamodule:
     _target_: src.utils.CustomParser.DataModuleArgs
     dataset:
       _target_: src.utils.CustomParser.ATATDatasetArgs 
       experiment_type: *experiment_type
-     # data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
+      #data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
       data_root: '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5'
       seed: 0
       train_apply_transform: True
       validation_apply_transform: false
-      transforms: []  # List of transform modules
+      train_transforms: []  # List of transform modules
+      val_transforms: []  # List of transform modules
       train_key: training
       validation_key: validation
       test_key: test
@@ -61,40 +62,40 @@ ATATConfig:
       feature_key: extracted_features
       metadata_key: metadata_feat
       label_key: labels
-    train_use_sampler: False
+    train_use_sampler: True
+    val_use_sampler: False
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 512
-
+    batch_size: 128
   vicreg:
-    projector_shape:  '128-512-512'
+    shape_projector_1:  ''
+    shape_projector_2:  ''
     inv_coeff: null
     var_coeff: null
     cov_coeff: null
-
   trainer:
-    max_epochs: 500
+    max_epochs: 35
     devices: 'auto'
     accelerator: 'gpu'
-    #gradient_clip_val: 1.0
+   # gradient_clip_val: 1e-3
     num_sanity_val_steps: 0
     min_epochs: 1
     log_every_n_steps: 1
     #accumulate_grad_batches: 4
 
-    #check_val_every_n_epoch: 5
+    #check_val_every_n_epoch: 5 
 
   callbacks:
     learning_rate:
       _target_:  pytorch_lightning.callbacks.LearningRateMonitor
       logging_interval: 'step'
     early_stopping:
-      monitor: *monitor
-      mode: *mode
+      monitor: loss_validation/total  #validation/LC/f1 
+      mode: min
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
-      patience: 20 # number of checks with no improvement after which training will be stopped
+      patience: 10 # number of checks with no improvement after which training will be stopped
       verbose: False # verbosity mode
       strict: True # whether to crash the training if monitor is not found in the validation metrics
       check_finite: True # when set True, stops training when the monitor becomes NaN or infinite
@@ -104,8 +105,8 @@ ATATConfig:
       # log_rank_zero_only: False  # this keyword argument isn't available in stable version
 
     model_checkpoint:
-      monitor: *monitor
-      mode: *mode
+      monitor:  validation/LC/f1_macro #"loss_validation/total"
+      mode:  max
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       dirpath: ''
       filename: classifier_ckpt_{step} # checkpoint filename

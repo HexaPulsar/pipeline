@@ -5,22 +5,22 @@ import colorlog
 warnings.filterwarnings("ignore")
 
 from src.data.modules.LitPretrain import LitPretrain
+from src.data.modules.LitPretrainMM import LitPretrainMM
 from src.models.PretrainModule import PretrainModule
 from src.models.PretrainMMModule import PretrainMMModule
 from src.models.PretrainModuleFusion import PretrainModuleFusion
-from src.layers.transformer.Combinator import Combinator
 from src.augmentations import LightCurveTransform as LC
 #from src.augmentations import TabularTransformations as TAB
-from src.layers.transformer.lightcurve import LightCurveTransformer
-from src.layers.transformer.tabular import TabularTransformer
+from src.layers.transformer.ATAT import LightCurveTransformer, TabularTransformer, Combinator
 from src.layers.utils.projector import VICRegProjector
 from src.losses.VICReg import VICReg
 from pytorch_lightning import Trainer
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from src.utils.CustomParser import ATATConfig
 from  hydra.utils import instantiate
-from torchvision.transforms import RandomChoice, RandomApply, Compose
+from torchvision.transforms import RandomChoice, RandomApply, Compose, RandomOrder
 
 import numpy as np
 
@@ -44,34 +44,49 @@ def main(cfg:ATATConfig):
             handler,
         ],
     )
-    #assert cfg.experiment_type == 'LC' , cfg.experiment_type
+   
     cfg.datamodule.dataset.experiment_type = cfg.experiment_type
-    
+    p_ =0.5
+    apply_to = None
     transforms = [  
-                #RandomChoice([LC.WindowSelect(2, window_size=w_) for w_ in list(range(10, 110, 10))]),
-                #RandomChoice([LC.MaskWindow(2, window_size= w_) for w_ in list(range(10, 110, 10))]),
-                RandomChoice([LC.MaskWindow(2, window_size= w_) for w_ in list(range(10, 210, 10))]),
-                LC.BandPermute(2),
-                #LC.CutBand(cfg.lc.num_bands),
-                LC.TimeShift(),
-                LC.ZeroOutTime(),
-                #LC.TimeFactor(2, 10,[-1, 0.5,0.9,1.01, 1.5]),
-                #LC.Factor([-1,1,0.5,1.5]),
-                LC.CutFirstN(2,mask_first=[-1,0,1,2,4,8,15,32,64,128]),
-                ]
-    p_ = 0.5
-    list_of_transforms = [RandomApply([t], p = p_) for t in transforms]
-    cfg.datamodule.dataset.transforms_1 = list_of_transforms
-    cfg.datamodule.dataset.transforms_2 = [] #list_of_transforms
+            RandomApply([LC.GaussianNoise(2)], p = p_),
+
+            RandomApply([LC.GaussFactor(2, scale = 1e-4, apply_to_classes=None)], p = p_),
+            RandomApply([LC.GaussTimeFactor(2, scale = 1e-4, apply_to_classes=None)], p = p_),
+
+            RandomApply([LC.Factor( factor = list(np.linspace(0.95,1.05, 100)), apply_to_classes=None)], p = p_),
+            RandomApply([LC.TimeFactor( factor = list(np.linspace(0.5,1.5, 100)), apply_to_classes=None)], p = p_),
+            
+            RandomApply([LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = [-1,1e-3,1e-2,0.1,0.2], apply_to_classes=None)], p = p_),
+            RandomApply([LC.TimeGaussianFilter(num_bands=cfg.lc.num_bands,filter_std = [-1,1e-3,1e-2,0.1,0.2], apply_to_classes=None)], p = p_),
+
+            
+            RandomApply([RandomChoice([LC.WindowSelect(2, window_size=w_, apply_to_classes=None) for w_ in list(range(25, 225, 25))])],p =1), 
+
+            RandomApply([LC.Roll(2,max_roll = 200,  apply_to_classes=None)], p = 1),
+
+            #RandomApply([LC.BandPermute(2, apply_to_classes=None)], p = p_),
+            #RandomApply([RandomChoice([LC.SobelFilterMask(keep = 'above',threshold=thr) for thr in [0.01,0.05, 0.1, 0.15,0.2]])],p = p_),
+            RandomApply([RandomChoice([LC.SobelFilterMask(keep = 'below',threshold=thr) for thr in [0.01,0.05, 0.1, 0.15,0.2,0.5]])],p = 1),
+
+            RandomApply([ LC.CutBand(cfg.lc.num_bands)], p = 1e-5),  
+            #RandomApply([LC.TimeGaussianNoise(2)], p = p_),
+
+            ]*1
+    list_of_transforms = transforms
+    cfg.datamodule.dataset.transforms_1 =list_of_transforms
+    cfg.datamodule.dataset.transforms_2 = list_of_transforms
     pl_datal = LitPretrain(**cfg.datamodule)
+    
     if cfg.experiment_type == 'LC':
         transformer = LightCurveTransformer(**cfg.lc)
         projector = VICRegProjector(VICReg(cfg.vicreg.inv_coeff,
                                            cfg.vicreg.var_coeff,
-                                           cfg.vicreg.cov_coeff),
+                                           cfg.vicreg.cov_coeff, 
+                                           cfg.datamodule.batch_size),
                                            cfg.vicreg.shape_projector_1,
                                            cfg.vicreg.shape_projector_2)
-        pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate)
+        pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate, eval_regressor=False)
 
     if cfg.experiment_type == 'MD' or cfg.experiment_type == 'FEAT':
         transformer = TabularTransformer(**cfg.tab)
@@ -91,7 +106,11 @@ def main(cfg:ATATConfig):
         transformer_lc = LightCurveTransformer(**cfg.lc)
         transformer_md = TabularTransformer(**cfg.tab)
         model  = Combinator(transformer_lc,transformer_md)
-        pl_model = PretrainModuleFusion(model,
+
+
+        pl_datal = LitPretrainMM(**cfg.datamodule)
+        pl_model = PretrainMMModule(model_lc=transformer_lc,
+                                    model_tab=transformer_md,
                                   loss=projector,
                                   lr = cfg.learning_rate)
     if cfg.experiment_type == 'LC_MD_FEAT':
@@ -102,8 +121,8 @@ def main(cfg:ATATConfig):
                                            cfg.vicreg.shape_projector_2)
         transformer_lc = LightCurveTransformer(**cfg.lc)
         transformer_md = TabularTransformer(**cfg.tab)
-        model  = Combinator(transformer_lc,transformer_md)
-        pl_model = PretrainModuleFusion(model,
+        model  = Combinator(transformer_lc,transformer_md, how = 'sum')
+        pl_model = PretrainModule(model,
                                   loss=projector,
                                   lr = cfg.learning_rate)
         
@@ -111,8 +130,7 @@ def main(cfg:ATATConfig):
         callbacks=list(cfg.callbacks.values()),
         logger= list(cfg.loggers.values()),
         **cfg.trainer
-        )
-    # Trainer model pl routine # trsainer fit models
+        ) 
     trainer.fit(pl_model, pl_datal)
 
 if __name__ == "__main__":

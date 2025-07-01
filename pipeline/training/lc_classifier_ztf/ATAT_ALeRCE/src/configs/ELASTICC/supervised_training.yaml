@@ -6,22 +6,36 @@ ATATConfig:
   log_filename: 'default.log'
   learning_rate: 1e-4
   num_classes: 19
-  checkpoint: null
+
   lc:   
+    _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
-    embedding_size: 128
-    embedding_size_sub: 512
+    embedding_size: 32
+    embedding_size_sub: 32
     num_heads: 4
-    num_encoders: 3
-    Tmax: 1000.0
+    num_encoders: 10
+    Tmax: 3000.0
     pe_type: 'tm'
-    num_harmonics: 4
+    num_harmonics: 1
     num_bands: 6
     dropout: 0.01
+    checkpoint: null
     
-  tab: null
-  mode: &mode 'max'
-  monitor: &monitor "validation/f1"
+  tab: 
+    _target_: src.utils.CustomParser.TabularArgs
+    embedding_size: 128
+    embedding_size_sub: 128
+    num_heads: 4
+    num_encoders: 3
+    length_size: 6 #187
+    dropout: 0.1
+    checkpoint: null
+  
+  #mode: &mode 'max'
+  mode: &mode 'min'
+  #monitor: &monitor "validation/LC/f1" #"validation/LC/f1"
+  monitor: null
+ 
   datamodule:
     _target_: src.utils.CustomParser.DataModuleArgs
     dataset:
@@ -29,9 +43,10 @@ ATATConfig:
       experiment_type: *experiment_type
       data_root: "/home/mdelafuente/ORIGINAL/elasticc_dataset_update.h5"
       seed: 0
-      train_apply_transform: false
+      train_apply_transform: True
       validation_apply_transform: false
-      transforms: []  # List of transform modules
+      train_transforms: []  # List of transform modules
+      val_transforms: []  # List of transform modules
       train_key: 'finetuning_training'
       validation_key: 'finetuning_validation'
       test_key: 'test'
@@ -40,31 +55,44 @@ ATATConfig:
       time_key: time
       time_alert_key: ''
       mask_key: mask
+      mask_photometry_key: ''
+      mask_detection_key: ''
       feature_key: feats_2048
       metadata_key: norm_feat_col
       label_key: labels
-    train_use_sampler: true
+    train_use_sampler: True
+    val_use_sampler: False
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 256
+    batch_size: 128
+
+  vicreg:
+    projector_shape:  null
+    inv_coeff: null
+    var_coeff: null
+    cov_coeff: null
 
   trainer:
-    max_epochs: 35
+    max_epochs: 500
     devices: 'auto'
     accelerator: 'gpu'
-    gradient_clip_val: 0.0
+    gradient_clip_val: 1.0
     num_sanity_val_steps: 0
     min_epochs: 1
-    log_every_n_steps: 10
+    log_every_n_steps: 1
+    #val_check_interval: 0.5
+    #accumulate_grad_batches: 4
+
+    #check_val_every_n_epoch: 5
 
   callbacks:
     learning_rate:
       _target_:  pytorch_lightning.callbacks.LearningRateMonitor
-      logging_interval: 'step'    
+      logging_interval: 'step'
     early_stopping:
-      monitor: *monitor
-      mode: *mode
+      monitor: validation/LC/f1_macro  #validation/LC/f1 
+      mode: max
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
       patience: 15 # number of checks with no improvement after which training will be stopped
@@ -77,8 +105,8 @@ ATATConfig:
       # log_rank_zero_only: False  # this keyword argument isn't available in stable version
 
     model_checkpoint:
-      monitor: *monitor
-      mode: *mode
+      monitor:  validation/LC/f1_macro #"loss_validation/total"
+      mode:  max
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       dirpath: ''
       filename: classifier_ckpt_{step} # checkpoint filename

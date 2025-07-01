@@ -11,6 +11,6 @@ class Token(nn.Module):
         # )
 
         self.token = nn.Parameter(torch.rand(embedding_size), requires_grad=True)
-
+        #self.dropout = nn.Dropout(0.01)
     def forward(self, n_batch):
         return self.token.repeat(n_batch, 1, 1)

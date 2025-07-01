@@ -1,5 +1,4 @@
 
-from copy import deepcopy
 import logging
 
 import torch
@@ -15,7 +14,7 @@ from torchvision.transforms import Compose
 
 
 @dataclass
-class SSLDataset(BaseDataset):
+class SSLDatasetMM(BaseDataset):
     data_root:str
     set_type:str
     experiment_type:str
@@ -84,19 +83,22 @@ class SSLDataset(BaseDataset):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
         data_dict = {}
+        aug_data_dict = {}
         data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        
+        aug_data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
+                            "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
+                            "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
         if self.mask_photometry_key != '':
                 data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
+                aug_data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
         if self.mask_photometry_key != '':
                 data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
-        
-        aug_data_dict = self.transforms_2(deepcopy((data_dict)))
+                aug_data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
         data_dict = self.transforms_1(data_dict)
-        
-        return (data_dict, aug_data_dict)
+        aug_data_dict = self.transforms_2(aug_data_dict)
+        return data_dict
     
     def get_md(self,_idx):
         data_dict = {}
@@ -123,7 +125,7 @@ class SSLDataset(BaseDataset):
         #if self.output_augmented_batch:
         #    aug_data_dict = self.transforms_2(aug_data_dict)
         #return (data_dict, aug_data_dict) if self.output_augmented_batch else data_dict
-        return (data_dict, aug_data_dict)
+        return data_dict
     
     def get_lc_md(self,_idx):
         data_dict = {}
@@ -155,7 +157,7 @@ class SSLDataset(BaseDataset):
         
         data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
-        return (data_dict, aug_data_dict)
+        return data_dict
     
     def get_ft(self,_idx):
         data_dict = {}
@@ -182,7 +184,7 @@ class SSLDataset(BaseDataset):
         #if self.output_augmented_batch:
         #    aug_data_dict = self.transforms_2(aug_data_dict)
         #return (data_dict, aug_data_dict) if self.output_augmented_batch else data_dict
-        return (data_dict, aug_data_dict)
+        return data_dict
     def get_lc_md_ft(self,_idx):
         
         data_dict = {}
@@ -218,4 +220,4 @@ class SSLDataset(BaseDataset):
         data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
        
-        return (data_dict, aug_data_dict)
+        return data_dict

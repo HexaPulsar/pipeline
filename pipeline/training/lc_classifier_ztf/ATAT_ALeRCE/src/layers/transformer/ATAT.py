@@ -42,7 +42,7 @@ class LightCurveTransformer(nn.Module):
                 activation="gelu",
                 dropout=dropout,
                 batch_first=True,
-                #norm_first=True,
+                norm_first=True,
             ),
             num_layers=self.num_encoders,
             #norm=nn.LayerNorm(self.embedding_size),
@@ -58,7 +58,7 @@ class LightCurveTransformer(nn.Module):
         
         x_mod, m_mod, t_mod = self.time_encoder(**{"x": x, "t": t, "mask": mask})
         #x_mod = x_mod*m_mod
-        x_norm = torch.linalg.norm(x_mod, dim = (1,2), keepdim = True)
+        x_norm = torch.sqrt(torch.linalg.norm(x_mod, dim = (1), keepdim = True))
         x_mod = x_mod / (x_norm + 1e-8)
         #self.token_lc.token.item() = torch.clamp(self.token_lc.token.item(),0,1)
         x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)

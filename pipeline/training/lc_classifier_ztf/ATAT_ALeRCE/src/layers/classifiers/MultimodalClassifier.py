@@ -10,16 +10,15 @@ class TokenClassifier(nn.Module):
         super().__init__()
         self.num_classes = num_classes
         
-        self.output_layer =  nn.Sequential(nn.RMSNorm(embedding_size),
+        self.output_layer =  nn.Sequential(nn.LayerNorm(embedding_size),
                                         nn.Linear(embedding_size, inner_size),
                                         nn.Dropout(dropout),
+                                        nn.LayerNorm(inner_size),
                                         nn.GELU(),
                                      nn.Linear(inner_size,num_classes),
                                      #nn.Softmax(dim= -1)
                                      )
     def forward(self, x):
-        #norm = torch.sqrt(torch.linalg.norm(x, dim = (1), keepdim = True))
-        #x = x / norm
         return self.output_layer(x)
 
 
@@ -28,7 +27,7 @@ class MultimodalClassifier(nn.Module):
                  experiment_type = str,
                  lc_input_size = None,
                  tab_input_size = None,
-                 inner_size = 128,
+                 inner_size = 32,
                  use_lc = False, 
                  use_tab = False,
                  use_mix = False,

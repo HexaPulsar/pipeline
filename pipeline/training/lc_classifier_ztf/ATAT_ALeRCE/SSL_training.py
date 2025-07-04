@@ -55,7 +55,7 @@ def main(cfg:ATATConfig):
             RandomApply([LC.GaussTimeFactor(2, scale = 1e-4, apply_to_classes=None)], p = p_),
 
             RandomApply([LC.Factor( factor = list(np.linspace(0.95,1.05, 100)), apply_to_classes=None)], p = p_),
-            RandomApply([LC.TimeFactor( factor = list(np.linspace(0.5,1.5, 100)), apply_to_classes=None)], p = p_),
+            RandomApply([LC.TimeFactor( factor = list(np.linspace(0.95,1.05, 100)), apply_to_classes=None)], p = p_),
             
             RandomApply([LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = [-1,1e-3,1e-2,0.1,0.2], apply_to_classes=None)], p = p_),
             RandomApply([LC.TimeGaussianFilter(num_bands=cfg.lc.num_bands,filter_std = [-1,1e-3,1e-2,0.1,0.2], apply_to_classes=None)], p = p_),
@@ -65,7 +65,7 @@ def main(cfg:ATATConfig):
 
             RandomApply([LC.Roll(2,max_roll = 200,  apply_to_classes=None)], p = 1),
 
-            #RandomApply([LC.BandPermute(2, apply_to_classes=None)], p = p_),
+            RandomApply([LC.BandPermute(2, apply_to_classes=None)], p = p_),
             #RandomApply([RandomChoice([LC.SobelFilterMask(keep = 'above',threshold=thr) for thr in [0.01,0.05, 0.1, 0.15,0.2]])],p = p_),
             RandomApply([RandomChoice([LC.SobelFilterMask(keep = 'below',threshold=thr) for thr in [0.01,0.05, 0.1, 0.15,0.2,0.5]])],p = 1),
 

@@ -1,8 +1,24 @@
 import torch
 import torch.nn as nn
 from ..timeEncoders import TimeHandler 
-from ..utils.Token import Token
-    
+
+import torch
+import torch.nn as nn
+
+
+class Token(nn.Module):
+    def __init__(self, embedding_size, **kwargs):
+        super(Token, self).__init__()
+
+        # self.token = nn.parameter.Parameter(
+        #    torch.rand(embedding_size), requires_grad=True
+        # )
+
+        self.token = nn.Parameter(torch.rand(embedding_size), requires_grad=True)
+        
+    def forward(self, n_batch):
+        return nn.functional.softmax(self.token).repeat(n_batch, 1, 1)
+
 class LightCurveTransformer(nn.Module):
     def __init__(self,
         input_size= 1,
@@ -54,13 +70,24 @@ class LightCurveTransformer(nn.Module):
     def load_weights(self):
         pass
 
-    def embedding_light_curve(self, x, t, mask=None, **kwargs):
+    def embedding_light_curve(self, x, 
+                              t, 
+                              mask,
+                              metadata = None,
+                               coordinates = None,
+                                allwise = None, 
+                                 timespan = None, **kwargs):
         
-        x_mod, m_mod, t_mod = self.time_encoder(**{"x": x, "t": t, "mask": mask})
-        #x_mod = x_mod*m_mod
+        x_mod, m_mod, t_mod = self.time_encoder(x, 
+                              t, 
+                                mask=mask,
+                                metadata = metadata,
+                                coordinates = coordinates,
+                                allwise = allwise, 
+                                timespan = timespan)
         x_norm = torch.sqrt(torch.linalg.norm(x_mod, dim = (1), keepdim = True))
         x_mod = x_mod / (x_norm + 1e-8)
-        #self.token_lc.token.item() = torch.clamp(self.token_lc.token.item(),0,1)
+
         x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)
         m_mod = torch.cat(
             [   self.ones.repeat(x.size(0),1,1),
@@ -68,26 +95,31 @@ class LightCurveTransformer(nn.Module):
             ],
             axis=1,
         )
-       
         assert m_mod.dtype == torch.bool, 'm_mod type is {}'.format(m_mod.dtype)
         return x_mod, m_mod, t_mod
 
-    def forward(self, data, time, mask, **kwargs):
-
-        x_mod, m_mod, _ = self.embedding_light_curve(
-            **{"x": data, "t": time, "mask": mask}
-        ) 
-       
+    def forward(self, data, 
+                        time, 
+                        mask, 
+                        metadata = None,
+                        timespan = None,
+                        coordinates = None,
+                        allwise = None,
+                        **kwargs):
+        
+        x_mod, m_mod, _ = self.embedding_light_curve(x = data,
+                                                    t = time, 
+                                                    mask=mask,
+                                                    metadata = metadata,
+                                                    coordinates = coordinates,
+                                                    allwise = allwise, 
+                                                    timespan = timespan) 
         x_emb = self.transformer_lc(
-            **{"src": x_mod, "src_key_padding_mask":~(m_mod.squeeze(-1))
-               }
-        ) 
-       
-        return self.dropout(x_emb)
+                                    src = x_mod, 
+                                    src_key_padding_mask = ~(m_mod.squeeze(-1))
+                                    ) 
+        return self.dropout(x_emb[:,0,:])
     
-
-
-
 class Embedding(nn.Module):
     def __init__(self, length_size, embedding_size, **kwargs):
         super(Embedding, self).__init__()
@@ -97,8 +129,7 @@ class Embedding(nn.Module):
 
     def forward(self, f): 
         return self.tab_W_feat * f + self.tab_b_feat
-
-
+    
 class TabularTransformer(nn.Module):
     def __init__(self,
         embedding_size= 128,
@@ -141,17 +172,16 @@ class TabularTransformer(nn.Module):
 
     def embedding_feats(self, f):
         f_mod = self.embedding_tab(**{"f": f})
+        f_norm = torch.sqrt(torch.linalg.norm(f_mod, dim = (1), keepdim = True))
+        f_mod = f_mod / (f_norm + 1e-8)
         f_mod = torch.cat([self.token_tab(f.shape[0]), f_mod], axis=1)
-        f_mod = f_mod / torch.sqrt(torch.linalg.norm(f_mod, dim = 1, keepdim = True))
         return f_mod
 
     def forward(self, tabular_feat, tab_mask=None, **kwargs):
         f_mod=  self.embedding_feats(
             **{"f": tabular_feat}
         )
-        f_mod = self.dropout(f_mod)
         f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": tab_mask})
-        
         return self.dropout(f_emb[:,0,:])
  
 

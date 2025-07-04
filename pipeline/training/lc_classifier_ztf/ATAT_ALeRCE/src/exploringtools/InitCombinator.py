@@ -21,6 +21,7 @@ class InitCombinator:
         lc_model,
         tab_model,
         classifier,
+        classifier_args,
         arg_key,
         device = 'cpu'):
         self.path_to_config_yaml = path_to_config_yaml
@@ -28,11 +29,8 @@ class InitCombinator:
         self.args = self._load_yaml_args(path_to_config_yaml).ATATConfig 
         self.classifier = classifier(lc_input_size = self.args.lc.embedding_size,
                  tab_input_size = self.args.tab.embedding_size,
-                 use_lc = False,
-                 use_tab = False,
-                 use_mix = True,
-                 num_classes = self.args.num_classes,
-                 dropout=0.0)
+                 num_classes = self.args.num_classes
+                 ,**classifier_args)
         
         lc_model = lc_model(**self.args["lc"])
         tab_model = tab_model(**self.args["tab"])
@@ -120,5 +118,5 @@ class InitCombinator:
         self.atat.to(device="cpu")
         self.classifier.to(device="cpu")
         return preds_out, target
-    def get_confusion_matrix(self, preds,target, taxonomy, dataset_type:str, method = 'logit reg'):
-        return get_confusion_matrix(preds,target,taxonomy, dataset_type,method)
+    def get_confusion_matrix(self, preds,target, taxonomy, dataset_type:str, plot_title,  order_classes  ):
+        return get_confusion_matrix(preds,target,taxonomy, dataset_type,plot_title, order_classes)

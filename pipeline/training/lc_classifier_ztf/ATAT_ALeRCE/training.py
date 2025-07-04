@@ -4,6 +4,7 @@ import colorlog
 
 warnings.filterwarnings("ignore")
 
+from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY
 from src.augmentations import LightCurveTransform as LC
 from src.augmentations import TabularTransformations as TAB
 
@@ -82,7 +83,7 @@ class HierLoss(nn.Module):
         return loss
     
 
-@hydra.main(version_base=None, config_path="./src/configs/ZTF/", config_name= 'supervised_training')
+@hydra.main(version_base=None, config_path="./src/configs/ELASTICC/", config_name= 'supervised_training')
 #@hydra.main(version_base=None, config_path="./src/configs/ZTF/", config_name= 'LC_MD')
 def main(cfg:ATATConfig):
     #print(cfg)
@@ -110,25 +111,25 @@ def main(cfg:ATATConfig):
     cfg.datamodule.dataset.experiment_type = cfg.experiment_type
     transients = { 
 
-               # 4, 
-               # 9,
-               # 16, 
+                4, 
+                9,
+                16, 
                 
-                #17,
-                #18,
+                17,
+                18,
                 19, 
                 20, 
                 21,}
     stochastic = {
                  0,
-                 #1 
+                  1 ,
                  8, 
                  5,
                  3
                  }
     periodic = { 
                 15,
-                #2,
+                2,
                 10,
                 11,
                 14,
@@ -136,32 +137,40 @@ def main(cfg:ATATConfig):
                 6,
                 7,
                 12,}
-    p_ = 1
+    p_ = 0.1
+
+
+    transients = set(ELASTICC_TAXONOMY.transient().values())
+    stochastic = set(ELASTICC_TAXONOMY.transient().values())
+    periodic = set(ELASTICC_TAXONOMY.periodic().values())
+
     transforms = [  
             #RandomApply([LC.GaussianNoise(2)], p = p_),
-           # RandomApply([LC.GaussFactor(2, scale = 1e-1, apply_to_classes=transients.union(stochastic))], p = p_),
-           # RandomApply([LC.GaussTimeFactor(2, scale = 1e-1, apply_to_classes=None)], p = p_),
-           # RandomApply([LC.Factor( factor = list(np.linspace(0.1,10, 100)), apply_to_classes=transients.union(stochastic))], p = p_),
-            #RandomApply([LC.TimeFactor( factor = list(np.linspace(0.5,1.5, 100)), apply_to_classes=transients.union(stochastic))], p = p_),
+            RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-3, apply_to_classes=None)], p = p_),
+            RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-3, apply_to_classes=None)], p = p_),
+            RandomApply([LC.Factor( factor = list(np.linspace(0.9,1.1, 100)), apply_to_classes=None)], p = p_),
+            RandomApply([LC.TimeFactor( factor = list(np.linspace(0.99,1.1, 100)), apply_to_classes=None)], p = p_),
             
             RandomApply([LC.GaussianFilter(num_bands=cfg.lc.num_bands,filter_std = [-1,1e-3,1e-2,0.1,0.2], apply_to_classes=None)], p = p_),
             RandomApply([LC.TimeGaussianFilter(num_bands=cfg.lc.num_bands,filter_std = [-1,1e-3,1e-2,0.1,0.2], apply_to_classes=None)], p = p_),
 
             
-            RandomApply([RandomChoice([LC.WindowSelect(2, window_size=w_, apply_to_classes=None) for w_ in list(range(25, 225, 25))])],p =1), 
-#
+           # RandomApply([RandomChoice([LC.WindowSelect(2, window_size=w_, apply_to_classes=None) for w_ in list(range(25, 225, 25))])],p =1), 
+            RandomApply([RandomChoice([LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=periodic.union(stochastic)) for w_ in list(range(6, 204, 6))])],p =1), 
+            RandomApply([RandomChoice([LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=transients) for w_ in list(range(6, 204, 6))])],p =1), 
+#           
             #RandomApply([LC.Roll(2,max_roll = 200,  apply_to_classes=None)], p = 1),
 
-           # RandomApply([LC.BandPermute(2, apply_to_classes=transients)], p = p_),
+            RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=[21,0,1])], p = p_),
             #RandomApply([RandomChoice([LC.SobelFilterMask(keep = 'above',threshold=thr) for thr in [0.01,0.05, 0.1, 0.15,0.2]])],p = p_),
-           # RandomApply([RandomChoice([LC.SobelFilterMask(keep = 'below',threshold=thr) for thr in [0.01,0.05, 0.1, 0.15,0.2,0.5]])],p = p_),
+            #RandomApply([RandomChoice([LC.SobelFilterMask(keep = 'below',threshold=thr) for thr in [0.01,0.05, 0.1, 0.15,0.2,0.5,1]])],p = p_),
 
-            #RandomApply([ LC.CutBand(cfg.lc.num_bands)], p = 1e-5),  
+            RandomApply([ LC.CutBand(cfg.lc.num_bands)], p = 1e-5),  
             #RandomApply([LC.TimeGaussianNoise(2)], p = p_),
-
+            #--RandomApply([TAB.TABGaussianNoise(0,1e-4)], p = p_),
             ]*1
 
-    #cfg.datamodule.dataset.train_transforms = transforms
+    cfg.datamodule.dataset.train_transforms = transforms
    # cfg.datamodule.dataset.val_transforms = transforms
 
     pl_datal = LitData(**cfg.datamodule)
@@ -256,9 +265,9 @@ def main(cfg:ATATConfig):
                                           lc_input_size=cfg.lc.embedding_size, 
                                                 tab_input_size=cfg.tab.embedding_size, 
                                                 use_mix = True,
-                                                use_lc = False,
-                                                use_tab=False,
-                                                combine_logits=False,
+                                                use_lc = True,
+                                                use_tab=True,
+                                                combine_logits=True,
                                                 num_classes= cfg.num_classes)
         loss = nn.CrossEntropyLoss()
         pl_model = ClassifierModule(model = model,

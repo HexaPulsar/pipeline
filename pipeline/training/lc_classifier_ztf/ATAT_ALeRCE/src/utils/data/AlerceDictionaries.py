@@ -11,10 +11,10 @@ class EventGroup:
     def __call__(self):
         return self.group
     
-    def __repr__(self):
-        string_repr = ["  - {} -> {}".format(event_name,label) for event_name,label in zip(self.event_names,self.labels)]
-        string_repr = '\n'.join(string_repr)
-        return "{}:\n{}".format(self.group_name,string_repr)
+    #def __repr__(self):
+    #    string_repr = ["  - {} -> {}".format(event_name,label) for event_name,label in zip(self.event_names,self.labels)]
+    ##    string_repr = '\n'.join(string_repr)
+     #   return "{}:\n{}".format(self.group_name,string_repr)
     
 class Taxonomy:
     def __init__(self, groups: List[EventGroup]):
@@ -99,12 +99,15 @@ class Taxonomy:
         str_repr = [g.__repr__() for g in self.groups]
         str_repr = '\n'.join(str_repr)
         return str_repr
+    
     def __len__(self):
         return len(self.pool.keys())
 
     def values_as_keys(self):
         return {value:key for key,value in self.pool.items()}
     
+    
+
 transient = EventGroup('transient',{"SNIa": 4,"SNII": 9,"SNIbc": 16,"SLSN": 17,"TDE": 18,"SNIIb": 19,"SNIIn": 20,"Microlensing": 21,})
 stochastic = EventGroup('stochastic',{"AGN": 0,"QSO": 1,"YSO": 3,"CV/Nova": 5,"Blazar": 8,})
 periodic = EventGroup( 'periodic', {"EA": 2,"RRLc": 6,"RSCVn": 7,"EB/EW": 10,"LPV": 11,"CEP": 12,"RRLab": 13,"Periodic-Other": 14,"DSCT": 15,})

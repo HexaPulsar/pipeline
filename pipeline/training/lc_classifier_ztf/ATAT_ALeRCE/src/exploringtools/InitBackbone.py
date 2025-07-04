@@ -38,12 +38,13 @@ class InitBackbone:
                             rename_keys: tuple = ('model.',''), print_keys = False):
             checkpoint_path_clip = glob.glob(f"{self.path_to_config_yaml}*{checkpoint_name}*")
             assert isinstance(rename_keys,tuple)
-            print('Found checkpoint {}'.format(checkpoint_path_clip[-1].split('=')[-1]))
+            print('Using checkpoint {}'.format(checkpoint_path_clip[-1].split('=')[-1]))
             checkpoint_clip = load(
                 checkpoint_path_clip[-1], map_location=device(self.device)
             )
             od_atat = OrderedDict()
             for key in checkpoint_clip["state_dict"].keys():
+                #print(key)
                 if print_keys:
                     print('old key name:',key)
                 if any([remove_if_in_key in key for remove_if_in_key in remove_if_in_key_list ]):
@@ -55,7 +56,7 @@ class InitBackbone:
     
     def load_backbone_weights(self,weights: dict, strict = True):
         self.backbone.load_state_dict(weights, strict=strict)
-        print("Loaded backbone weights")
+        print("     - Loaded backbone weights")
 
     def predict(self,dataloader, device = None, return_count_len  = False):
         if device is not None:
@@ -70,7 +71,7 @@ class InitBackbone:
         for b1 in tqdm(dataloader):
             b1 = {key: value.to(device=self.device) for key, value in b1.items()}
             t = b1["labels"]
-            emb = self.backbone(**b1)[:,0,:] 
+            emb = self.backbone(**b1)
             flux = np.count_nonzero(b1['data'].clone().detach().cpu().numpy(), axis =1)
             count_len = (
                 np.concatenate([count_len, flux])

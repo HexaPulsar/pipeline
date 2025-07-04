@@ -11,14 +11,15 @@ class TokenClassifier(nn.Module):
         self.num_classes = num_classes
         
         self.output_layer =  nn.Sequential(nn.LayerNorm(embedding_size),
-                                        nn.Linear(embedding_size, inner_size),
+                                        nn.Linear(embedding_size, inner_size, bias = False),
                                         nn.Dropout(dropout),
                                         nn.LayerNorm(inner_size),
                                         nn.GELU(),
-                                     nn.Linear(inner_size,num_classes),
+                                     nn.Linear(inner_size,num_classes, bias=False),
                                      #nn.Softmax(dim= -1)
                                      )
     def forward(self, x):
+        
         return self.output_layer(x)
 
 
@@ -54,18 +55,19 @@ class MultimodalClassifier(nn.Module):
             self.token_tab = TokenClassifier(tab_input_size,inner_size,num_classes, dropout )
         if use_mix:
             combined = lc_input_size + tab_input_size
-            self.net = nn.Sequential(#nn.LayerNorm(combined),
-                                     nn.Linear(combined, inner_size),
-                                        nn.Dropout(dropout),
-                                        nn.LayerNorm(inner_size),
-                                        nn.GELU(),  
-                                     nn.Linear(inner_size,num_classes),
+            #self.net = nn.Sequential(nn.LayerNorm(combined),
+            #                         nn.Linear(combined, inner_size),
+            ##                            nn.Dropout(dropout),
+             #                           nn.LayerNorm(inner_size),
+             #                           nn.GELU(),  
+             #                        nn.Linear(inner_size,num_classes),
                                      #nn.Softmax(dim =-1)
-                                     )
+             #                        )
+        #self.register_parameter('temp',nn.Parameter(torch.log(torch.tensor(1/0.07))))
         if self.combine_logits:
             assert all([self.combine_logits, self.use_mix,self.use_lc, self.use_tab]), 'to combine logits use all modalities'
     def forward(self,emb_dict):
-       
+        #self.temp.data = torch.clamp(self.temp.data,0,4.605) 
        # self.logit_scale.data = torch.clamp(self.logit_scale.data,0,4.605) 
         out_dict= {}
         if all([self.use_lc, not self.use_tab, not self.use_mix]):
@@ -77,7 +79,7 @@ class MultimodalClassifier(nn.Module):
             out_dict.update({'TAB':tab_class})
 
         if self.use_mix:
-            mix_class = self.net(emb_dict['MIX']) #/ self.logit_scale
+            #mix_class = self.net(emb_dict['MIX']) #/ self.logit_scale
             
             if all([self.combine_logits,self.use_lc, self.use_tab]):
                 lc_class = self.token_lc(emb_dict['LC'])# / self.logit_scale
@@ -85,9 +87,10 @@ class MultimodalClassifier(nn.Module):
                 tab_class =  self.token_tab(emb_dict['TAB']) # / self.logit_scale
                 #out_dict.update({'TAB':tab_class})
 
-                out_dict.update({'MIX': (lc_class + tab_class + mix_class)/3})
+                out_dict.update({'MIX': lc_class + tab_class})
             else:
-                out_dict.update({'MIX':mix_class})
+                pass
+                #out_dict.update({'MIX':mix_class})
         return out_dict
        
     

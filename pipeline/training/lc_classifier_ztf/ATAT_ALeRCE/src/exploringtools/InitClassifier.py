@@ -52,15 +52,17 @@ class InitClassifier(InitBackbone):
                         arg_key,
                         device)
         self.classifier = classifier(lc_input_size = self.args.lc.embedding_size,
+                                     inner_size = self.args.lc.embedding_size,
                  tab_input_size = self.args.tab.embedding_size,
                  use_lc = use_lc,
                  use_tab = use_tab,
                  use_mix = use_mix,
                  num_classes = self.args.num_classes,
                  dropout=0.0)
+        
     def load_classifier_weights(self,weights: dict, strict = True):
         self.classifier.load_state_dict(weights, strict=strict)
-        print("LOaded classifier weights")
+        print("     - Loaded classifier weights")
 
     def predict(self,dataloader, device = None, pred_type = 'class'):
         if device is not None:

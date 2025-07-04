@@ -49,8 +49,8 @@ class PretrainModule(pl.LightningModule):
                 nn.init.kaiming_uniform_(p)
 
     def training_step(self, batch, batch_idx):
-        loss_dict = self.loss(self.model(**batch[0])[:,0,:], 
-                              self.model(**batch[1])[:,0,:])
+        loss_dict = self.loss(self.model(**batch[0]), 
+                              self.model(**batch[1]))
         with torch.no_grad():
             for key,value in loss_dict.items():
                 if 'emb_corr' in key:
@@ -62,22 +62,22 @@ class PretrainModule(pl.LightningModule):
 
         self.log(f'Tmax_0',self.model.time_encoder.time_encoders[0].Tmax,on_step = True, sync_dist=True)
         return loss_dict['loss']
-     
-   # def on_validation_epoch_start(self):
-        #for dataloader_idx in range(3):
-        #   if dataloader_idx == 0:
-        #        return
-        #    else:
-        #        self.collect_train_embs = None
-        #        self.collect_train_labels = None
-        #        self.collect_val_embs = None
-        #        self.collect_val_labels = None
-      #  return super().on_validation_batch_start()
-
+    '''
+    def on_validation_epoch_start(self, dataloader_idx):
+        for dataloader_idx in range(3):
+            if dataloader_idx == 0:
+                return
+            else:
+                self.collect_train_embs = None
+                self.collect_train_labels = None
+                self.collect_val_embs = None
+                self.collect_val_labels = None
+        return super().on_validation_batch_start()
+    '''
     def validation_step(self, batch, batch_idx):
         #if dataloader_idx == 0:
-        loss_dict = self.loss(self.model(**batch[0])[:,0,:], 
-                              self.model(**batch[1])[:,0,:])
+        loss_dict = self.loss(self.model(**batch[0]), 
+                            self.model(**batch[1]))
         with torch.no_grad():
             for key,value in loss_dict.items():
                     if 'emb_corr' not in key:
@@ -113,9 +113,10 @@ class PretrainModule(pl.LightningModule):
                 else labels.cpu().detach().numpy()
             )
             return 0
-        '''    
-   # def on_validation_epoch_end(self):
         '''
+    '''      
+    def on_validation_epoch_end(self, dataloader_idx):
+         
         for dataloader_idx in range(3):
             if dataloader_idx == 2:
                 taxonomy = ZTF_TAXONOMY()
@@ -136,6 +137,7 @@ class PretrainModule(pl.LightningModule):
                             continue
                         self.log(f'LRegressor/{key}', value ,on_epoch=True,on_step=False, add_dataloader_idx=False, sync_dist=True)
                     self.log(f'LRegressor/accuracy', np.round(lr_report['accuracy'],4) ,on_epoch=True,on_step=False, add_dataloader_idx=False, sync_dist=True)
+                    del lr_report
                 if self.eval_knn:        
                     knn_report = classification_report(
                         self.collect_val_labels,
@@ -150,6 +152,9 @@ class PretrainModule(pl.LightningModule):
                             continue
                         self.log(f'KNN_3/{key}', value ,on_epoch=True,on_step=False, add_dataloader_idx=False, sync_dist=True)
                     self.log(f'KNN_3/accuracy', np.round(knn_report['accuracy'],4) ,on_epoch=True,on_step=False, add_dataloader_idx=False, sync_dist=True)
+                    del knn_report
+
+                del taxonomy, class_names, labels
 
                # to_print = print(classification_report(self.collect_val_labels,val_preds, target_names=list(ZTF_TAXONOMY().keys()),digits = 4, output_dict=False))
                # self.logger.experiment.add_text(to_print, self.current_epoch)
@@ -157,9 +162,9 @@ class PretrainModule(pl.LightningModule):
                #                                    tag_scalar_dict=scalars,
                #                                    global_step = self.current_epoch, 
                #                                    sync_dist = True)
-        '''
-     #   return super().on_validation_epoch_end()
-
+        
+        return super().on_validation_epoch_end()
+    '''
     def test_step(self, batch, batch_idx):
         return 0
     
@@ -179,6 +184,7 @@ class PretrainModule(pl.LightningModule):
         return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
     
     def get_real_classes_weights(self,labels):
+
         class_sample_count = np.array(
             [
                 len(np.where(labels == t)[0])
@@ -187,12 +193,17 @@ class PretrainModule(pl.LightningModule):
         )
        # print('class_sampler_count', class_sample_count)
         weight = 1.0 / class_sample_count
-        return weight
+        uniques = np.unique(labels).astype(int)
+        d = {key: value for key, value in zip(uniques, weight)}
+        samples_weight = np.array([d[labels[i].item()] for i in range(len(labels))])
+        samples_weight = torch.from_numpy(samples_weight)
+        return samples_weight
+
     
     def get_regressor_eval(self,):
         weights = self.get_real_classes_weights(torch.tensor(self.collect_train_labels))
         weights_dict = {float(i):  weights[i] for i in range(len(weights))}
-
+        
         std_pipeline = Pipeline([
         ('scaler', StandardScaler()),  # z = (x - mean) / std
         ('model', LogisticRegression(random_state=0, max_iter = 1000, multi_class = 'ovr', class_weight=weights_dict))

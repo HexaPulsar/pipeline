@@ -32,19 +32,6 @@ class LitData(pl.LightningDataModule):
     drop_last: bool = False
     def __post_init__(self):
         super().__init__()
-
-    def get_hier_weights(self, labels):
-        hier_class = map_label_tensor(labels)
-        class_sample_count = np.array(
-            [
-                len(np.where(hier_class == t)[0])
-                for t in np.unique(hier_class)
-            ]
-        )
-        weight = 1.0 / class_sample_count
-        samples_weight = np.array([weight[t] for t in hier_class])
-        samples_weight = torch.from_numpy(samples_weight)
-        return samples_weight
     
     def get_real_classes_weights(self,labels):
 
@@ -61,35 +48,14 @@ class LitData(pl.LightningDataModule):
         samples_weight = np.array([d[labels[i].item()] for i in range(len(labels))])
         samples_weight = torch.from_numpy(samples_weight)
         return samples_weight
-
-    def conditional_weights(self,labels):
-        hier_class = map_label_tensor(labels)
-        H_class_sample_count = np.array(
-            [
-                len(np.where(hier_class == t)[0])
-                for t in np.unique(hier_class)
-            ]
-        )
-        prob_superclass = H_class_sample_count/len(labels)
-
-       
-        hierarchy_samples_weight = np.array([prob_superclass[t] for t in hier_class])
-        hierarchy_weights = torch.from_numpy(hierarchy_samples_weight)
-
-        class_sample_count = np.array(
-            [
-                len(np.where(labels == t)[0])
-                for t in np.unique(labels)
-            ]
-        )
-       
-        prob_subclass = class_sample_count/len(labels)
-
-        subclass_samples_weight = np.array([prob_subclass[t] for t in labels])
-        subclass_weights = torch.from_numpy(subclass_samples_weight)
-
-        return hierarchy_weights * subclass_weights
-    
+    def setup(self, stage):
+        logging.debug(f'{self.dataset.train_transforms}')
+        if stage == 'fit':
+            logging.info(f'Apply train transforms: {self.dataset.train_apply_transform}')
+        if stage == 'validate':
+            logging.info(f'Apply validation transforms: {self.dataset.validation_apply_transform}')
+        
+        return super().setup(stage)
     def train_dataloader(self): 
         dataset_used = ATATDataset(set_type="train", **self.dataset)
         if self.train_use_sampler:

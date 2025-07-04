@@ -71,6 +71,7 @@ class BaseDataset(Dataset):
         log_message = (
         f"Dataset Configuration:\n"
         f"{'='*30}\n"
+        f"• Seed        : {self.seed}\n"
         f"• Set Type         : {self.set_type}\n"
         f"• Total Indices    : {len(self.these_idx)}\n"
         f"• Light Curves     : {'✓' if self.use_lightcurves else '✗'}\n"
@@ -78,12 +79,12 @@ class BaseDataset(Dataset):
         f"• Features         : {'✓' if self.use_features else '✗'}\n"
         f"{'='*30}"
         )
+        print(log_message)
         #assert self.use_lightcurves == True
         #logging.info(log_message)
         self.data = h5_.get(self.observation_key)
         self.data_err = h5_.get(self.observation_err_key)
         self.mask = h5_.get(self.mask_key)
-
         if self.mask_photometry_key !='':
             self.mask_photometry = h5_.get(self.mask_photometry_key) if self.mask_photometry_key in h5_.keys() else None
         if self.mask_detection_key !='':
@@ -98,17 +99,18 @@ class BaseDataset(Dataset):
         #    self.nz_count =  torch.from_numpy(self.target[:][self.these_idx])
         logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
 
-        if self.use_metadata:
-            metadata_feat = h5_.get(self.metadata_key)[:]
-            path = '/'.join(self.data_root.split('/')[:-1])
-            add = 'metadata_qt'
-            add = 'fold'
-            path_QT = f"{path}/metadata/{add}_{self.seed}.joblib".format(
-                self.data_root, self.seed
-            )
-            self.metadata_feat = self.get_tabular_data(
-                metadata_feat, path_QT, "metadata"
-            ) 
+        
+        metadata_feat = h5_.get(self.metadata_key)[:]
+        path = '/'.join(self.data_root.split('/')[:-1])
+        add = 'metadata_qt'
+        add = 'fold'
+        path_QT = f"{path}/metadata/{add}_{self.seed}.joblib".format(
+            self.data_root, self.seed
+        )
+        path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_{}.joblib'.format(self.seed)
+        self.metadata_feat = self.get_tabular_data(
+            metadata_feat, path_QT, "metadata"
+        ) 
         if self.use_features:
             #self.extracted_feat = dict()
             #print(h5_.keys())
@@ -148,7 +150,10 @@ class BaseDataset(Dataset):
             QT = load(path_QT)
           
             #tabular_data = QT.transform(tabular_data)
-            tabular_data = pd.DataFrame(tabular_data.squeeze(-1))
+            if len(tabular_data.shape) > 2:
+                tabular_data = pd.DataFrame(tabular_data.squeeze(-1))
+            else:
+                tabular_data = pd.DataFrame(tabular_data)
            # isnan = tabular_data.isna()
             #
             tabular_data = QT.transform(tabular_data)

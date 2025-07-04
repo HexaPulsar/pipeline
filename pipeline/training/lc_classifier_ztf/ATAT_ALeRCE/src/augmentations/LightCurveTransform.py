@@ -148,10 +148,59 @@ class WindowSelect:
                     sample["data"][end:,i] = 0
                     sample["time"][:start,i] = 0
                     sample["time"][end:,i] = 0
-                    sample['data'] = torch.roll(sample['data'], shifts=(-self.window_size,), dims = 1)
-                    sample['time'] = torch.roll(sample['time'], shifts=(-self.window_size,), dims = 1)
+                    sample['data'] = torch.roll(sample['data'], shifts=(-start,), dims = 1)
+                    sample['time'] = torch.roll(sample['time'], shifts=(-start,), dims = 1)
                     sample['mask'] = sample['data'] != 0
     
+import torch
+
+class MAXWindowSelect:
+    def __init__(self, num_bands: int, window_size: int, apply_to_classes=None):
+        self.num_bands = num_bands
+        self.window_size = window_size
+        self.apply_to_classes = apply_to_classes
+
+    def __call__(self, sample: dict):
+        self.window_select(sample)
+        return sample
+
+    def window_select(self, sample):
+        data = sample['data']
+        time = sample['time']
+        total_length = data.shape[0]
+
+        for i in range(self.num_bands):
+            signal = data[:, i]
+            abs_signal = torch.abs(signal)
+
+            if torch.count_nonzero(signal) < self.window_size:
+                continue  # Not enough data to extract a full window
+
+            max_idx = torch.argmax(abs_signal)
+
+            half_window = self.window_size // 2
+
+            # Compute window bounds centered at max_idx
+            start = max(max_idx - half_window, 0)
+            end = start + self.window_size
+
+            # Adjust if end goes beyond sequence length
+            if end > total_length:
+                end = total_length
+                start = end - self.window_size
+
+            # Zero out values outside the window
+            mask = torch.zeros(total_length, dtype=torch.bool)
+            mask[start:end] = True
+
+            data[:, i] = data[:, i] * mask
+            time[:, i] = time[:, i] * mask
+
+            # Optionally roll the window to the start
+            sample['data'][:, i] = torch.roll(data[:, i], shifts=(-start,), dims=0)
+            sample['time'][:, i] = torch.roll(time[:, i], shifts=(-start,), dims=0)
+
+        sample['mask'] = sample['data'] != 0
 
 class RandomSubsample:
     def __init__(self,num_bands:int,window_size:int):

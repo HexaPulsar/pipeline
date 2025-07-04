@@ -8,7 +8,7 @@ class InitDataLoader:
             for key, value in datamodule_args.dataset.items() 
             if key not in ['transforms_1','transforms_2']
         }
-        dataset['feature_key'] = 'extracted_feat_2048'
+        #dataset['feature_key'] = 'extracted_feat_2048'
         datamodule_args_copy = deepcopy(datamodule_args)
         datamodule_args_copy['dataset'] = dataset
         datamodule_args_copy['dataset']['data_root'] = update_dataset_path

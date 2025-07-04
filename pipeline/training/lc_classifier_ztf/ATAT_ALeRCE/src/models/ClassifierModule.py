@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWar
 import torchmetrics.classification
 import torchmetrics.classification.precision_recall_curve
 from tqdm import tqdm  
-from src.utils.data.AlerceDictionaries import ZTF_TAXONOMY
+from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY, ZTF_TAXONOMY
 
 import matplotlib.pyplot as plt
 import io
@@ -119,17 +119,17 @@ class ClassifierModule(pl.LightningModule):
     def training_step(self, batch_data, batch_idx):
         labels = batch_data.pop('labels')
         embs = self.model(**batch_data) 
-        preds = self.classifier(embs[:,0,:])
+        preds = self.classifier(embs)
         loss = 0
 
         if 'LC' in preds.keys():
             partial_loss = self.loss(preds['LC'],  labels.long())
             loss+=partial_loss
             self.LC_train_metrics(preds['LC'], labels.long())
-            hier_map_preds = self.map_label_tensor(torch.argmax(preds['LC'],dim = -1))
-            hier_map_labels = self.map_label_tensor(labels.long())
+           # hier_map_preds = self.map_label_tensor(torch.argmax(preds['LC'],dim = -1))
+           # hier_map_labels = self.map_label_tensor(labels.long())
             #self.f1_hier_macro_val(hier_map_preds, hier_map_labels)
-            self.log('training/f1_score_harmonic',2 / (self.LC_train_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_train(hier_map_preds, hier_map_labels)**-1), on_step=True, sync_dist=True)
+           # self.log('training/f1_score_harmonic',2 / (self.LC_train_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_train(hier_map_preds, hier_map_labels)**-1), on_step=True, sync_dist=True)
             self.log_dict(self.LC_train_metrics, on_step=False, on_epoch=True)
             self.log(f"loss_train/lc",partial_loss,on_step=False, on_epoch=True, sync_dist=True)
             
@@ -150,7 +150,7 @@ class ClassifierModule(pl.LightningModule):
 
         #loss = loss / len(self.modalities)
         self.log("loss_train/total", loss,on_step=True, on_epoch=True, sync_dist=True)
-       # self.log("logit_scale", self.classifier.logit_scale.item(),on_step=True, on_epoch=True, sync_dist=True)
+       #self.log("logit_scale", self.classifier.temp.item(),on_step=True, on_epoch=True, sync_dist=True)
         return loss
         
     def on_validation_epoch_start(self):
@@ -169,7 +169,7 @@ class ClassifierModule(pl.LightningModule):
     def validation_step(self, batch_data, batch_idx):
         labels = batch_data.pop('labels')
         embs = self.model(**batch_data) 
-        preds = self.classifier(embs[:,0,:])
+        preds = self.classifier(embs)
         loss = 0
         
         
@@ -180,8 +180,8 @@ class ClassifierModule(pl.LightningModule):
             self.log_dict(self.LC_valid_metrics, on_step=False, on_epoch=True)
             self.validation_cm(preds['LC'],labels.long())
             #print(torch.argmax(preds['LC'],dim = -1).shape)
-            hier_map_preds = self.map_label_tensor(torch.argmax(preds['LC'],dim = -1))
-            hier_map_labels = self.map_label_tensor(labels.long())
+           # hier_map_preds = self.map_label_tensor(torch.argmax(preds['LC'],dim = -1))
+           # hier_map_labels = self.map_label_tensor(labels.long())
 
            # df = pd.DataFrame({'preds',preds["LC"].detach().numpy(),
            #                    'preds_hier',hier_map_preds.detach().numpy(),
@@ -190,7 +190,7 @@ class ClassifierModule(pl.LightningModule):
            # df.query('labels_hier == 0')
             self.log(f"loss_validation/lc",partial_loss,on_step=False, on_epoch=True, sync_dist=True)
 
-            self.log('validation/f1_score_harmonic',2 / (self.LC_valid_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_val(hier_map_preds, hier_map_labels)**-1), on_step=False, on_epoch=True, sync_dist=True)
+            #self.log('validation/f1_score_harmonic',2 / (self.LC_valid_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_val(hier_map_preds, hier_map_labels)**-1), on_step=False, on_epoch=True, sync_dist=True)
             #self.log('validation/f1_hier_macro',self.f1_hier_macro_val(hier_map_preds, hier_map_labels), on_step=False, on_epoch=True)
            #self.log(, on_step=False, on_epoch=True)
         if 'TAB' in preds.keys():
@@ -199,11 +199,11 @@ class ClassifierModule(pl.LightningModule):
             partial_loss = self.loss(preds['TAB'],  labels.long())
             loss+=partial_loss
             self.validation_cm(preds['TAB'],labels.long())
-            hier_map_preds = self.map_label_tensor(torch.argmax(preds['TAB'],dim = -1))
-            hier_map_labels = self.map_label_tensor(labels.long())
+           # hier_map_preds = self.map_label_tensor(torch.argmax(preds['TAB'],dim = -1))
+           # hier_map_labels = self.map_label_tensor(labels.long())
             self.log(f"loss_validation/tab",partial_loss,on_step=False, on_epoch=True, sync_dist=True)
 
-            self.log('validation/f1_score_harmonic',2 / (self.TAB_valid_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_val(hier_map_preds, hier_map_labels)**-1), on_step=False, on_epoch=True, sync_dist=True)
+            #self.log('validation/f1_score_harmonic',2 / (self.TAB_valid_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_val(hier_map_preds, hier_map_labels)**-1), on_step=False, on_epoch=True, sync_dist=True)
         if 'MIX' in preds.keys():
             self.MIX_valid_metrics(preds['MIX'], labels.long())
             self.log_dict(self.MIX_valid_metrics, on_step=False, on_epoch=True)
@@ -224,13 +224,13 @@ class ClassifierModule(pl.LightningModule):
         
 
     def on_validation_epoch_end(self):
-    
+        tax = ELASTICC_TAXONOMY()
         cm = self.validation_cm.compute().cpu().numpy().astype(float)
         fig = plt.figure(figsize=(12, 10)) 
         
         sns.heatmap(np.round(cm, decimals=2), annot=True, cmap=plt.cm.Blues, ax=fig.add_subplot(111))
-        plt.xticks(ticks=range(0, 22), rotation=45, labels=ZTF_TAXONOMY().keys())
-        plt.yticks(ticks=range(0, 22), rotation=45, labels=ZTF_TAXONOMY().keys())
+        plt.xticks(ticks=range(0, self.classifier.num_classes), rotation=45, labels=tax.keys())
+        plt.yticks(ticks=range(0, self.classifier.num_classes), rotation=45, labels=tax.keys())
 
         
         if len(self.modalities) == 3:
@@ -259,17 +259,17 @@ class ClassifierModule(pl.LightningModule):
            # {'params': self.model.transformer_tab.parameters(), 'lr': 1e-5},  # low learning rate
             #{'params': self.model.transformer_lc.parameters(), 'lr': 1e-3}       # higher learning rate
         #])c
-        self.warmup = 0
+        self.warmup = 100
         optimizer = Lion(self.parameters(), lr=self.learning_rate, weight_decay=1e-2)
 
         constant = ConstantLR(optimizer,1)  
         #cosine = CosineAnnealingWarmRestarts(optimizer,T_0=100,eta_min=1e-6)                                         
-        #linear = LinearLR(optimizer, start_factor=1e-8, total_iters=self.warmup)
-        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=1000,eta_min=1e-6)                                         
+        linear = LinearLR(optimizer, start_factor=1e-2, total_iters=self.warmup)
+        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=self.warmup,eta_min=1e-5)                                         
 
         scheduler = SequentialLR(
                     optimizer,
-                    schedulers=[constant,constant],
+                    schedulers=[linear,cosine],
                     milestones=[self.warmup]
                 )
 
@@ -296,8 +296,8 @@ class ClassifierModule(pl.LightningModule):
             'precision': torchmetrics.classification.Precision(task="multiclass", num_classes=self.classifier.num_classes, average="macro", threshold=thr),
             })
         self.validation_cm = torchmetrics.classification.ConfusionMatrix(task="multiclass", num_classes=self.classifier.num_classes, normalize='true', threshold=thr)
-        self.f1_hier_macro_val =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro", threshold=thr)
-        self.f1_hier_macro_train =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro", threshold=thr)
+       # self.f1_hier_macro_val =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro", threshold=thr)
+       # self.f1_hier_macro_train =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro", threshold=thr)
         #self.f1_8 =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro")
         #self.prcurve = torchmetrics.classification.MulticlassPrecisionRecallCurve(num_classes=self.classifier.num_classes,average = 'macro')
         if 'LC' in self.modalities:

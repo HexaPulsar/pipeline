@@ -1,3 +1,3 @@
 
-from .TimeFilmModified import TimeFilmModified
+from .TimeFilmModified import EarlyFusionEncoder
 from .TimeHandler import TimeHandler 

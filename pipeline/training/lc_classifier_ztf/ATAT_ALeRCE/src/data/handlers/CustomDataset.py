@@ -11,78 +11,6 @@ from torchvision.transforms import Compose
 from copy import deepcopy
 from src.augmentations import LightCurveTransform as LC
 
-class Cut200:
-    def __init__(self,num_bands:int,seqlen:int, sampling_type:str = 'overlap_100'):
-        self.num_bands = num_bands
-        self.seqlen = seqlen
-        self.sampling_type = sampling_type
-    def __call__(self,sample:dict): 
-        sample = deepcopy(sample)
-        if ((sample['data']!=0).sum() < 400) or self.sampling_type =='static':
-            sample['data']=sample['data'][:200,:]
-            sample['mask']= sample['mask'][:200,:]
-            sample['time']= sample['time'][:200,:]
-        elif self.sampling_type == 'random':
-            random_indices = torch.randint(0,200, size = (200,))
-            random_indices.sort()
-            sample['data']=sample['data'][random_indices,:]
-            sample['mask']= sample['mask'][random_indices,:]
-            sample['time']= sample['time'][random_indices,:]
-        elif self.sampling_type == 'random_window':
-            max_seqlen = (sample['data']!=0).sum(dim  = 0).max().item()
-            higher = max_seqlen-200
-            if higher <= 0:
-                return sample
-            start = torch.randint(0,higher-200,size = (1,)).item()
-            sample['data']=sample['data'][start:start+200,:]
-            sample['mask']= sample['data']!=0
-            sample['time']= sample['time'][start:start+200,:]
-        elif self.sampling_type == 'undersample':
-            n = 30
-            indices = torch.randint(0,1500-n,size = (n,)).item()
-            data = torch.zeros(size = (200,2))
-            time = torch.zeros(size = (200,2))
-            data[0:n, : ] = sample['data'][indices,:]
-            time[0:n, : ] = sample['time'][indices,:]
-            sample['data']= data
-            sample['mask']= (data!=0).bool()
-            sample['time']= time
-        elif self.sampling_type == 'overlap_100':
-            i = np.random.choice(list(np.linspace(0, 7, 15)[:14]))
-
-            start = (i*200).astype(int)
-            end = ((i+1)*200).astype(int)
-            #print(start,end)
-            sample['data']= sample['data'][start:end,:]
-            sample['mask']= sample['mask'][start:end,:]
-            sample['time']= sample['time'][start:end,:]
-        else:
-            sample['data']= sample['data'][:self.seqlen,:]
-            sample['mask']= sample['mask'][:self.seqlen,:]
-            sample['time']= sample['time'][:self.seqlen,:]
-        return sample
-
-import numpy as np
-class NormalizeTime:
-    def __call__(self,sample):
-        time = sample['time']
-        new =time - torch.min(time[time != 0]) if torch.any(time != 0) else time
-        sample['time'] = np.where(new < 0, 0,new)
-        return sample
-#cut_lc = Cut200(2,200, 'static')
-
-def select_window(array, num_bands = 2,window_size=200, start_index=None):
-   
-
-    band_len = max(np.count_nonzero(array, axis = 0))
-    if band_len - window_size > 0:
-        start = torch.randint(0, band_len - window_size, size = (1,))
-        return start, start+ window_size
-    if band_len - window_size == 0:
-        return 0, 200
-    if band_len - window_size < 0:
-        return 0, 200
-
 @dataclass
 class ATATDataset(BaseDataset):
     data_root:str
@@ -116,11 +44,7 @@ class ATATDataset(BaseDataset):
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
         self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False
-        logging.debug(f'{self.train_transforms}')
-        logging.info(f'Apply train transforms: {self.train_apply_transform}')
-        logging.info(f'Apply validation transforms: {self.validation_apply_transform}')
         
-        self.window_normalizer = LC.TimeNormalization()
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -142,24 +66,18 @@ class ATATDataset(BaseDataset):
         if self.use_lightcurves_err:
             data_dict.update({"data_err":torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
 
-        if self.use_metadata:
-            data_dict.update({"metadata_feat":self.metadata_feat[_idx],})
+        #if self.use_metadata:
+        data_dict.update({"metadata":self.metadata_feat[_idx]})
 
         if self.use_features:
-            data_dict.update(
-                {"extracted_feat": self.extracted_feat[_idx]}
-            )
-        
-        tabular_features = []
-         
-        if self.use_metadata:
-            tabular_features.append(data_dict["metadata_feat"].unsqueeze(1))
-            data_dict.pop('metadata_feat')
-        if self.use_features:
-            tabular_features.append(data_dict["extracted_feat"].unsqueeze(1))
-        if tabular_features:
-            data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
+            data_dict.update({'coordinates':self.extracted_feat[_idx][-3:]})
+            data_dict.update({'allwise':self.extracted_feat[_idx][-12:-5]})
+            data_dict.update({'timespan':self.extracted_feat[_idx][-4]})
 
+            #data_dict.update(
+            #    {"extracted_feat": self.extracted_feat[_idx]}
+            #)
+            
 
         if all([self.set_type == 'train',self.train_transforms is not None]):
             data_dict = self.train_transforms(data_dict)

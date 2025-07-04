@@ -88,9 +88,8 @@ class TABGaussianNoise:
         x = sample['tabular_feat']  # Shape: [bs, seqlen, channels]
         # Generate Gaussian noise for each channel independently
         noise = torch.normal(self.mean, self.std, size=x.shape).to(device = x.device)
-        x_with_noise = x + noise
         #x_with_noise = torch.clip(x_with_noise, 0,1.0)
-        sample['tabular_feat'] = x_with_noise
+        sample['tabular_feat'] = x + noise
         return sample
     
 

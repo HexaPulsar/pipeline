@@ -4,7 +4,7 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 1e-3
+  learning_rate: 5e-4
   num_classes: 22
   lc: 
     _target_: src.utils.CustomParser.LightcurveArgs
@@ -24,7 +24,7 @@ ATATConfig:
     embedding_size: 128
     embedding_size_sub: 256
     num_heads: 4
-    num_encoders: 3
+    num_encoders: 1
     length_size: 187
     dropout: 0.1
   mode: &mode 'min'
@@ -60,7 +60,7 @@ ATATConfig:
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 128
+    batch_size: 512
   vicreg:
     shape_projector_1:  '32-512-512'
     shape_projector_2:  '32-512-512'

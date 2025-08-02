@@ -1,0 +1,166 @@
+
+ATATConfig:
+  _target_: src.utils.CustomParser.ATATConfig
+  experiment_type: &experiment_type 'default_type'
+  save_dir_path: &save_dir_path 'default_savepath'
+  log_filename: 'default.log'
+  learning_rate: 1e-4
+  num_classes: 22
+  
+  online_transforms:
+    use_window_select: False
+    use_max_window_select: False
+    use_time_gauss_factor: False
+    use_gauss_factor: False
+    use_simple_time_factor: False
+    use_simple_data_factor: False
+    use_band_permute: False
+    use_roll: False
+    use_gauss_noise: False
+    p_: 0.5
+  lc: 
+    _target_: src.utils.CustomParser.LightcurveArgs
+    input_size: 1
+    embedding_size: 32
+    embedding_size_sub: 32
+    num_heads: 4
+    num_encoders: 1
+    Tmax: 2048.0
+    pe_type: 'tm'
+    num_harmonics: 1
+    num_bands: 2
+    dropout: 0.01
+    checkpoint: null
+
+    use_acceleration : True 
+    use_velocity : True 
+    use_stats : False 
+    use_features : True
+    use_metadata: True
+    use_sequence_norm: True
+    use_tabular_transformer: False
+    use_timefilm_gelu: True
+    use_timefilm_norm: True
+    use_exp: True
+    use_conv: False
+    features_num_features: 181
+    metadata_num_features: 6
+    
+  tab: 
+    _target_: src.utils.CustomParser.TabularArgs
+    embedding_size: 32
+    embedding_size_sub: 32
+    num_heads: 4
+    num_encoders: 3
+    length_size: 187
+    dropout: 0.05
+    checkpoint: null
+    sequence_norm: True
+  
+  #mode: &mode 'max'
+  mode: &mode 'min'
+
+  monitor: null
+ 
+  datamodule:
+    _target_: src.utils.CustomParser.DataModuleArgs
+    dataset:
+      _target_: src.utils.CustomParser.ATATDatasetArgs 
+      experiment_type: 'LC'
+      #data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
+      data_root: '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5'
+      seed: 0
+      train_apply_transform: True
+      validation_apply_transform: false
+      train_transforms: []  # List of transform modules
+      val_transforms: []  # List of transform modules
+      train_key: training
+      validation_key: validation
+      test_key: test
+      observation_key: 'flux' 
+      observation_err_key: 'flux_err'
+      time_key: time
+      time_alert_key: time_alert 
+      mask_key: mask
+      mask_photometry_key: ''
+      mask_detection_key: ''
+      #feature_key: feat_cols
+      feature_key:  extracted_features #extracted_feat_2048
+      metadata_key: metadata_feat
+      label_key: labels
+    train_use_sampler: True
+    val_use_sampler: False
+    train_shuffle: true
+    num_workers: 8
+    pin_memory: true
+    batch_size: 128
+  vicreg:
+    shape_projector_1:  ''
+    shape_projector_2:  ''
+    inv_coeff: null
+    var_coeff: null
+    cov_coeff: null
+  trainer:
+    max_epochs: 100
+    devices: 'auto'
+    accelerator: 'gpu'
+    #gradient_clip_val: 1e-1
+    num_sanity_val_steps: 0
+    min_epochs: 1
+    log_every_n_steps: 1
+    #accumulate_grad_batches: 4
+
+    #check_val_every_n_epoch: 5 
+
+  callbacks:
+    learning_rate:
+      _target_:  pytorch_lightning.callbacks.LearningRateMonitor
+      logging_interval: 'step'
+    early_stopping:
+      monitor: loss_validation/total  #validation/LC/f1 
+      mode: min
+      _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+      min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
+      patience: 30 # number of checks with no improvement after which training will be stopped
+      verbose: False # verbosity mode
+      strict: True # whether to crash the training if monitor is not found in the validation metrics
+      check_finite: True # when set True, stops training when the monitor becomes NaN or infinite
+      stopping_threshold: null # stop training immediately once the monitored quantity reaches this threshold
+      divergence_threshold: null # stop training as soon as the monitored quantity becomes worse than this threshold
+      check_on_train_epoch_end: null # whether to run early stopping at the end of the training epoch
+      # log_rank_zero_only: False  # this keyword argument isn't available in stable version
+
+    model_checkpoint:
+      monitor:  'validation/LC/f1_macro' #"loss_validation/total"
+      mode:  max
+      _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      dirpath: ''
+      filename: classifier_ckpt_{step} # checkpoint filename
+      verbose: False # verbosity mode
+      save_last: null # additionally always save an exact copy of the last checkpoint to a file last.ckpt
+      save_top_k: 1 # save k best models (determined by above metric)
+      auto_insert_metric_name: True # when True, the checkpoints filenames will contain the metric name
+      save_weights_only: False # if True, then only the model’s weights will be saved
+      every_n_train_steps: null # number of training steps between checkpoints
+      train_time_interval: null # checkpoints are monitored at the specified time interval
+      every_n_epochs: null # number of epochs between checkpoints
+      save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
+
+  loggers:
+    
+    tensorboard:
+      _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
+      name: 'tensorboard'
+      version: 0
+      save_dir: ''
+      log_graph: False
+      default_hp_metric: True
+      prefix: ""
+      # version: ""
+    csv:
+      name: 'metrics'
+      version: 0
+      save_dir: ''
+      _target_: pytorch_lightning.loggers.csv_logs.CSVLogger
+      prefix: ""
+

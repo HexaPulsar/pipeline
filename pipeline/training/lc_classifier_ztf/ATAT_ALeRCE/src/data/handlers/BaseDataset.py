@@ -27,6 +27,8 @@ class BaseDataset(Dataset):
         label_key = 'labels',
         feature_key = 'ft_cols',
         metadata_key = 'metadata_feat',
+        metadata_qt_dir = '',
+        feature_qt_dir = '',
         list_time_to_eval = ['']):
 
         """loading dataset from H5 file"""
@@ -68,18 +70,7 @@ class BaseDataset(Dataset):
         #np.random.seed(0)
         #if set_type != 'test':
         #    self.these_idx = np.random.choice(self.these_idx,int(5e4))
-        log_message = (
-        f"Dataset Configuration:\n"
-        f"{'='*30}\n"
-        f"• Seed        : {self.seed}\n"
-        f"• Set Type         : {self.set_type}\n"
-        f"• Total Indices    : {len(self.these_idx)}\n"
-        f"• Light Curves     : {'✓' if self.use_lightcurves else '✗'}\n"
-        f"• Metadata         : {'✓' if self.use_metadata else '✗'}\n"
-        f"• Features         : {'✓' if self.use_features else '✗'}\n"
-        f"{'='*30}"
-        )
-        print(log_message)
+        
         #assert self.use_lightcurves == True
         #logging.info(log_message)
         self.data = h5_.get(self.observation_key)
@@ -97,26 +88,24 @@ class BaseDataset(Dataset):
         #if 'nonzero_count' in h5_.keys():
         #    self.target = h5_.get('nonzero_count')
         #    self.nz_count =  torch.from_numpy(self.target[:][self.these_idx])
-        logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
-
-        
-        metadata_feat = h5_.get(self.metadata_key)[:]
-        path = '/'.join(self.data_root.split('/')[:-1])
-        add = 'metadata_qt'
-        add = 'fold'
-        path_QT = f"{path}/metadata/{add}_{self.seed}.joblib".format(
-            self.data_root, self.seed
-        )
-        path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_{}.joblib'.format(self.seed)
-        self.metadata_feat = self.get_tabular_data(
-            metadata_feat, path_QT, "metadata"
-        ) 
-        if self.use_features:
-            #self.extracted_feat = dict()
-            #print(h5_.keys())
-            #input()
+        #logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
+        use_metadata = True
+        if use_metadata:
+            metadata_feat = h5_.get(self.metadata_key)[:]
+            path = '/'.join(self.data_root.split('/')[:-1])
+            add = 'metadata_qt'
+            add = 'fold'
+            path_QT = f"{path}/metadata/{add}_{self.seed}.joblib".format(
+                self.data_root, self.seed
+            )
+            #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_{}.joblib'.format(self.seed)
+            self.metadata_feat = self.get_tabular_data(
+                metadata_feat, path_QT, "metadata"
+            )
+        use_features = True 
+        if use_features:
             extracted_feat = h5_.get("{}".format(self.feature_key))[:]
-            #print(extracted_feat.shape)
+             
             path = '/'.join(self.data_root.split('/')[:-1])
             add = 'features_qt'
             add = 'fold'
@@ -128,43 +117,18 @@ class BaseDataset(Dataset):
                     )
             
             self.extracted_feat = data
-
-                #else:
-                #    path = self.data_root.replace('dataset.h5','')
-                ##    path_QT = f"{path}/features/fold_{self.seed}.joblib"
-                #    extracted_feat = h5_.get("{}_{}".format(self.feature_key,time_eval))[:]
-                #    
-                #    self.extracted_feat.update(
-                #        {
-                #            f'extracted_feat_{time_eval}': self.get_tabular_data(
-                #                extracted_feat, path_QT, f"features_{time_eval}"    
-                #            )
-                #        }
-                #)
-
-                #print(self.extracted_feat[f"features_{time_eval}"].shape)
-
     def get_tabular_data(self, tabular_data, path_QT, type_data):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")
         if self.use_QT:
             QT = load(path_QT)
           
-            #tabular_data = QT.transform(tabular_data)
-            if len(tabular_data.shape) > 2:
-                tabular_data = pd.DataFrame(tabular_data.squeeze(-1))
+             
+            if tabular_data.shape[-1]  ==  1:
+                tabular_data = tabular_data.squeeze(-1)
             else:
-                tabular_data = pd.DataFrame(tabular_data)
-           # isnan = tabular_data.isna()
-            #
+                tabular_data = tabular_data
+            
             tabular_data = QT.transform(tabular_data)
-                                # tabular_data = QT.transform(tabular_data.squeeze(-1))
-                                # tabular_data  = np.nan_to_num(tabular_data,nan = -9999)
-                                    # df = qt.transform(df.fillna(12345)) + 0.1
-            #tabular_data[isnan] = 0.0
-            #tabular_data = tabular_data.reshape(tabular_data.shape[0],tabular_data.shape[1])
-                              #feats = np.concatenate([feat for feat in collect_feats])
-            #print(tabular_data.shape)
-            #input()
             tabular_data = np.nan_to_num(tabular_data,-0.1)
 
             assert np.isnan(tabular_data).sum() == 0

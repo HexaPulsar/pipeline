@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
-from tqdm import tqdm 
+from tqdm import tqdm
 import glob
 
 from copy import deepcopy
@@ -19,7 +19,7 @@ from src.data.modules.LitData import LitData
 from src.layers.ClassifierBaseModel import ClassifierBaseModel
 
 
-class QuickLoader: 
+class QuickLoader:
     def __init__(self,
                  batch_size = 256,
                  experiment_type =  "LC",
@@ -68,39 +68,39 @@ class QuickLoader:
             'batch_size': batch_size,
         }
         pl_datal = LitData(**datamodule)
-         
+
         self.train = pl_datal.train_dataloader()
         self.validation = pl_datal.val_dataloader()
         self.test = pl_datal.test_dataloader()
- 
-    
+
+
 
 class Report:
     def __init__(
         self,
-        path_to_training_dir, 
-        path_to_dataset, 
-        model_class, model_type, 
+        path_to_training_dir,
+        path_to_dataset,
+        model_class, model_type,
         custom_parse_key_str,
-        taxonomy, 
-        seed, 
-        device, 
-        batch_size, 
-        load_checkpoint, 
+        taxonomy,
+        seed,
+        device,
+        batch_size,
+        load_checkpoint,
         **kwargs,
     ):
-        
+
         self.cfg = self._load_yaml_args(path_to_training_dir).ATATConfig
         self.taxonomy = taxonomy
-        self.path_to_dataset = path_to_dataset 
+        self.path_to_dataset = path_to_dataset
         self.device = device
-        self.load_checkpoint = load_checkpoint 
+        self.load_checkpoint = load_checkpoint
         self.seed = seed
         self.custom_parse_key_str = custom_parse_key_str
         self.model_type = model_type
         self.checkpoint_src = path_to_training_dir
         self.batch_size = batch_size
-        
+
     @staticmethod
     def _load_yaml_args(path_args):
         import yaml
@@ -112,16 +112,16 @@ class Report:
         return args
 
     def _init_dataloader(
-        self, path_to_dataset, 
-        set_type="test", 
-        seed=0,  
+        self, path_to_dataset,
+        set_type="test",
+        seed=0,
         sampler = None,
     ):
         from src.data.modules.LitData import LitData
         from collections import OrderedDict
         dataset_exclude_transform_keys ={
-            key: value 
-            for key, value in self.cfg.datamodule.dataset.items() 
+            key: value
+            for key, value in self.cfg.datamodule.dataset.items()
             if key not in ['transforms_1','transforms_2', 'data_root', 'batch_size']
         }
         modded_config = deepcopy(self.cfg)
@@ -144,7 +144,7 @@ class Report:
         elif set_type == "test":
             dataloader = pl_datal.test_dataloader()
         return dataloader
-    
+
     def _predict(self,dataloader, modality):
         target = None
         preds_out = None
@@ -152,7 +152,7 @@ class Report:
         for b1 in tqdm(dataloader):
             b1 = {key: value.to(device=self.device) for key, value in b1.items()}
             t = b1["labels"]
-            lc_emb = self.model(**b1)  # [:, 0, :]
+            lc_emb = self.model(**b1)[:, 0, :]
             if modality =='LC':
                 lc_emb = lc_emb["LC"]
             else:
@@ -176,7 +176,7 @@ class Report:
         for b1 in tqdm(dataloader):
             b1 = {key: value.to(device=self.device) for key, value in b1.items()}
             t = b1["labels"]
-            lc_emb = self.model.get_embeddings(**b1)  # [:, 0, :]
+            lc_emb = self.model.get_embeddings(**b1)[:, 0, :]
             if modality =='LC':
                 lc_emb = lc_emb["LC"]
             else:
@@ -195,28 +195,28 @@ class Report:
         return preds_out, target
 
 class ReportClassification(Report):
-    def __init__(self, 
-                 path_to_training_dir, 
-                 path_to_dataset, 
+    def __init__(self,
+                 path_to_training_dir,
+                 path_to_dataset,
                  taxonomy,
-                 model_class, 
-                 model_type, 
+                 model_class,
+                 model_type,
                  custom_parse_key_str,
-                 seed = 0, 
-                 device="cpu", 
-                 batch_size=128, 
-                 load_checkpoint=True, 
+                 seed = 0,
+                 device="cpu",
+                 batch_size=128,
+                 load_checkpoint=True,
                  **kwargs):
-        
-        super().__init__(path_to_training_dir, 
-                         path_to_dataset, 
-                         model_class, model_type, 
+
+        super().__init__(path_to_training_dir,
+                         path_to_dataset,
+                         model_class, model_type,
                          custom_parse_key_str,
-                         taxonomy, 
-                         seed, 
-                         device, 
-                         batch_size, 
-                         load_checkpoint, 
+                         taxonomy,
+                         seed,
+                         device,
+                         batch_size,
+                         load_checkpoint,
                          **kwargs)
         self.model = self._init_model(model_class)
         self.taxonomy = taxonomy
@@ -225,11 +225,11 @@ class ReportClassification(Report):
 
         model = model(**self.cfg.lc) if self.model_type =='lc' else model(**self.cfg.tab)
         classifier =  MultimodalClassifier(lc_input_size=self.cfg.lc.embedding_size,
-                                          tab_input_size=None, 
+                                          tab_input_size=None,
                                           use_lc= True,
                                           num_classes= self.cfg.num_classes)
         model = ClassifierBaseModel(model, classifier)
-        if self.checkpoint_src is not None or self.load_checkpoint: 
+        if self.checkpoint_src is not None or self.load_checkpoint:
             checkpoint_path_clip = glob.glob(f"{self.checkpoint_src}*classifier_ckpt*")
             print(checkpoint_path_clip)
             print('using checkpoint {}'.format(checkpoint_path_clip[-1].split('=')[-1]))
@@ -248,7 +248,7 @@ class ReportClassification(Report):
         else:
             print('NO CKPT LOADED')
         return model
-    
+
     def classification_report(self, dataset_type: str = 'validation', digits = 4, confusion_matrix = True, modality = 'LC'):
         from sklearn.metrics import classification_report
         dataloader = self._init_dataloader(
@@ -261,7 +261,7 @@ class ReportClassification(Report):
         if confusion_matrix:
             self.get_confusion_matrix(preds_out,target, dataset_type=dataset_type)
         return classification_report(target,preds_out, target_names=list(self.taxonomy().keys()),digits = digits, output_dict=True)
-    
+
 
     def get_confusion_matrix(self, preds,target,  dataset_type:str):
         from src.utils.plots.ATATConfusionMatrix import elasticc_confusion_matrix
@@ -275,19 +275,19 @@ class ReportClassification(Report):
                  'SLSN', # yes
                  'TDE', # yes
                  'Microlensing', # yes
-                 'QSO', 
+                 'QSO',
                  'AGN', # yes
-                 'Blazar', 
-                 'YSO', 
-                 'CV/Nova', 
-                 'LPV', 
-                 'EA', 
+                 'Blazar',
+                 'YSO',
+                 'CV/Nova',
+                 'LPV',
+                 'EA',
                  'EB/EW', # yes
-                 'Periodic-Other', 
-                 'RSCVn', 
-                 'CEP', 
-                 'RRLab', 
-                 'RRLc', 
+                 'Periodic-Other',
+                 'RSCVn',
+                 'CEP',
+                 'RRLab',
+                 'RRLc',
                  'DSCT']
         from sklearn.metrics import confusion_matrix
         import matplotlib.pyplot as plt
@@ -303,7 +303,7 @@ class ReportClassification(Report):
         decimals = 2
         im = ax.imshow(np.around(cm, decimals=decimals), interpolation='nearest', cmap=cmap)
         # color map
-        new_color = cmap(1.0) 
+        new_color = cmap(1.0)
 
         # Añadiendo manualmente las anotaciones con la media y desviación estándar
         for i in range(cm.shape[0]):
@@ -336,21 +336,21 @@ class ReportClassification(Report):
         #ax.xaxis.labelpad = 13
         #ax.yaxis.labelpad = 13
         return ax
-    
-    
+
+
 class ReportPretraining(Report):
-    
+
     def __init__(
-        self, 
-        path_to_training_dir, 
-        path_to_dataset, 
+        self,
+        path_to_training_dir,
+        path_to_dataset,
         taxonomy,
-        model_class, 
-        model_type, 
+        model_class,
+        model_type,
         custom_parse_key_str,
-        seed = 0, 
-        device="cpu", 
-        batch_size=128, 
+        seed = 0,
+        device="cpu",
+        batch_size=128,
         load_checkpoint = True,
         figsize = (20,20),
         umap_args={"n_neighbors": 15, "min_dist": 0.25, "metric": "euclidean"},
@@ -370,8 +370,8 @@ class ReportPretraining(Report):
         self.taxonomy = taxonomy
         self.figsize =figsize
         self.marker_size = marker_size
-        self.umap_args = umap_args 
-     
+        self.umap_args = umap_args
+
     def generate_umap_plots(self, set_type = 'validation'):
         import matplotlib.pyplot as plt
         dataloader = self._init_dataloader(
@@ -380,14 +380,14 @@ class ReportPretraining(Report):
         self.preds_out, self.target = self._predict(dataloader)
         #umap_result = self._umap(n_components=2, **self.umap_args)
         #self._2d_umap_plot(umap_result, self.target, "by_class", type_="by_class")
-        #plt.show() 
+        #plt.show()
         #self._2d_umap_plot(umap_result, self.target, "by_hierarchy", type_="by_hierarchy")
         #plt.show()
         umap_result = self._umap(n_components=3, **self.umap_args)
         self._3d_umap_plot(umap_result, self.target, "3d", type_="by_class")
         plt.show()
-        
- 
+
+
     def _umap(self, n_components, metric, min_dist, n_neighbors):
         import umap
         print(f"creating {n_components}D UMAP reduction for data...")
@@ -420,39 +420,39 @@ class ReportPretraining(Report):
         plot_umap_3d(ax, umap_result, target, len(self.taxonomy), "UMAP 3D Visualization",marker_size=self.marker_size)
         plt.savefig('{}/3d_umap_{}.pdf'.format(self.checkpoint_src,type_))
         return fig, ax
- 
+
 class ComparePerformance:
-    def __init__(self, 
+    def __init__(self,
                  path_1,
                  path_2,
-                 path_to_dataset, 
-                 model_class, 
-                 model_type,  
-                 custom_parse_key_str, 
-                 seed = 0, 
-                 device="cpu", 
-                 batch_size=128, 
+                 path_to_dataset,
+                 model_class,
+                 model_type,
+                 custom_parse_key_str,
+                 seed = 0,
+                 device="cpu",
+                 batch_size=128,
                  load_checkpoint=True ):
         self.taxonomy = None
-        self.model_1 = ReportClassification(path_1, 
-                                            path_to_dataset, 
-                                            model_class, 
-                                            model_type,  
-                                            custom_parse_key_str, 
-                                            seed = seed, 
-                                            device=device, 
-                                            batch_size=batch_size, 
+        self.model_1 = ReportClassification(path_1,
+                                            path_to_dataset,
+                                            model_class,
+                                            model_type,
+                                            custom_parse_key_str,
+                                            seed = seed,
+                                            device=device,
+                                            batch_size=batch_size,
                                             load_checkpoint=load_checkpoint )
-        self.model_2 = ReportClassification(path_2, 
-                                            path_to_dataset, 
-                                            model_class, 
-                                            model_type,  
-                                            custom_parse_key_str, 
-                                            seed = seed, 
-                                            device=device, 
-                                            batch_size=batch_size, 
+        self.model_2 = ReportClassification(path_2,
+                                            path_to_dataset,
+                                            model_class,
+                                            model_type,
+                                            custom_parse_key_str,
+                                            seed = seed,
+                                            device=device,
+                                            batch_size=batch_size,
                                             load_checkpoint=load_checkpoint )
-    
+
     def compare(self, dataset_type:str= 'validation', eval_time = 2048):
         from sklearn.metrics import classification_report
         dataloader = self._init_dataloader(
@@ -500,18 +500,18 @@ class ComparePerformance:
 
 
 class ReportMultimodal(Report):
-    
+
     def __init__(
-        self, 
-        path_to_training_dir, 
-        path_to_dataset, 
+        self,
+        path_to_training_dir,
+        path_to_dataset,
         taxonomy,
-        model_class, 
-        model_type, 
+        model_class,
+        model_type,
         custom_parse_key_str,
-        seed = 0, 
-        device="cpu", 
-        batch_size=128, 
+        seed = 0,
+        device="cpu",
+        batch_size=128,
         load_checkpoint = True,
         figsize = (20,20),
         umap_args={"n_neighbors": 15, "min_dist": 0.25, "metric": "euclidean"},
@@ -531,7 +531,7 @@ class ReportMultimodal(Report):
         self.taxonomy = taxonomy
         self.figsize =figsize
         self.marker_size = marker_size
-        self.umap_args = umap_args 
+        self.umap_args = umap_args
 
     def predict(self, set_type = 'validation', modality = "LC"):
         dataloader = self._init_dataloader(
@@ -551,7 +551,7 @@ class ReportMultimodal(Report):
         preds_out = (preds_out/preds_out.max())*1000
         mapper = umap.UMAP(**self.umap_args).fit(preds_out)
         return hover_data,target, mapper
-    
+
     def generate_umap_plots(self, set_type = 'validation'):
         import matplotlib.pyplot as plt
         dataloader = self._init_dataloader(
@@ -560,13 +560,13 @@ class ReportMultimodal(Report):
         self.preds_out, self.target = self._predict(dataloader)
         #umap_result = self._umap(n_components=2, **self.umap_args)
         #self._2d_umap_plot(umap_result, self.target, "by_class", type_="by_class")
-        #plt.show() 
+        #plt.show()
         #self._2d_umap_plot(umap_result, self.target, "by_hierarchy", type_="by_hierarchy")
         #plt.show()
         umap_result = self._umap(n_components=3, **self.umap_args)
         self._3d_umap_plot(umap_result, self.target, "3d", type_="by_class")
         plt.show()
-        
+
 
     def _init_model(self,model ):
         from torch import device, load
@@ -590,7 +590,7 @@ class ReportMultimodal(Report):
         else:
             print('NO CKPT LOADED')
         return model
-    
+
     def _umap(self, n_components, metric, min_dist, n_neighbors):
         import umap
         print(f"creating {n_components}D UMAP reduction for data...")
@@ -629,7 +629,7 @@ class ReportMultimodal(Report):
         train_dataloader = self._init_dataloader(
             path_to_dataset=self.path_to_dataset, set_type="train", seed=self.seed
         )
-        
+
         val_dataloader = self._init_dataloader(
             path_to_dataset=self.path_to_dataset, set_type="validation", seed=self.seed
         )
@@ -639,7 +639,7 @@ class ReportMultimodal(Report):
         KNNClassifier(self._predict(train_dataloader),
                       self._predict(val_dataloader),
                       self._predict(test_dataloader), plot_cm=True)
-        
+
 
 
 

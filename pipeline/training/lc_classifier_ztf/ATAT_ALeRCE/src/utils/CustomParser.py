@@ -31,6 +31,8 @@ class BaseDatasetArgs:
     mask_detection_key:str = 'mask_detection'
     feature_key:str  = 'feat_cols'
     metadata_key:str = 'metadata_feat'
+    metadata_qt_path = ''
+    feature_qt_path = ''
     label_key:str= 'labels'
 
 @dataclass
@@ -71,6 +73,7 @@ class TabularArgs:
     dropout: float = 0.01
     checkpoint: Optional[str] = None
     freeze_weights:bool = False
+    sequence_norm:bool = True
 
 @dataclass
 class LightcurveArgs:
@@ -86,6 +89,19 @@ class LightcurveArgs:
     dropout: float = 0.01
     checkpoint: Optional[str] = None
     freeze_weights:bool = False
+    metadata_num_features:int = 6
+    features_num_features:int = 181
+    use_velocity:bool = False 
+    use_acceleration:bool = False 
+    use_stats :bool= False 
+    use_metadata:bool =False
+    use_features:bool =False
+    use_sequence_norm:bool = False
+    use_timefilm_gelu:bool = False
+    use_timefilm_norm: bool= False
+    use_exp:bool = False
+    use_conv:bool = False
+    use_tabular_transformer:bool = False
 
 @dataclass
 class VICRegArgs:
@@ -98,6 +114,7 @@ class VICRegArgs:
 class ATATConfig:
     experiment_type: str
     experiment_name: str
+    online_transforms: Optional[list] 
     lc: Optional[LightcurveArgs]
     tab: Optional[TabularArgs]
     datamodule: DataModuleArgs

@@ -42,11 +42,13 @@ class LitPretrain(pl.LightningDataModule):
             samples_weight = np.array([d[labels[i].item()] for i in range(len(labels))])
             samples_weight = torch.from_numpy(samples_weight)
             return samples_weight
-    def train_dataloader(self):
+    def train_dataloader(self): 
+
         if isinstance(self.dataset.data_root, str):
             dataset_used = SSLDataset(set_type="train", **self.dataset)
         else:
             datasets = []
+            
             for i in range(len(self.dataset.data_root)):
                 dataset_config = {key:value for key,value in self.dataset.items() if key != 'data_root'}
                 datasets.append(SSLDataset(set_type='train',data_root = self.dataset.data_root[i], **dataset_config))

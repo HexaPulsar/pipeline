@@ -150,7 +150,37 @@ class WindowSelect:
                     sample["time"][end:,i] = 0
                     sample['data'] = torch.roll(sample['data'], shifts=(-start,), dims = 1)
                     sample['time'] = torch.roll(sample['time'], shifts=(-start,), dims = 1)
-                    sample['mask'] = sample['data'] != 0
+                    sample['mask'] = (sample['data'] != 0).bool()
+
+class BlockWindow:
+    def __init__(self,num_bands:int,window_size:int,apply_to_classes=None):
+        self.num_bands = num_bands
+        self.window_size = window_size
+        self.apply_to_classes = apply_to_classes
+
+    def __call__(self,sample:dict): 
+        if self.apply_to_classes is None:
+            self.window_select(sample)
+        else:
+            self.window_select(sample)
+        return sample
+    
+    def window_select(self,  sample):
+        for i in range(self.num_bands):
+            nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
+            intersection_check = nonzero_measures - self.window_size
+            if  torch.count_nonzero((sample['data'][:,i])<= self.window_size):
+                continue
+            else:
+                if intersection_check == 0:
+                    start = 0
+                else:
+                    start = torch.randint(0,intersection_check ,size = (1,)) 
+                end = start + self.window_size
+                
+                sample['data'][start:end, i] =0
+                sample['time'][start:end, i] =0
+                sample['mask'] = (sample['data'] == 0).bool()
     
 import torch
 

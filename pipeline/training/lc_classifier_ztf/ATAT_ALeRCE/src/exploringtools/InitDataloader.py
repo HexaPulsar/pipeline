@@ -15,10 +15,7 @@ class InitDataLoader:
         datamodule_args_copy['batch_size'] = update_batch_size
         self.datamodule = datamodule_args_copy
         self.pl_datal = LitData(**self.datamodule)
-         
-        self.train_dataset = self.pl_datal.train_dataloader()
-        self.validation_dataset = self.pl_datal.val_dataloader()
-        self.test_dataset = self.pl_datal.test_dataloader()
+          
 
     def set_sampler(self,use_sampler:bool = False):
         if use_sampler:
@@ -30,4 +27,9 @@ class InitDataLoader:
             self.datamodule['train_use_sampler']  = False
             self.pl_datal =  LitData(**self.datamodule)
             self.train = self.pl_datal.train_dataloader()
-
+    def init_train_dataset(self):
+        self.train_dataset = self.pl_datal.train_dataloader()
+    def init_validation_dataset(self):
+        self.validation_dataset = self.pl_datal.val_dataloader()
+    def init_test_dataset(self):
+        self.test_dataset = self.pl_datal.test_dataloader()

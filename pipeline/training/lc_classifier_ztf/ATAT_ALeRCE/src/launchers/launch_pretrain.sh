@@ -1,12 +1,17 @@
+#!/bin/bash
+#!/bin/bash
+
 cd ../../
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=0,1,2,3,
 
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
-export EXPERIMENT_NAME='multiview_v1'
-export EXPERIMENT_OUTPUT_PATH="./results/200/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export EXPERIMENT_NAME='FINAL_v16'
+export EXPERIMENT_OUTPUT_PATH="./results/PRETRAIN/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipealine/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
+
+VERSION=0
 
 # Ensure directories exist
 mkdir -p "$EXPERIMENT_OUTPUT_PATH"
@@ -21,6 +26,30 @@ python SSL_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
   ++ATATConfig.datamodule.dataset.experiment_type=$EXPERIMENT_TYPE\
   ++ATATConfig.loggers.tensorboard.save_dir=$EXPERIMENT_OUTPUT_PATH\
   ++ATATConfig.loggers.csv.save_dir=$EXPERIMENT_OUTPUT_PATH\
-  ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH
+  ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.lc.use_acceleration=True\
+  ++ATATConfig.lc.use_velocity=True\
+  ++ATATConfig.lc.use_stats=False\
+  ++ATATConfig.lc.use_metadata=False\
+  ++ATATConfig.lc.use_features=False\
+  ++ATATConfig.lc.use_sequence_norm=True\
+  ++ATATConfig.lc.use_timefilm_norm=True\
+  ++ATATConfig.lc.use_exp=True\
+  ++ATATConfig.lc.use_conv=True\
+    ++ATATConfig.online_transforms.use_window_select=True\
+    ++ATATConfig.online_transforms.use_max_window_select=True\
+    ++ATATConfig.online_transforms.use_time_gauss_factor=True\
+      ++ATATConfig.online_transforms.use_gauss_factor=True\
+      ++ATATConfig.online_transforms.use_simple_time_factor=True\
+      ++ATATConfig.online_transforms.use_simple_data_factor=True\
+      ++ATATConfig.online_transforms.use_band_permute=True\
+      ++ATATConfig.online_transforms.use_roll=True\
+      ++ATATConfig.online_transforms.use_gauss_noise=False\
+      ++ATATConfig.online_transforms.p_=1\
+      ++ATATConfig.lc.dropout=0.01\
+          ++ATATConfig.learning_rate=1e-5\
+          ++ATATConfig.loggers.tensorboard.version=$VERSION\
+          ++ATATConfig.loggers.csv.version=$VERSION
+
   #++ATATConfig.trainer.val_check_interval=0.2
 

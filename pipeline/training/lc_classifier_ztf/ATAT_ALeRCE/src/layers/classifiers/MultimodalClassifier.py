@@ -4,22 +4,18 @@ import torch.nn
 
 
 class TokenClassifier(nn.Module):
-    def __init__(self, embedding_size, 
-                 inner_size,num_classes,
+    def __init__(self, embedding_size,num_classes,
                   dropout = 0.01, **kwargs):
         super().__init__()
         self.num_classes = num_classes
-        
-        self.output_layer =  nn.Sequential(nn.LayerNorm(embedding_size),
-                                        nn.Linear(embedding_size, inner_size, bias = False),
-                                        nn.Dropout(dropout),
-                                        nn.LayerNorm(inner_size),
-                                        nn.GELU(),
-                                     nn.Linear(inner_size,num_classes, bias=False),
-                                     #nn.Softmax(dim= -1)
+
+        self.output_layer =  nn.Sequential(nn.Dropout(dropout),
+                                        nn.LayerNorm(embedding_size),
+                                     nn.Linear(embedding_size,num_classes, bias=True),
+
                                      )
     def forward(self, x):
-        
+
         return self.output_layer(x)
 
 
@@ -28,8 +24,7 @@ class MultimodalClassifier(nn.Module):
                  experiment_type = str,
                  lc_input_size = None,
                  tab_input_size = None,
-                 inner_size = 32,
-                 use_lc = False, 
+                 use_lc = False,
                  use_tab = False,
                  use_mix = False,
                  num_classes = None,
@@ -48,49 +43,54 @@ class MultimodalClassifier(nn.Module):
         self.modalities+= ['TAB'] if 'MD' in parse_exp_type or 'FEAT' in parse_exp_type else []
         self.modalities+= ['MIX'] if ('MD' in parse_exp_type or 'FEAT' in parse_exp_type) and ('LC' in parse_exp_type) else []
         self.combine_logits = combine_logits
-        
-        if use_lc:
-            self.token_lc =  TokenClassifier(lc_input_size,inner_size,num_classes, dropout ) # Hier(lc_input_size, 22, 3) #
-        if use_tab:
-            self.token_tab = TokenClassifier(tab_input_size,inner_size,num_classes, dropout )
-        if use_mix:
-            combined = lc_input_size + tab_input_size
-            #self.net = nn.Sequential(nn.LayerNorm(combined),
-            #                         nn.Linear(combined, inner_size),
-            ##                            nn.Dropout(dropout),
-             #                           nn.LayerNorm(inner_size),
-             #                           nn.GELU(),  
-             #                        nn.Linear(inner_size,num_classes),
-                                     #nn.Softmax(dim =-1)
-             #                        )
-        #self.register_parameter('temp',nn.Parameter(torch.log(torch.tensor(1/0.07))))
         if self.combine_logits:
-            assert all([self.combine_logits, self.use_mix,self.use_lc, self.use_tab]), 'to combine logits use all modalities'
+            self.logit = nn.Softmax(dim= -1)
+
+        if use_lc:
+            self.token_lc =  TokenClassifier(lc_input_size,num_classes, dropout ) # Hier(lc_input_size, 22, 3) #
+        elif use_tab:
+            self.token_tab = TokenClassifier(tab_input_size,num_classes, dropout )
+        #elif self.combine_logits:
+         #   assert all([self.combine_logits, self.use_mix,self.use_lc, self.use_tab]), 'to combine logits use all modalities'
+        else:
+            self.mixed_classifier = TokenClassifier(lc_input_size + tab_input_size,num_classes, dropout)
     def forward(self,emb_dict):
-        #self.temp.data = torch.clamp(self.temp.data,0,4.605) 
-       # self.logit_scale.data = torch.clamp(self.logit_scale.data,0,4.605) 
         out_dict= {}
-        if all([self.use_lc, not self.use_tab, not self.use_mix]):
-            lc_class = self.token_lc(emb_dict)# / self.logit_scale
-            out_dict.update({'LC':lc_class})
 
-        if all([not self.use_lc, self.use_tab, not self.use_mix]):
-            tab_class = self.token_tab(emb_dict)# / self.logit_scale
-            out_dict.update({'TAB':tab_class})
-
-        if self.use_mix:
-            #mix_class = self.net(emb_dict['MIX']) #/ self.logit_scale
-            
+        if isinstance(emb_dict,dict):
             if all([self.combine_logits,self.use_lc, self.use_tab]):
                 lc_class = self.token_lc(emb_dict['LC'])# / self.logit_scale
                 #out_dict.update({'LC':lc_class})
                 tab_class =  self.token_tab(emb_dict['TAB']) # / self.logit_scale
                 #out_dict.update({'TAB':tab_class})
 
-                out_dict.update({'MIX': lc_class + tab_class})
+                out_dict.update({'MIX': lc_class[:,0,:] + tab_class[:,0,:] })
             else:
-                pass
-                #out_dict.update({'MIX':mix_class})
+                emb = torch.concat([emb_dict['LC'][:,0,:] , emb_dict['TAB'][:,0,:] ], dim = -1)
+                out_dict.update({'MIX': self.mixed_classifier(emb)})
+        else:
+            emb_dict = emb_dict[:,0,:]
+            #self.temp.data = torch.clamp(self.temp.data,0,4.605)
+        # self.logit_scale.data = torch.clamp(self.logit_scale.data,0,4.605)
+            if all([self.use_lc, not self.use_tab, not self.use_mix]):
+                lc_class = self.token_lc(emb_dict)# / self.logit_scale
+                out_dict.update({'LC':lc_class})
+
+            if all([not self.use_lc, self.use_tab, not self.use_mix]):
+                tab_class = self.token_tab(emb_dict)# / self.logit_scale
+                out_dict.update({'TAB':tab_class})
+
+            if self.use_mix:
+                #mix_class = self.net(emb_dict['MIX']) #/ self.logit_scale
+
+                if all([self.combine_logits,self.use_lc, self.use_tab]):
+                    lc_class = self.token_lc(emb_dict['LC'])# / self.logit_scale
+                    #out_dict.update({'LC':lc_class})
+                    tab_class =  self.token_tab(emb_dict['TAB']) # / self.logit_scale
+                    #out_dict.update({'TAB':tab_class})
+
+                    out_dict.update({'MIX': lc_class + tab_class})
+                else:
+                    out_dict.update({'MIX': self.mixed_classifier(emb_dict['MIX'])})
         return out_dict
-       
-    
+

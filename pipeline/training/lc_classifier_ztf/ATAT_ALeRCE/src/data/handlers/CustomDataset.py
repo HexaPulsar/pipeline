@@ -67,17 +67,18 @@ class ATATDataset(BaseDataset):
             data_dict.update({"data_err":torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
 
         #if self.use_metadata:
-        data_dict.update({"metadata":self.metadata_feat[_idx]})
+        md =self.metadata_feat[_idx,:].squeeze(-1)
+        md[torch.isnan(md)] = -1e9
+        
 
-        if self.use_features:
-            data_dict.update({'coordinates':self.extracted_feat[_idx][-3:]})
-            data_dict.update({'allwise':self.extracted_feat[_idx][-12:-5]})
-            data_dict.update({'timespan':self.extracted_feat[_idx][-4]})
-
-            #data_dict.update(
-            #    {"extracted_feat": self.extracted_feat[_idx]}
-            #)
-            
+        
+        ft = self.extracted_feat[_idx,:].squeeze(-1)
+        ft[torch.isnan(ft)] = -1e9
+        
+        data_dict["metadata"] =md
+        data_dict["features"] =ft
+        data_dict["tabular_feat"] = torch.cat([md,ft], axis=-1)
+        
 
         if all([self.set_type == 'train',self.train_transforms is not None]):
             data_dict = self.train_transforms(data_dict)

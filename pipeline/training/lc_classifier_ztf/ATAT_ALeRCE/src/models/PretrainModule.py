@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch
 from typing import Dict, Optional, Literal
-import pytorch_lightning as pl  
+import pytorch_lightning as pl
 from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR, LinearLR, ExponentialLR
 import logging
 from sklearn.metrics.pairwise import cosine_similarity
@@ -27,7 +27,7 @@ class PretrainModule(pl.LightningModule):
         Args:
             model (_type_): _description_
             loss (_type_): _description_
-           
+
         """
         super().__init__()
         self.gradients_ = None
@@ -49,18 +49,23 @@ class PretrainModule(pl.LightningModule):
                 nn.init.kaiming_uniform_(p)
 
     def training_step(self, batch, batch_idx):
-        loss_dict = self.loss(self.model(**batch[0]), 
-                              self.model(**batch[1]))
+
+        loss_dict = self.loss(self.model(**batch[0])[:,0,:],
+                              self.model(**batch[1])[:,0,:])
+
         with torch.no_grad():
             for key,value in loss_dict.items():
                 if 'emb_corr' in key:
                     self.logger.experiment.add_histogram(key, value,self.global_step)
+                elif 'mean_' in key:
+                    self.logger.experiment.add_histogram(key, value,self.global_step)
+
                 elif 'percent' in key:
                     self.log(f'{key}', value ,on_epoch=False,on_step=True, sync_dist=True)
                 else:
                     self.log(f'loss_train/{key}', value ,on_epoch=False,on_step=True, sync_dist=True)
 
-        self.log(f'Tmax_0',self.model.time_encoder.time_encoders[0].Tmax,on_step = True, sync_dist=True)
+        #self.log(f'Tmax_0',self.model.time_encoder.time_encoders[0].Tmax,on_step = True, sync_dist=True)
         return loss_dict['loss']
     '''
     def on_validation_epoch_start(self, dataloader_idx):
@@ -76,14 +81,14 @@ class PretrainModule(pl.LightningModule):
     '''
     def validation_step(self, batch, batch_idx):
         #if dataloader_idx == 0:
-        loss_dict = self.loss(self.model(**batch[0]), 
-                            self.model(**batch[1]))
+        loss_dict = self.loss(self.model(**batch[0])[:,0,:],
+                            self.model(**batch[1])[:,0,:])
         with torch.no_grad():
             for key,value in loss_dict.items():
                     if 'emb_corr' not in key:
                         self.log(f'loss_validation/{key}', value ,on_epoch=True,on_step=False, add_dataloader_idx=False)
         return loss_dict['loss']
-        '''
+        '''x
         elif dataloader_idx == 1:
             labels = batch.pop('labels')
             embs = self.model(**batch)
@@ -114,9 +119,9 @@ class PretrainModule(pl.LightningModule):
             )
             return 0
         '''
-    '''      
+    '''
     def on_validation_epoch_end(self, dataloader_idx):
-         
+
         for dataloader_idx in range(3):
             if dataloader_idx == 2:
                 taxonomy = ZTF_TAXONOMY()
@@ -138,7 +143,7 @@ class PretrainModule(pl.LightningModule):
                         self.log(f'LRegressor/{key}', value ,on_epoch=True,on_step=False, add_dataloader_idx=False, sync_dist=True)
                     self.log(f'LRegressor/accuracy', np.round(lr_report['accuracy'],4) ,on_epoch=True,on_step=False, add_dataloader_idx=False, sync_dist=True)
                     del lr_report
-                if self.eval_knn:        
+                if self.eval_knn:
                     knn_report = classification_report(
                         self.collect_val_labels,
                         self.get_knn_eval(),
@@ -160,29 +165,31 @@ class PretrainModule(pl.LightningModule):
                # self.logger.experiment.add_text(to_print, self.current_epoch)
                # self.logger.experiment.add_scalars(main_tag="PerClassF1",
                #                                    tag_scalar_dict=scalars,
-               #                                    global_step = self.current_epoch, 
+               #                                    global_step = self.current_epoch,
                #                                    sync_dist = True)
-        
+
         return super().on_validation_epoch_end()
     '''
     def test_step(self, batch, batch_idx):
         return 0
-    
+
     def configure_optimizers(self):
-        warmup = 10000
-        #optimizer = optim.AdamW(self.parameters(), lr=self.lr)
-        #cosine = CosineAnnealingWarmRestarts(optimizer, T_0=100, eta_min=1e-8)
+        self.warmup = 100
         optimizer = Lion(self.parameters(), lr=self.lr, weight_decay=1e-2)
-        constant = ConstantLR(optimizer,1)  
-        w = LinearLR(optimizer, start_factor=1e-12, total_iters=warmup)
-        e = ExponentialLR(optimizer, gamma=0.9999)
+
+        constant = ConstantLR(optimizer,1)
+        #cosine = CosineAnnealingWarmRestarts(optimizer,T_0=100,eta_min=1e-6)
+        linear = LinearLR(optimizer, start_factor=1e-2, total_iters=self.warmup)
+        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=self.warmup,eta_min=1e-5)
+
         scheduler = SequentialLR(
                     optimizer,
                     schedulers=[constant,constant],
-                    milestones=[warmup]
+                    milestones=[self.warmup]
                 )
+
         return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
-    
+
     def get_real_classes_weights(self,labels):
 
         class_sample_count = np.array(
@@ -199,11 +206,11 @@ class PretrainModule(pl.LightningModule):
         samples_weight = torch.from_numpy(samples_weight)
         return samples_weight
 
-    
+
     def get_regressor_eval(self,):
         weights = self.get_real_classes_weights(torch.tensor(self.collect_train_labels))
         weights_dict = {float(i):  weights[i] for i in range(len(weights))}
-        
+
         std_pipeline = Pipeline([
         ('scaler', StandardScaler()),  # z = (x - mean) / std
         ('model', LogisticRegression(random_state=0, max_iter = 1000, multi_class = 'ovr', class_weight=weights_dict))
@@ -211,7 +218,7 @@ class PretrainModule(pl.LightningModule):
         std_pipeline.fit(self.collect_train_embs,self.collect_train_labels)
         val_preds = std_pipeline.predict(self.collect_val_embs)
         return val_preds
-    
+
     def get_knn_eval(self):
         knn_pipeline = Pipeline([
         ('scaler', StandardScaler()),  # z = (x - mean) / std

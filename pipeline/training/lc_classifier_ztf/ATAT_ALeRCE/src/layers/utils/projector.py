@@ -13,30 +13,33 @@ class VICRegProjector(nn.Module):
             self.projection_y = nn.Sequential()
         else:
             layers = []
-           
             f = list(map(int, shape_projector_1.split("-")))
-            #if len(f) == 2:
-            #    layers.append(nn.LayerNorm(f[-2]))
+            layers.append(nn.LayerNorm(f[-2]))#
+
+            if len(f) == 2:
+                layers.append(nn.LayerNorm(f[-2]))
             for i in range(len(f) - 2):
                 layers.append(nn.Linear(f[i], f[i + 1]))
-                layers.append(nn.BatchNorm1d(f[i + 1]))
+                layers.append(nn.LayerNorm(f[i + 1]))
                 layers.append(nn.GELU())
+            if len(f) == 2:
+                layers.append(nn.LayerNorm(f[-2]))
             layers.append(nn.Linear(f[-2], f[-1], bias=False))
-            
+
             self.projection_x = nn.Sequential(*layers)
             layers = []
-           # f = list(map(int, shape_projector_2.split("-")))
-           # if len(f) == 2:
-           #     layers.append(nn.BatchNorm1d(f[-2]))
+            f = list(map(int, shape_projector_2.split("-")))
+            layers.append(nn.LayerNorm(f[-2]))#
             for i in range(len(f) - 2):
                 layers.append(nn.Linear(f[i], f[i + 1]))
-                layers.append(nn.BatchNorm1d(f[i + 1]))
+                layers.append(nn.LayerNorm(f[i + 1]))
                 layers.append(nn.GELU())
-            
+            if len(f) == 2:
+                layers.append(nn.LayerNorm(f[-2]))
             layers.append(nn.Linear(f[-2], f[-1], bias=False))
             self.projection_y = nn.Sequential(*layers)
         self.vicreg = vicreg
-        
+
     def forward(self, emb_x,emb_y):
         return self.vicreg(self.projection_x(emb_x),self.projection_y(emb_y))
 

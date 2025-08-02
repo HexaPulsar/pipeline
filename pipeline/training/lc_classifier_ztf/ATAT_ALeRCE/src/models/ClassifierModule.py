@@ -36,7 +36,8 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
  
 import pandas as pd
-
+ 
+    
 class ClassifierModule(pl.LightningModule):
     def __init__(self,model,classifier, loss,
                  experiment_type:str, 
@@ -68,45 +69,64 @@ class ClassifierModule(pl.LightningModule):
         
         self.init_metrics(report_lc, report_tab, report_mix) 
 
+        """
+        _ckpt = glob.glob(lc_load_ckpt+ "*.ckpt")[-1]
+        
+        checkpoint_ = torch.load(_ckpt)
+        weights = OrderedDict()
+        for key in checkpoint_["state_dict"].keys():
+            if 'loss' in key:
+                continue
+            elif 'lc' in key:
+                #print(key)
+                weights[key.replace(f'{weight_str_parse_lc[0]}', f"{weight_str_parse_lc[1]}")] = checkpoint_["state_dict"][key] 
+            elif 'tab' in key:
+                weights[key.replace(f'{weight_str_parse_tab[0]}', f"{weight_str_parse_tab[1]}")] = checkpoint_["state_dict"][key] 
+
+        self.model.load_state_dict(weights, strict=True)
+        print(f"loaded checkpoint {_ckpt}".format(_ckpt))
+        """
+
+
         if lc_load_ckpt is not None:
+            _ckpt = glob.glob(lc_load_ckpt+ "*.ckpt")[-1]
+            checkpoint_ = torch.load(_ckpt)
+            weights = OrderedDict()
+
+            for key in checkpoint_["state_dict"].keys():
+                if 'loss' in key:
+
+                    continue
+                elif 'model' in key:
+                    weights[key.replace(f'{weight_str_parse_lc[0]}', f"{weight_str_parse_lc[1]}")] = checkpoint_["state_dict"][key] 
+            self.model.load_state_dict(weights, strict=True)
+            print(f"loaded LC checkpoint {_ckpt}".format(_ckpt))
+        if freeze_lc:
+            for name,param in self.model.named_parameters():
+                    param.requires_grad = False
+            
+
+        if tab_load_ckpt is not None:
+             
             _ckpt = glob.glob(lc_load_ckpt+ "*.ckpt")[-1]
             checkpoint_ = torch.load(_ckpt)
             weights = OrderedDict()
             for key in checkpoint_["state_dict"].keys():
                 if 'loss' in key:
                     continue
-                if 'tab' in key:
-                    continue
-                else:
-                    #print(key)
-                    weights[key.replace(f'{weight_str_parse_lc[0]}', f"{weight_str_parse_lc[1]}")] = checkpoint_["state_dict"][key]
-
-            #self.model.transformer_lc.load_state_dict(weights, strict=True)
-            self.model.load_state_dict(weights, strict=True)
-            print(f"loaded LC checkpoint {_ckpt}".format(_ckpt))
-        if freeze_lc:
-            for name,param in self.model.transformer_lc.named_parameters():
-                    param.requires_grad = False
-            
-
-        if tab_load_ckpt is not None:
-            print("LOADING CKPT!!!")
-            _ckpt = glob.glob(tab_load_ckpt+ "*.ckpt")
-            checkpoint_ = torch.load(_ckpt[-1])
-            weights = OrderedDict()
-            for key in checkpoint_["state_dict"].keys():
-                if 'loss' in key:
-                    continue
-                if 'lc' in key:
-                    continue
-                else:
-                    #print(key)
-                    weights[key.replace(f'{weight_str_parse_tab}', "")] = checkpoint_["state_dict"][key]
+                elif 'tab' in key:
+             
+                    weights[key.replace(f'{weight_str_parse_tab[0]}', f"{weight_str_parse_tab[1]}")] = checkpoint_["state_dict"][key]
             self.model.transformer_tab.load_state_dict(weights, strict=True)
+            print(f"loaded TAB checkpoint {_ckpt}".format(_ckpt))
+
+
         if freeze_tab:
             for name,param in self.model.transformer_tab.named_parameters():
                 param.requires_grad = False
-            print("loaded TAB checkpoint")
+                print(f"loaded TAB checkpoint {_ckpt}".format(_ckpt))
+         
+
             
         
     def init_model(self):
@@ -117,19 +137,18 @@ class ClassifierModule(pl.LightningModule):
                 #        nn.init.uniform_(p,0,1)
      
     def training_step(self, batch_data, batch_idx):
+
         labels = batch_data.pop('labels')
         embs = self.model(**batch_data) 
         preds = self.classifier(embs)
         loss = 0
+        
 
         if 'LC' in preds.keys():
-            partial_loss = self.loss(preds['LC'],  labels.long())
+            partial_loss = self.loss(preds['LC'],  labels.long())# + self.triplet_loss(embs, labels.long())
             loss+=partial_loss
             self.LC_train_metrics(preds['LC'], labels.long())
-           # hier_map_preds = self.map_label_tensor(torch.argmax(preds['LC'],dim = -1))
-           # hier_map_labels = self.map_label_tensor(labels.long())
-            #self.f1_hier_macro_val(hier_map_preds, hier_map_labels)
-           # self.log('training/f1_score_harmonic',2 / (self.LC_train_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_train(hier_map_preds, hier_map_labels)**-1), on_step=True, sync_dist=True)
+
             self.log_dict(self.LC_train_metrics, on_step=False, on_epoch=True)
             self.log(f"loss_train/lc",partial_loss,on_step=False, on_epoch=True, sync_dist=True)
             
@@ -174,10 +193,10 @@ class ClassifierModule(pl.LightningModule):
         
         
         if 'LC' in preds.keys():
-            partial_loss = self.loss(preds['LC'],  labels.long())
+            partial_loss = self.loss(preds['LC'],  labels.long()) #+ self.triplet_loss(embs, labels.long())
             loss+=partial_loss
             self.LC_valid_metrics(preds['LC'], labels.long())
-            self.log_dict(self.LC_valid_metrics, on_step=False, on_epoch=True)
+            self.log_dict(self.LC_valid_metrics, on_step=False, on_epoch=True, prog_bar=True)
             self.validation_cm(preds['LC'],labels.long())
             #print(torch.argmax(preds['LC'],dim = -1).shape)
            # hier_map_preds = self.map_label_tensor(torch.argmax(preds['LC'],dim = -1))
@@ -190,6 +209,30 @@ class ClassifierModule(pl.LightningModule):
            # df.query('labels_hier == 0')
             self.log(f"loss_validation/lc",partial_loss,on_step=False, on_epoch=True, sync_dist=True)
 
+            df = pd.DataFrame({'true':labels.clone().long().detach().cpu().numpy(), 'pred':np.argmax(preds['LC'].clone().detach().cpu().numpy(), axis = -1)})
+
+            transient_dict = ZTF_TAXONOMY.transient.group
+            transients = df.query('true in {}'.format(list(transient_dict.values())))
+            
+
+            ##
+            stochastic_dict = ZTF_TAXONOMY.stochastic.group
+            stochastics = df.query('true in {}'.format(list(stochastic_dict.values())))
+            
+            ####
+            periodic_dict = ZTF_TAXONOMY.periodic.group
+            periodics = df.query('true in {}'.format(list(periodic_dict.values())))
+            
+            mean_f1 = sum([classification_report(transients['true'], transients['pred'],target_names= list(ZTF_TAXONOMY.transient.group.keys()),labels = list(ZTF_TAXONOMY.transient.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],
+            classification_report(stochastics['true'], stochastics['pred'],target_names= list(ZTF_TAXONOMY.stochastic.group.keys()),labels = list(ZTF_TAXONOMY.stochastic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],
+            classification_report(periodics['true'], periodics['pred'],target_names= list(ZTF_TAXONOMY.periodic.group.keys()),labels = list(ZTF_TAXONOMY.periodic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score']])/3
+            
+            self.log(f"validation/hier_mean_f1",mean_f1,on_step=False, on_epoch=True, sync_dist=True)
+            
+            self.log(f"validation/transient",classification_report(transients['true'], transients['pred'],target_names= list(ZTF_TAXONOMY.transient.group.keys()),labels = list(ZTF_TAXONOMY.transient.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],on_step=False, on_epoch=True, sync_dist=True)
+            self.log(f"validation/stochastic",classification_report(stochastics['true'], stochastics['pred'],target_names= list(ZTF_TAXONOMY.stochastic.group.keys()),labels = list(ZTF_TAXONOMY.stochastic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],on_step=False, on_epoch=True, sync_dist=True)
+            self.log(f"validation/periodic",classification_report(periodics['true'], periodics['pred'],target_names= list(ZTF_TAXONOMY.periodic.group.keys()),labels = list(ZTF_TAXONOMY.periodic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],on_step=False, on_epoch=True, sync_dist=True)
+            
             #self.log('validation/f1_score_harmonic',2 / (self.LC_valid_metrics['f1_macro'].compute()**-1 + self.f1_hier_macro_val(hier_map_preds, hier_map_labels)**-1), on_step=False, on_epoch=True, sync_dist=True)
             #self.log('validation/f1_hier_macro',self.f1_hier_macro_val(hier_map_preds, hier_map_labels), on_step=False, on_epoch=True)
            #self.log(, on_step=False, on_epoch=True)
@@ -217,14 +260,37 @@ class ClassifierModule(pl.LightningModule):
             self.validation_cm(preds['MIX'],labels.long())
             self.log(f"loss_validation/mix",partial_loss,on_step=False, on_epoch=True, sync_dist=True)
             self.log(f"validation_pr_diff",(self.MIX_valid_metrics['precision'].compute() -self.MIX_valid_metrics['recall'].compute() ),on_step=False, on_epoch=True, sync_dist=True)
-        
+            df = pd.DataFrame({'true':labels.clone().long().detach().cpu().numpy(), 'pred':np.argmax(preds['MIX'].clone().detach().cpu().numpy(), axis = -1)})
+
+            transient_dict = ZTF_TAXONOMY.transient.group
+            transients = df.query('true in {}'.format(list(transient_dict.values())))
+            
+
+            ##
+            stochastic_dict = ZTF_TAXONOMY.stochastic.group
+            stochastics = df.query('true in {}'.format(list(stochastic_dict.values())))
+            
+            ####
+            periodic_dict = ZTF_TAXONOMY.periodic.group
+            periodics = df.query('true in {}'.format(list(periodic_dict.values())))
+            
+            mean_f1 = sum([classification_report(transients['true'], transients['pred'],target_names= list(ZTF_TAXONOMY.transient.group.keys()),labels = list(ZTF_TAXONOMY.transient.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],
+            classification_report(stochastics['true'], stochastics['pred'],target_names= list(ZTF_TAXONOMY.stochastic.group.keys()),labels = list(ZTF_TAXONOMY.stochastic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],
+            classification_report(periodics['true'], periodics['pred'],target_names= list(ZTF_TAXONOMY.periodic.group.keys()),labels = list(ZTF_TAXONOMY.periodic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score']])/3
+            
+            self.log(f"validation/hier_mean_f1",mean_f1,on_step=False, on_epoch=True, sync_dist=True)
+            
+            self.log(f"validation/transient",classification_report(transients['true'], transients['pred'],target_names= list(ZTF_TAXONOMY.transient.group.keys()),labels = list(ZTF_TAXONOMY.transient.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],on_step=False, on_epoch=True, sync_dist=True)
+            self.log(f"validation/stochastic",classification_report(stochastics['true'], stochastics['pred'],target_names= list(ZTF_TAXONOMY.stochastic.group.keys()),labels = list(ZTF_TAXONOMY.stochastic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],on_step=False, on_epoch=True, sync_dist=True)
+            self.log(f"validation/periodic",classification_report(periodics['true'], periodics['pred'],target_names= list(ZTF_TAXONOMY.periodic.group.keys()),labels = list(ZTF_TAXONOMY.periodic.group.values()),digits = 4, output_dict=True)['macro avg']['f1-score'],on_step=False, on_epoch=True, sync_dist=True)
+            
         #loss = loss / len(self.modalities)
         self.log(f"loss_validation/total",loss,on_step=False, on_epoch=True, sync_dist=True)
         return loss
         
 
     def on_validation_epoch_end(self):
-        tax = ELASTICC_TAXONOMY()
+        tax = ZTF_TAXONOMY()
         cm = self.validation_cm.compute().cpu().numpy().astype(float)
         fig = plt.figure(figsize=(12, 10)) 
         
@@ -265,11 +331,11 @@ class ClassifierModule(pl.LightningModule):
         constant = ConstantLR(optimizer,1)  
         #cosine = CosineAnnealingWarmRestarts(optimizer,T_0=100,eta_min=1e-6)                                         
         linear = LinearLR(optimizer, start_factor=1e-2, total_iters=self.warmup)
-        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=self.warmup,eta_min=1e-5)                                         
+        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=self.warmup*10,eta_min=1e-5)                                         
 
         scheduler = SequentialLR(
                     optimizer,
-                    schedulers=[linear,cosine],
+                    schedulers=[constant,constant],
                     milestones=[self.warmup]
                 )
 

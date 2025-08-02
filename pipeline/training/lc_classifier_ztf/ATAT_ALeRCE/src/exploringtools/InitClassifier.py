@@ -1,6 +1,6 @@
 from .InitBackbone import InitBackbone
 import numpy as np
-from tqdm import tqdm 
+from tqdm import tqdm
 from sklearn.metrics import classification_report
 
 from sklearn.linear_model import LogisticRegression
@@ -21,25 +21,25 @@ ztf_order_classes = ['SNIa', # yes
                 'SLSN', # yes
                 'TDE', # yes
                 'Microlensing', # yes
-                'QSO', 
+                'QSO',
                 'AGN', # yes
-                'Blazar', 
-                'YSO', 
-                'CV/Nova', 
-                'LPV', 
-                'EA', 
+                'Blazar',
+                'YSO',
+                'CV/Nova',
+                'LPV',
+                'EA',
                 'EB/EW', # yes
-                'Periodic-Other', 
-                'RSCVn', 
-                'CEP', 
-                'RRLab', 
-                'RRLc', 
+                'Periodic-Other',
+                'RSCVn',
+                'CEP',
+                'RRLab',
+                'RRLc',
                 'DSCT']
 
 class InitClassifier(InitBackbone):
     def __init__(
         self,
-        path_to_config_yaml, 
+        path_to_config_yaml,
         model,
         classifier,
         arg_key,
@@ -47,7 +47,7 @@ class InitClassifier(InitBackbone):
         use_tab = False,
         use_mix = False,
         device = 'cpu'):
-        super().__init__(path_to_config_yaml, 
+        super().__init__(path_to_config_yaml,
                         model,
                         arg_key,
                         device)
@@ -59,7 +59,7 @@ class InitClassifier(InitBackbone):
                  use_mix = use_mix,
                  num_classes = self.args.num_classes,
                  dropout=0.0)
-        
+
     def load_classifier_weights(self,weights: dict, strict = True):
         self.classifier.load_state_dict(weights, strict=strict)
         print("     - Loaded classifier weights")
@@ -72,11 +72,11 @@ class InitClassifier(InitBackbone):
         preds_out = None
         self.backbone.eval().to(device=self.device)
         self.classifier.eval().to(device=self.device)
-        
+
         for b1 in tqdm(dataloader):
             b1 = {key: value.to(device=self.device) for key, value in b1.items()}
             t = b1["labels"]
-            emb = self.backbone(**b1) 
+            emb = self.backbone(**b1)
             if pred_type == 'class':
                 emb = self.classifier(emb)
                 if isinstance(emb, dict):
@@ -101,7 +101,7 @@ class InitClassifier(InitBackbone):
         self.backbone.to(device="cpu")
         self.classifier.to(device="cpu")
         return preds_out, target
-    
+
     def predict_by_time(self,dataloader, device = None, pred_type = 'class', eval_times = [8,16,32,64,128,256,512,1024,2048]):
 
         time_eval ={time:[] for time in eval_times}
@@ -112,13 +112,13 @@ class InitClassifier(InitBackbone):
         preds_out = None
         self.backbone.eval().to(device=self.device)
         self.classifier.eval().to(device=self.device)
-        
+
         for b1 in tqdm(dataloader):
             b1 = {key: value.to(device=self.device) for key, value in b1.items()}
             t = b1["labels"]
             for time in eval_times:
-                
-                emb = self.backbone(**b1) 
+
+                emb = self.backbone(**b1)
                 if pred_type == 'class':
                     emb = self.classifier(emb)
                     if isinstance(emb, dict):
@@ -144,7 +144,7 @@ class InitClassifier(InitBackbone):
         self.backbone.to(device="cpu")
         self.classifier.to(device="cpu")
         return preds_out, target
-    
+
 
 
     def logistic_regression(self, X_train, y_train,X_test, y_test,taxonomy,knn_args:dict):
@@ -178,6 +178,6 @@ class InitClassifier(InitBackbone):
         classification = classification_report(y_test,knn_preds, target_names=list(taxonomy.keys()),digits = 4)
         print(classification)
         return knn_preds
-    
+
     def get_confusion_matrix(self, preds,target, taxonomy, dataset_type:str, plot_title,  order_classes  ):
         return get_confusion_matrix(preds,target,taxonomy, dataset_type,plot_title, order_classes)

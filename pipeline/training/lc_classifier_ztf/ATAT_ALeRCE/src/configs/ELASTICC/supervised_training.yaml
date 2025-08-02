@@ -4,7 +4,7 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 1e-3
+  learning_rate: 5e-4
   num_classes: 19
 
   lc:   
@@ -20,6 +20,11 @@ ATATConfig:
     num_bands: 6
     dropout: 0.01
     checkpoint: null
+    use_velocity : True 
+    use_acceleration : True 
+    use_stats : True 
+    use_metadata: True
+    metadata_num_features: 64
     
   tab: 
     _target_: src.utils.CustomParser.TabularArgs

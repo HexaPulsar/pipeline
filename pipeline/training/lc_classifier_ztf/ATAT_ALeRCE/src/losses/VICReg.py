@@ -42,6 +42,10 @@ class VICReg(nn.Module):
         y = y - y.mean(dim=0) 
         corr_x = torch.corrcoef(x).mean(dim = 1).flatten()
         corr_y = torch.corrcoef(y).mean(dim = 1).flatten()
+       # loss_dict.update({'CORR/mean_x':  torch.mean(x,dim = 1).flatten() })
+      #  loss_dict.update({'CORR/mean_y':  torch.mean(y,dim = 1).flatten() })
+#
+
         loss_dict.update({'CORR/emb_corr_post_norm_x':  torch.corrcoef(x).mean(dim = 1).flatten() })
         loss_dict.update({'CORR/emb_corr_post_norm_y': torch.corrcoef(y).mean(dim = 1).flatten()})
         loss_dict.update({'CORR/99_percentile_x': np.percentile(abs(corr_x).cpu().detach().numpy(), 99) })
@@ -60,6 +64,7 @@ class VICReg(nn.Module):
                 'weighted_inv': self.inv * repr_loss,
                 'weighted_1mvar': self.var * std_loss,
                 'weighted_cov': self.cov * cov_loss, 
+                 
                 #'CORR_median': 
             })
         return loss_dict

@@ -4,51 +4,83 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 5e-4
+  learning_rate: 1e-6
   num_classes: 22
-  lc: 
+
+  online_transforms:
+    use_window_select: True
+    use_max_window_select: True
+    use_time_gauss_factor: True
+    use_gauss_factor: True
+    use_simple_time_factor: true
+    use_simple_data_factor: True
+    use_band_permute: True
+    use_roll: True
+    use_gauss_noise: True
+    p_: 0.5
+
+  lc:
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
-    embedding_size: 32
-    embedding_size_sub: 32
+    embedding_size: 64
+    embedding_size_sub: 64
     num_heads: 4
-    num_encoders: 3
-    Tmax: 3000.0
+    num_encoders: 2
+    Tmax: 2048.0
     pe_type: 'tm'
-    num_harmonics: 4
+    num_harmonics: 1
     num_bands: 2
     dropout: 0.01
     checkpoint: null
+
+    use_acceleration : True
+    use_velocity : True
+    use_stats : False
+    use_features : False
+    use_metadata: False
+    use_sequence_norm: True
+    use_tabular_transformer: False
+    use_timefilm_gelu: True
+    use_timefilm_norm: True
+    use_exp: True
+    use_conv: True
+    features_num_features: 181
+    metadata_num_features: 6
   tab:
     _target_: src.utils.CustomParser.TabularArgs
-    embedding_size: 128
+    embedding_size: 32
     embedding_size_sub: 256
     num_heads: 4
-    num_encoders: 1
+    num_encoders: 3
     length_size: 187
-    dropout: 0.1
+    dropout: 0.05
+    checkpoint: null
+    sequence_norm: True
+
+  #mode: &mode 'max'
   mode: &mode 'min'
 
   monitor: null
   datamodule:
     _target_: src.utils.CustomParser.DataModuleArgs
     dataset:
-      _target_: src.utils.CustomParser.SSLDatasetArgs 
+      _target_: src.utils.CustomParser.SSLDatasetArgs
       experiment_type: *experiment_type
-      data_root: /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2020/200_2020.h5
-       # - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2021/200_2021.h5
-       #a - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2022/200_2022.h5
-       # - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2023/200_2023.h5
+      data_root:
+        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2020/200_2020.h5
+        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2021/200_2021.h5
+        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2022/200_2022.h5
+       #- /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2023/200_2023.h5
       seed: 0
       train_apply_transform: True
       validation_apply_transform: True
       train_key: 'training'
       validation_key: 'validation'
       test_key: 'test'
-      observation_key: flux 
+      observation_key: flux
       observation_err_key: flux_err
       time_key: time
-      time_alert_key: time_alert 
+      time_alert_key: time_alert
       mask_key: mask
       mask_photometry_key: ''
       mask_detection_key: ''
@@ -60,30 +92,30 @@ ATATConfig:
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 512
+    batch_size: 256
   vicreg:
-    shape_projector_1:  '32-512-512'
-    shape_projector_2:  '32-512-512'
-    inv_coeff: 5
-    var_coeff: 45
+    shape_projector_1:  '64-64-64'
+    shape_projector_2:  '64-64-64'
+    inv_coeff: 1
+    var_coeff: 25
     cov_coeff: 1
   trainer:
     max_epochs: 100
     devices: 'auto'
     accelerator: 'gpu'
-    #gradient_clip_val: 0.001
+    #radient_clip_val: 1e-3
     num_sanity_val_steps: 0
     min_epochs: 1
     #accumulate_grad_batches: 4
     val_check_interval: 0.5
-    log_every_n_steps: 10
+    log_every_n_steps: 1
 
   callbacks:
     learning_rate:
       _target_:  pytorch_lightning.callbacks.LearningRateMonitor
       logging_interval: 'step'
     early_stopping:
-      monitor: loss_validation/loss # *monitor #LRegressor/f1-score 
+      monitor: loss_validation/loss # *monitor #LRegressor/f1-score
       mode: min # *mode
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
@@ -97,9 +129,9 @@ ATATConfig:
       # log_rank_zero_only: False  # this keyword argument isn't available in stable version
 
     model_checkpoint:
-      #monitor: LRegressor/f1-score #KNN_3/f1-score 
+      #monitor: LRegressor/f1-score #KNN_3/f1-score
       #mode: max
-      monitor: loss_validation/loss # *monitor #LRegressor/f1-score 
+      monitor: loss_validation/loss # *monitor #LRegressor/f1-score
       mode: min # *mode
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       dirpath: ''
@@ -108,7 +140,7 @@ ATATConfig:
       save_last: null # additionally always save an exact copy of the last checkpoint to a file last.ckpt
       #save_top_k: 1 # save k best models (determined by above metric)
 
-      #every_n_epochs: 1          
+      #every_n_epochs: 1
       save_top_k: 1
       auto_insert_metric_name: True # when True, the checkpoints filenames will contain the metric name
       save_weights_only: False # if True, then only the model’s weights will be saved
@@ -118,7 +150,7 @@ ATATConfig:
       save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
 
   loggers:
-    
+
     tensorboard:
       _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
       name: 'tensorboard'
@@ -127,11 +159,10 @@ ATATConfig:
       log_graph: False
       default_hp_metric: True
       prefix: ""
-      # version: ""
     csv:
       name: 'metrics'
       version: 0
       save_dir: ''
       _target_: pytorch_lightning.loggers.csv_logs.CSVLogger
       prefix: ""
- 
+

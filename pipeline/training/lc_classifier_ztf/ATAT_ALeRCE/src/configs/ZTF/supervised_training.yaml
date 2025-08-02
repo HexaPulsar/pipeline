@@ -4,32 +4,55 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 1e-3
+  learning_rate: 1e-4
   num_classes: 22
   
+  online_transforms:
+    use_window_select: True
+    use_max_window_select: True
+    use_time_gauss_factor: True
+    use_gauss_factor: True
+    use_simple_time_factor: true
+    use_simple_data_factor: True
+    use_band_permute: True
+    use_roll: True
+    use_gauss_noise: True
+    p_: 0.5
   lc: 
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
-    embedding_size: 32
-    embedding_size_sub: 32
+    embedding_size: 128
+    embedding_size_sub: 128
     num_heads: 4
     num_encoders: 3
-    Tmax: 3000.0
+    Tmax: 2048.0
     pe_type: 'tm'
     num_harmonics: 1
     num_bands: 2
-    dropout: 0.001
+    dropout: 0.01
     checkpoint: null
-    
+
+    use_acceleration : False 
+    use_velocity : False 
+    use_stats : False 
+    use_features : False
+    use_metadata: False
+    sequence_norm: False
+    use_tabular_transformer: false
+    timefilm_gelu: False
+    timefilm_norm: False
+    features_num_features: 181
+    metadata_num_features: 6
   tab: 
     _target_: src.utils.CustomParser.TabularArgs
     embedding_size: 32
     embedding_size_sub: 32
     num_heads: 4
     num_encoders: 3
-    length_size: 187 #187
-    dropout: 0.01
+    length_size: 187
+    dropout: 0.05
     checkpoint: null
+    sequence_norm: True
   
   #mode: &mode 'max'
   mode: &mode 'min'
@@ -75,10 +98,10 @@ ATATConfig:
     var_coeff: null
     cov_coeff: null
   trainer:
-    max_epochs: 500
+    max_epochs: 100
     devices: 'auto'
     accelerator: 'gpu'
-   # gradient_clip_val: 1e-3
+    #gradient_clip_val: 1e-1
     num_sanity_val_steps: 0
     min_epochs: 1
     log_every_n_steps: 1
@@ -95,7 +118,7 @@ ATATConfig:
       mode: min
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
-      patience: 25 # number of checks with no improvement after which training will be stopped
+      patience: 30 # number of checks with no improvement after which training will be stopped
       verbose: False # verbosity mode
       strict: True # whether to crash the training if monitor is not found in the validation metrics
       check_finite: True # when set True, stops training when the monitor becomes NaN or infinite
@@ -105,7 +128,7 @@ ATATConfig:
       # log_rank_zero_only: False  # this keyword argument isn't available in stable version
 
     model_checkpoint:
-      monitor:  validation/LC/f1_macro #"loss_validation/total"
+      monitor:  mean_f1_hier/lc #"loss_validation/total"
       mode:  max
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       dirpath: ''

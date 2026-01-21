@@ -1,35 +1,61 @@
 #!/bin/bash
-
 cd ../../
-export CUDA_VISIBLE_DEVICES=0 #,3
+export CUDA_VISIBLE_DEVICES=0,1,2,3 #0,1,2,3
 
-# Define variables
+PATIENCE=40
 
-for seed in {0..0}; do
-  EXPERIMENT_TYPE="md"
-  EXPERIMENT_NAME=MD_TEST_02_${seed}
-  DATASET_NAME="ztf_ff"
-  DATA_ROOT="/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/"
+for SEED in {0..0}; do
 
-  # Run the Python script with variables
-  python training.py \
-    --experiment_type_general "$EXPERIMENT_TYPE" \
-    --experiment_name_general "$EXPERIMENT_NAME" \
-    --name_dataset_general "$DATASET_NAME" \
-    --data_root_general "$DATA_ROOT" \
-    --patience_general 15 \
-    --lr_general 1e-4 \
-    --batch_size_general 512 \
-    --use_sampler_general 1 \
-    --num_encoders 1 \
-    --embedding_size 128 \
-    --embedding_size_sub 512 \
-    --num_heads 4 \
-    --num_epochs_general 35
+
+experiment_name=BASELINE1
+#experiment_name=MULTIMODAL_v7_twobranch
+EXPERIMENT_NAME=class_${experiment_name}_${SEED} #_p10
+DIRECTORY=ATAT
+LEARNING_RATE=5e-4
+EXPERIMENT_TYPE='MD_FEAT' #_FEAT'
+
+export CONFIG_FILE_DIRECTORY="TF_GELU_NORM_EXP_VEL_ACC_SEQNORM.yaml"
+
+export EXPERIMENT_OUTPUT_PATH="./results/$DIRECTORY/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
+export CHECKPOINT=/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/${DIRECTORY}/${EXPERIMENT_TYPE}/${experiment_name}/
+
+# Ensure directories exist
+mkdir -p "$EXPERIMENT_OUTPUT_PATH"
+export HYDRA_FULL_ERROR=1
+# Run the Python script with Hydra
+
+python training.py \
+  --config-dir /home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs/\
+  --config-name $CONFIG_FILE_DIRECTORY \
+  ++ATATConfig.experiment_type=$EXPERIMENT_TYPE\
+  ++ATATConfig.experiment_name=$EXPERIMENT_NAME \
+  ++ATATConfig.log_filename=$LOG_FILENAME \
+  ++ATATConfig.save_dir_path=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.datamodule.dataset.experiment_type=$EXPERIMENT_TYPE\
+  ++ATATConfig.loggers.tensorboard.save_dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.loggers.csv.save_dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
+  hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
+  ++ATATConfig.datamodule.dataset.seed=$SEED\
+    ++ATATConfig.online_transforms.use_window_select=False\
+    ++ATATConfig.online_transforms.use_max_window_select=False\
+    ++ATATConfig.online_transforms.use_gauss_factor=False\
+      ++ATATConfig.online_transforms.use_simple_time_factor=False\
+      ++ATATConfig.online_transforms.use_simple_data_factor=False\
+      ++ATATConfig.online_transforms.use_band_permute=False\
+      ++ATATConfig.online_transforms.use_roll=False\
+      ++ATATConfig.online_transforms.use_gauss_noise=False\
+      ++ATATConfig.online_transforms.p_=1\
+        ++ATATConfig.learning_rate=$LEARNING_RATE\
+        ++ATATConfig.tab.dropout=0.1\
+          ++ATATConfig.tab.embedding_size=32\
+          ++ATATConfig.tab.embedding_size_sub=32\
+          ++ATATConfig.tab.num_encoders=3\
+          ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE\
+          ++ATATConfig.callbacks.model_checkpoint.monitor='validation/TAB/f1_macro'\
+          ++ATATConfig.loggers.tensorboard.version=$VERSION\
+          ++ATATConfig.loggers.csv.version=$VERSION #\
+      #++ATATConfig.lc.checkpoint=$CHECKPOINT\
+      #++ATATConfig.tab.checkpoint=$CHECKPOINT
 done
-
-
-#embedding_size = 64*numbands
-#embedding_size_sub = 256*band
-#num_harmonics = 4
-

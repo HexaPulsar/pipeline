@@ -25,8 +25,8 @@ class SSLDataset(BaseDataset):
     train_key: str
     validation_key:str
     test_key:str
-    observation_key:str 
-    observation_err_key: str 
+    observation_key:str
+    observation_err_key: str
     mask_key :str
     mask_photometry_key:str
     mask_detection_key:str
@@ -44,13 +44,13 @@ class SSLDataset(BaseDataset):
         self.use_lightcurves  = True if 'LC' in self.experiment_type else False
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
-        self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False       
+        self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False
         #logging.info(f'{self.transforms_1}')
-        #logging.info(f'{self.transforms_2}') 
+        #logging.info(f'{self.transforms_2}')
 
         self.transforms_1 =  Compose(self.transforms_1)
         self.transforms_2 =  Compose(self.transforms_2)
-        
+
 
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
@@ -68,8 +68,8 @@ class SSLDataset(BaseDataset):
             return self.get_ft(_idx)
     def __len__(self):
         return len(self.these_idx)
-         
- 
+
+
     def get_lc(self,_idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -77,26 +77,26 @@ class SSLDataset(BaseDataset):
         data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        
+
         if self.mask_photometry_key != '':
                 data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
         if self.mask_photometry_key != '':
                 data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
 
-        md = torch.tensor(self.metadata_feat[_idx,:],dtype = torch.float).squeeze(-1)
-        md[torch.isnan(md)] = -1e9
-        data_dict.update({"metadata": md})
+        if self.use_metadata:
+            md = torch.tensor(self.metadata_feat[_idx,:],dtype = torch.float).squeeze(-1)
+            md[torch.isnan(md)] = -1e9
+            data_dict.update({"metadata": md})
+        if self.use_features:
+            ft =  torch.tensor(self.extracted_feat[_idx,:],dtype = torch.float).squeeze(-1)
+            ft[torch.isnan(ft)] = -1e9
+            data_dict.update({"features":ft })
 
-        ft =  torch.tensor(self.extracted_feat[_idx,:],dtype = torch.float).squeeze(-1)
-        ft[torch.isnan(ft)] = -1e9
-
-        data_dict.update({"features":ft })
-        
-        aug_data_dict = self.transforms_2(deepcopy((data_dict)))
+        aug_data_dict = self.transforms_2(deepcopy(data_dict))
         data_dict = self.transforms_1(data_dict)
-        
+
         return (data_dict, aug_data_dict)
-    
+
     def get_md(self,_idx):
         data_dict = {}
         aug_data_dict = {}
@@ -106,24 +106,24 @@ class SSLDataset(BaseDataset):
         aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
 
         tabular_features.append(data_dict["metadata_feat"])
-        
+
         #if self.output_augmented_batch:
-        
+
         #    aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx].clone()})
         #    aug_tabular_features.append(aug_data_dict["metadata_feat"])
-         
+
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             aug_data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             #if self.output_augmented_batch:
             #    aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
-        
+
         #data_dict = self.transforms_1(data_dict)
         #if self.output_augmented_batch:
         #    aug_data_dict = self.transforms_2(aug_data_dict)
         #return (data_dict, aug_data_dict) if self.output_augmented_batch else data_dict
         return (data_dict, aug_data_dict)
-    
+
     def get_lc_md(self,_idx):
         data_dict = {}
         aug_data_dict = {}
@@ -139,7 +139,7 @@ class SSLDataset(BaseDataset):
         #if self.mask_photometry_key != '':
         ##        data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
          #       aug_data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
-        
+
         tabular_features = []
         aug_tabular_features = []
 
@@ -147,15 +147,15 @@ class SSLDataset(BaseDataset):
         aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx]})
         tabular_features.append(data_dict["metadata_feat"])
         aug_tabular_features.append(aug_data_dict["metadata_feat"])
-       
+
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
-        
+
         data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
         return (data_dict, aug_data_dict)
-    
+
     def get_ft(self,_idx):
         data_dict = {}
         aug_data_dict = {}
@@ -165,30 +165,30 @@ class SSLDataset(BaseDataset):
         aug_data_dict.update({"metadata_feat": self.extracted_feat[_idx]})
 
         tabular_features.append(data_dict["metadata_feat"])
-        
+
         #if self.output_augmented_batch:
-        
+
         #    aug_data_dict.update({"metadata_feat": self.metadata_feat[_idx].clone()})
         #    aug_tabular_features.append(aug_data_dict["metadata_feat"])
-         
+
         if tabular_features:
             data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             aug_data_dict["tabular_feat"] = torch.cat(tabular_features, axis=0)
             #if self.output_augmented_batch:
             #    aug_data_dict["tabular_feat"] = torch.cat(aug_tabular_features, axis=0)
-        
+
         #data_dict = self.transforms_1(data_dict)
         #if self.output_augmented_batch:
         #    aug_data_dict = self.transforms_2(aug_data_dict)
         #return (data_dict, aug_data_dict) if self.output_augmented_batch else data_dict
         return (data_dict, aug_data_dict)
     def get_lc_md_ft(self,_idx):
-        
+
         data_dict = {}
         data_dict.update({"data": torch.tensor(self.data[_idx,:,:], dtype= torch.float),
                             "time": torch.tensor(self.time[_idx,:,:], dtype= torch.float),
                             "mask": torch.tensor(self.mask[_idx,:,:],dtype = bool)})
-        
+
         if self.mask_photometry_key != '':
                 data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
         if self.mask_photometry_key != '':
@@ -203,9 +203,8 @@ class SSLDataset(BaseDataset):
 
         data_dict.update({"features":ft })
         data_dict["tabular_feat"] = torch.cat([md,ft], axis=-1)
-        
+
         aug_data_dict = self.transforms_2(deepcopy((data_dict)))
         data_dict = self.transforms_1(data_dict)
-        
+
         return (data_dict, aug_data_dict)
-        

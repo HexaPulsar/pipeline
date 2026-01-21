@@ -4,9 +4,21 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 5e-4
-  num_classes: 19
-  lc: 
+  learning_rate: 1e-4
+  num_classes: 22
+
+  online_transforms:
+    use_window_select: False
+    use_max_window_select: False
+    use_time_gauss_factor: False
+    use_gauss_factor: False
+    use_simple_time_factor: False
+    use_simple_data_factor: False
+    use_band_permute: False
+    use_roll: False
+    use_gauss_noise: False
+    p_: 0.5
+  lc:
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
     embedding_size: 32
@@ -19,11 +31,21 @@ ATATConfig:
     num_bands: 6
     dropout: 0.01
     checkpoint: null
-    use_velocity : True 
-    use_acceleration : True 
-    use_stats : True 
-    use_metadata: False
-    metadata_num_features: 64
+
+    use_acceleration : True
+    use_velocity : True
+    use_stats : False
+    use_features : True
+    use_metadata: True
+    use_sequence_norm: True
+    use_tabular_transformer: False
+    use_timefilm_gelu: True
+    use_timefilm_norm: True
+    use_exp: True
+    use_conv: True
+    features_num_features: 181
+    metadata_num_features: 6
+
   tab:
     _target_: src.utils.CustomParser.TabularArgs
     embedding_size: 128
@@ -32,13 +54,13 @@ ATATConfig:
     num_encoders: 3
     length_size: 6
     dropout: 0.0
-    
+
   mode: &mode 'min'
   monitor: &monitor "loss_validation/loss"
   datamodule:
     _target_: src.utils.CustomParser.DataModuleArgs
     dataset:
-      _target_: src.utils.CustomParser.SSLDatasetArgs 
+      _target_: src.utils.CustomParser.SSLDatasetArgs
       experiment_type: *experiment_type
 
       data_root: "/home/mdelafuente/ORIGINAL/elasticc_dataset_update.h5"
@@ -116,7 +138,7 @@ ATATConfig:
       save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
 
   loggers:
-    
+
     tensorboard:
       _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
       name: 'tensorboard'

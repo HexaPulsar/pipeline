@@ -33,7 +33,7 @@ class BaseDataset(Dataset):
 
         """loading dataset from H5 file"""
         """ dataset is composed for all samples, where self.these__idx dart to samples for each partition"""
-        
+
         if self.set_type in ['train','train_step']:
             name = self.train_key
         elif self.set_type in ['validation']:
@@ -55,7 +55,7 @@ class BaseDataset(Dataset):
         get_data = (h5_.get("test") if self.set_type == "test" else h5_.get("%s_%s" % (name, self.seed)))
         assert get_data is not None, '{}_{} not a key of the dataset'.format(name,self.seed)
         self.these_idx = get_data[:]
-        
+
         """
         new_idx = []
         for i in self.these_idx:
@@ -70,7 +70,7 @@ class BaseDataset(Dataset):
         #np.random.seed(0)
         #if set_type != 'test':
         #    self.these_idx = np.random.choice(self.these_idx,int(5e4))
-        
+
         #assert self.use_lightcurves == True
         #logging.info(log_message)
         self.data = h5_.get(self.observation_key)
@@ -90,48 +90,95 @@ class BaseDataset(Dataset):
         #    self.nz_count =  torch.from_numpy(self.target[:][self.these_idx])
         #logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
         use_metadata = True
+
+        use_features = True
+
         if use_metadata:
             metadata_feat = h5_.get(self.metadata_key)[:]
             path = '/'.join(self.data_root.split('/')[:-1])
-            add = 'metadata_qt'
+            #add = 'metadata_qt'
+            #path_2 = 'QT-New/finetune'
+            path_2 = 'metadata'
             add = 'fold'
-            path_QT = f"{path}/metadata/{add}_{self.seed}.joblib".format(
+            path_QT = f"{path}/{path_2}/{add}_{self.seed}.joblib".format(
                 self.data_root, self.seed
+            )
+            print(path_QT)
+            #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_0.joblib'
+            #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_{}.joblib'.format(self.seed)
+            path_QT = '/home/mdelafuente/ORIGINAL/QT-New/OG/md_fold_{}.joblib'.format(self.seed)
+            self.metadata_feat = self.get_tabular_data(
+                metadata_feat, path_QT, "metadata"
+            )
+        if use_features:
+            extracted_feat = h5_.get("{}".format(self.feature_key))[:]
+
+            path = '/'.join(self.data_root.split('/')[:-1])
+            add = 'features_qt'
+            #path_2 = 'QT-New/finetune'
+            path_2 = 'features'
+           # add = 'finetune_qt-fold'
+            add = 'fold'
+            path_QT = f"{path}/{path_2}/{add}_{self.seed}.joblib".format(
+                self.data_root, self.seed
+            )
+            #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_qt-fold-0.joblib'
+            path_QT = f'/home/mdelafuente/ORIGINAL/QT-New/OG/qt-feat-{self.seed}.joblib'
+            #path_QT = ''
+            data = self.get_tabular_data(
+                        extracted_feat, path_QT, self.feature_key
+                    )
+
+            self.extracted_feat = data
+
+        '''
+        if use_metadata:
+            metadata_feat = h5_.get(self.metadata_key)[:]
+            path = '/'.join(self.data_root.split('/')[:-1])
+            #add = 'finetune_md_fold'
+            add = 'fold'
+            #path_QT = f"{path}/QT-New/finetune/{add}_{self.seed}.joblib".format(
+            #    self.data_root, self.seed
+            #)
+            path_QT = f"{path}/metadata/{add}_{self.seed}.joblib".format( self.data_root, self.seed
             )
             #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_{}.joblib'.format(self.seed)
             self.metadata_feat = self.get_tabular_data(
                 metadata_feat, path_QT, "metadata"
             )
-        use_features = True 
         if use_features:
             extracted_feat = h5_.get("{}".format(self.feature_key))[:]
-             
+
             path = '/'.join(self.data_root.split('/')[:-1])
-            add = 'features_qt'
+            add = 'finetune_qt-fold'
             add = 'fold'
-            path_QT = f"{path}/features/{add}_{self.seed}.joblib".format(
-                self.data_root, self.seed
-            )   
+            #path_QT = f"{path}/QT-New/finetune/{add}-{self.seed}.joblib".format(
+            #    self.data_root, self.seed
+            #)
+            import glob
+            print(glob.glob(f"{path}/features/"))
+            path_QT = f"{path}/features/{add}_{self.seed}.joblib".format( self.data_root, self.seed
+            )
             data = self.get_tabular_data(
-                        extracted_feat, path_QT, self.feature_key    
+                        extracted_feat, path_QT, self.feature_key
                     )
-            
+
             self.extracted_feat = data
+        '''
     def get_tabular_data(self, tabular_data, path_QT, type_data):
         logging.info(f"Loading and procesing {type_data}. Using QT: {self.use_QT}")
         if self.use_QT:
             QT = load(path_QT)
-          
-             
+
+
             if tabular_data.shape[-1]  ==  1:
                 tabular_data = tabular_data.squeeze(-1)
             else:
                 tabular_data = tabular_data
-            
+
             tabular_data = QT.transform(tabular_data)
             tabular_data = np.nan_to_num(tabular_data,-0.1)
 
             assert np.isnan(tabular_data).sum() == 0
            # print(tabular_data.isnan())
         return torch.from_numpy(tabular_data).float()
-    

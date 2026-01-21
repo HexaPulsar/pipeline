@@ -34,7 +34,7 @@ ATATConfig:
 
     use_acceleration : True
     use_velocity : True
-    use_stats : False
+    use_stats : True
     use_features : True
     use_metadata: True
     use_sequence_norm: True
@@ -101,7 +101,7 @@ ATATConfig:
     var_coeff: null
     cov_coeff: null
   trainer:
-    max_epochs: 500
+    max_epochs: 100
     devices: 'auto'
     accelerator: 'gpu'
     #gradient_clip_val: 1e-1

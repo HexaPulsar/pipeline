@@ -67,7 +67,7 @@ ATATConfig:
     dataset:
       _target_: src.utils.CustomParser.ATATDatasetArgs
       experiment_type: 'LC'
-      #data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
+     # data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
       data_root: '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5'
       seed: 0
       train_apply_transform: True
@@ -85,7 +85,7 @@ ATATConfig:
       mask_photometry_key: ''
       mask_detection_key: ''
       #feature_key: feat_cols
-      feature_key:  extracted_features #extracted_feat_2048
+      feature_key: extracted_features #extracted_feat_2048 #extracted_features #
       metadata_key: metadata_feat
       label_key: labels
     train_use_sampler: True
@@ -101,7 +101,7 @@ ATATConfig:
     var_coeff: null
     cov_coeff: null
   trainer:
-    max_epochs: 100
+    max_epochs: 300
     devices: 'auto'
     accelerator: 'gpu'
     #gradient_clip_val: 1e-1

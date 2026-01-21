@@ -4,19 +4,19 @@ cd ../../../
 export CUDA_VISIBLE_DEVICES=0,1,2,3 #,1
 
 
-LEARNING_RATE=1e-3
-DROPOUT=0.01
+LEARNING_RATE=5e-4
+DROPOUT=0.1
 PATIENCE=10
 
 VERSION=0
 DIRECTORY=SCALING
 EXPERIMENT_TYPE='LC_MD_FEAT'
 
-for SEED in {0..2}; do
- # for DEPTH in {1..3}; do
-    #for i in 32 64; do
-     # experiment_name=${DEPTH}_${i}
-      EXPERIMENT_NAME=MOSPERF_class_${experiment_name}_${SEED}
+for SEED in {0..4}; do
+  for DEPTH in {3..3}; do
+    for i in 32 64 128; do
+      experiment_name=${DEPTH}_${i}
+      EXPERIMENT_NAME=class_${experiment_name}_${SEED}
 
       export CONFIG_FILE_DIRECTORY="TF_GELU_NORM_EXP_VEL_ACC_SEQNORM.yaml"
 
@@ -42,13 +42,13 @@ for SEED in {0..2}; do
         ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
         hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
           ++ATATConfig.tab.embedding_size=32\
-          ++ATATConfig.tab.embedding_size_sub=32\
-          ++ATATConfig.tab.num_encoders=2\
-          ++ATATConfig.lc.embedding_size=64\
-          ++ATATConfig.lc.embedding_size_sub=64\
-          ++ATATConfig.lc.num_encoders=2\
-          ++ATATConfig.online_transforms.use_window_select=True\
-          ++ATATConfig.online_transforms.use_max_window_select=True\
+          ++ATATConfig.tab.embedding_size_sub=${i}\
+          ++ATATConfig.tab.num_encoders=3\
+          ++ATATConfig.lc.embedding_size=32\
+          ++ATATConfig.lc.embedding_size_sub=${i}\
+          ++ATATConfig.lc.num_encoders=3\
+          ++ATATConfig.online_transforms.use_window_select=False\
+          ++ATATConfig.online_transforms.use_max_window_select=False\
           ++ATATConfig.tab.dropout=$DROPOUT\
           ++ATATConfig.lc.dropout=$DROPOUT\
           ++ATATConfig.learning_rate=$LEARNING_RATE\
@@ -56,8 +56,8 @@ for SEED in {0..2}; do
           ++ATATConfig.callbacks.model_checkpoint.monitor='validation/MIX/f1_macro'\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
           ++ATATConfig.loggers.csv.version=$VERSION
-    #done
- # done
+    done
+  done
 done
 
 

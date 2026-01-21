@@ -22,8 +22,8 @@ class ATATDataset(BaseDataset):
     train_key: str
     validation_key:str
     test_key:str
-    observation_key:str 
-    observation_err_key: str 
+    observation_key:str
+    observation_err_key: str
     mask_key :str
     mask_photometry_key:str
     mask_detection_key:str
@@ -44,11 +44,11 @@ class ATATDataset(BaseDataset):
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
         self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False
-        
+
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
-         
+
         _idx = self.these_idx[idx]
         data_dict = {
             #"idx": _idx,
@@ -65,20 +65,25 @@ class ATATDataset(BaseDataset):
 
         if self.use_lightcurves_err:
             data_dict.update({"data_err":torch.tensor(self.data_err[_idx,:,:],dtype =  torch.float)})
+        #'''
+        if self.use_metadata:
+            md =self.metadata_feat[_idx,:].squeeze(-1)
+            md[torch.isnan(md)] = -1e9
+            data_dict["metadata"] =md
 
-        #if self.use_metadata:
-        md =self.metadata_feat[_idx,:].squeeze(-1)
-        md[torch.isnan(md)] = -1e9
-        
 
-        
-        ft = self.extracted_feat[_idx,:].squeeze(-1)
-        ft[torch.isnan(ft)] = -1e9
-        
-        data_dict["metadata"] =md
-        data_dict["features"] =ft
-        data_dict["tabular_feat"] = torch.cat([md,ft], axis=-1)
-        
+        if self.use_features:
+            ft = self.extracted_feat[_idx,:].squeeze(-1)
+            ft[torch.isnan(ft)] = -1e9
+            data_dict["features"] =ft
+
+        if self.use_features and self.use_metadata:
+            data_dict["tabular_feat"] = torch.cat([md,ft], axis=-1)
+        elif self.use_metadata:
+            data_dict["tabular_feat"] = data_dict["metadata"]
+        elif self.use_features:
+            data_dict["tabular_feat"] = data_dict["features"]
+        #'''
 
         if all([self.set_type == 'train',self.train_transforms is not None]):
             data_dict = self.train_transforms(data_dict)
@@ -86,7 +91,5 @@ class ATATDataset(BaseDataset):
             data_dict = self.val_transforms(data_dict)
         return data_dict
 
-    def __len__(self): 
+    def __len__(self):
         return len(self.these_idx)
-
-    

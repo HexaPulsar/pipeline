@@ -7,44 +7,66 @@ ATATConfig:
   learning_rate: 5e-4
   num_classes: 19
 
-  lc:   
+  online_transforms:
+    use_window_select: False
+    use_max_window_select: False
+    use_time_gauss_factor: False
+    use_gauss_factor: False
+    use_simple_time_factor: False
+    use_simple_data_factor: False
+    use_band_permute: False
+    use_roll: False
+    use_gauss_noise: False
+    p_: 0.5
+
+  lc:
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
-    embedding_size: 32
-    embedding_size_sub: 32
+    embedding_size: 64
+    embedding_size_sub: 128
     num_heads: 4
     num_encoders: 3
-    Tmax: 3000.0
+    Tmax: 2048.0
     pe_type: 'tm'
     num_harmonics: 1
     num_bands: 6
     dropout: 0.01
     checkpoint: null
-    use_velocity : True 
-    use_acceleration : True 
-    use_stats : True 
-    use_metadata: True
-    metadata_num_features: 64
-    
-  tab: 
+
+    use_acceleration : True
+    use_velocity : True
+    use_stats : False
+    use_features : False
+    use_metadata: False
+    use_sequence_norm: True
+    use_tabular_transformer: False
+    use_timefilm_gelu: True
+    use_timefilm_norm: True
+    use_exp: True
+    use_conv: True
+    features_num_features: 181
+    metadata_num_features: 6
+
+  tab:
     _target_: src.utils.CustomParser.TabularArgs
     embedding_size: 32
     embedding_size_sub: 32
     num_heads: 4
     num_encoders: 3
-    length_size: 6 #187
-    dropout: 0.1
+    length_size: 103
+    dropout: 0.05
     checkpoint: null
-  
+    sequence_norm: True
+
   #mode: &mode 'max'
   mode: &mode 'min'
   #monitor: &monitor "validation/LC/f1" #"validation/LC/f1"
   monitor: null
- 
+
   datamodule:
     _target_: src.utils.CustomParser.DataModuleArgs
     dataset:
-      _target_: src.utils.CustomParser.ATATDatasetArgs 
+      _target_: src.utils.CustomParser.ATATDatasetArgs
       experiment_type: *experiment_type
       data_root: "/home/mdelafuente/ORIGINAL/elasticc_dataset_update.h5"
       seed: 0
@@ -52,8 +74,8 @@ ATATConfig:
       validation_apply_transform: false
       train_transforms: []  # List of transform modules
       val_transforms: []  # List of transform modules
-      train_key: 'finetuning_training'
-      validation_key: 'finetuning_validation'
+      train_key: old_training #training #'finetuning_training'
+      validation_key: old_validation #validation #'finetuning_validation'
       test_key: 'test'
       observation_key: data
       observation_err_key: data-var
@@ -70,23 +92,23 @@ ATATConfig:
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 256
+    batch_size: 128
 
   vicreg:
-    projector_shape:  null
+    shape_projector_1:  ''
+    shape_projector_2:  ''
     inv_coeff: null
     var_coeff: null
     cov_coeff: null
-
   trainer:
-    max_epochs: 500
+    max_epochs: 1000
     devices: 'auto'
     accelerator: 'gpu'
     #gradient_clip_val: 1.0
     num_sanity_val_steps: 0
     min_epochs: 1
-    log_every_n_steps: 1
-    #val_check_interval: 0.5
+    log_every_n_steps: 10
+    val_check_interval: 0.2
     #accumulate_grad_batches: 4
 
     #check_val_every_n_epoch: 5
@@ -96,7 +118,7 @@ ATATConfig:
       _target_:  pytorch_lightning.callbacks.LearningRateMonitor
       logging_interval: 'step'
     early_stopping:
-      monitor: loss_validation/total   #validation/LC/f1 
+      monitor: loss_validation/total   #validation/LC/f1
       mode: min
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
@@ -126,7 +148,7 @@ ATATConfig:
       save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
 
   loggers:
-    
+
     tensorboard:
       _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
       name: 'tensorboard'

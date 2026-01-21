@@ -2,12 +2,12 @@
 #!/bin/bash
 
 cd ../../
-export CUDA_VISIBLE_DEVICES=0,1,2,3,
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
-export EXPERIMENT_NAME='FINAL_v16'
-export EXPERIMENT_OUTPUT_PATH="./results/PRETRAIN/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
+export EXPERIMENT_NAME='test_2019_v7'
+export EXPERIMENT_OUTPUT_PATH="./results/NEW_OPTIM/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipealine/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 
@@ -38,18 +38,26 @@ python SSL_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
   ++ATATConfig.lc.use_conv=True\
     ++ATATConfig.online_transforms.use_window_select=True\
     ++ATATConfig.online_transforms.use_max_window_select=True\
-    ++ATATConfig.online_transforms.use_time_gauss_factor=True\
-      ++ATATConfig.online_transforms.use_gauss_factor=True\
+    ++ATATConfig.online_transforms.use_time_gauss_factor=False\
+      ++ATATConfig.online_transforms.use_gauss_factor=False\
       ++ATATConfig.online_transforms.use_simple_time_factor=True\
       ++ATATConfig.online_transforms.use_simple_data_factor=True\
-      ++ATATConfig.online_transforms.use_band_permute=True\
-      ++ATATConfig.online_transforms.use_roll=True\
+      ++ATATConfig.online_transforms.use_band_permute=False\
+      ++ATATConfig.online_transforms.use_roll=False\
       ++ATATConfig.online_transforms.use_gauss_noise=False\
       ++ATATConfig.online_transforms.p_=1\
-      ++ATATConfig.lc.dropout=0.01\
-          ++ATATConfig.learning_rate=1e-5\
+    ++ATATConfig.lc.embedding_size=32\
+    ++ATATConfig.lc.embedding_size_sub=512\
+    ++ATATConfig.lc.num_encoders=3\
+      ++ATATConfig.lc.dropout=0.1\
+          ++ATATConfig.learning_rate=1e-4\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
-          ++ATATConfig.loggers.csv.version=$VERSION
-
+          ++ATATConfig.loggers.csv.version=$VERSION\
+          ++ATATConfig.callbacks.early_stopping.patience=10\
+          ++ATATConfig.vicreg.inv_coeff=100\
+          ++ATATConfig.vicreg.var_coeff=100\
+          ++ATATConfig.vicreg.cov_coeff=1\
+          ++ATATConfig.vicreg.shape_projector_1='256-128-128'\
+          ++ATATConfig.vicreg.shape_projector_2='256-128-128'\
   #++ATATConfig.trainer.val_check_interval=0.2
 

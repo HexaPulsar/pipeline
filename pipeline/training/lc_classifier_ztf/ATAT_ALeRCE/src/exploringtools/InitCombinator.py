@@ -13,7 +13,7 @@ from collections import OrderedDict
 import yaml
 from  hydra.utils import instantiate
 from .utils import get_confusion_matrix
-
+import torch
 class InitCombinator:
     def __init__(
         self,
@@ -29,7 +29,7 @@ class InitCombinator:
         self.args = self._load_yaml_args(path_to_config_yaml).ATATConfig
         self.classifier = classifier(lc_input_size = self.args.lc.embedding_size,
                                      inner_size = self.args.lc.embedding_size,
-                                     combine_logits = True,
+                                     combine_logits = False,
                  tab_input_size = self.args.tab.embedding_size,
                  num_classes = self.args.num_classes
                  ,**classifier_args)
@@ -95,6 +95,84 @@ class InitCombinator:
         for b1 in tqdm(dataloader):
             b1 = {key: value.to(device=self.device) for key, value in b1.items()}
             t = b1["labels"]
+            emb = self.atat(**b1)
+            if pred_type == 'class':
+
+                emb = self.classifier(emb)
+                if isinstance(emb, dict):
+                    if 'LC' in emb.keys():
+                        output = emb["LC"]
+                    if 'TAB' in emb.keys():
+                        output = emb["TAB"]
+                    if 'MIX' in emb.keys():
+                        output = emb["MIX"]
+
+
+
+            preds_out = (
+                np.concatenate([preds_out, output.detach().cpu().numpy()])
+                if preds_out is not None
+                else output.cpu().detach().numpy()
+            )
+            target = (
+                np.concatenate([target, t.cpu().detach().numpy()])
+                if target is not None
+                else t.detach().cpu().numpy()
+            )
+        self.atat.to(device="cpu")
+        self.classifier.to(device="cpu")
+        return preds_out, target
+
+    def embeddings(self,dataloader, device = None, pred_type = 'class'):
+        if device is not None:
+            self.device = device
+            print("device set to {}".format(device))
+        target = None
+        preds_out = None
+       # print(self.atat)
+        self.atat.eval().to(device=self.device)
+        self.classifier.eval().to(device=self.device)
+
+        for b1 in tqdm(dataloader):
+            b1 = {key: value.to(device=self.device) for key, value in b1.items()}
+            t = b1["labels"]
+
+            emb = self.atat(**b1)
+            output = torch.concat([emb['LC'][:,0,:], emb['TAB'][:,0,:]], axis = -1)
+           # output =  emb['LC'][:,0,:]
+
+            preds_out = (
+                np.concatenate([preds_out, output.detach().cpu().numpy()])
+                if preds_out is not None
+                else output.cpu().detach().numpy()
+            )
+            target = (
+                np.concatenate([target, t.cpu().detach().numpy()])
+                if target is not None
+                else t.detach().cpu().numpy()
+            )
+        self.atat.to(device="cpu")
+        self.classifier.to(device="cpu")
+        return preds_out, target
+
+
+    def predict_for_n_samples(self,dataloader, device = None, pred_type = 'class', n = 8):
+        if device is not None:
+            self.device = device
+            print("device set to {}".format(device))
+        target = None
+        preds_out = None
+       # print(self.atat)
+        self.atat.eval().to(device=self.device)
+        self.classifier.eval().to(device=self.device)
+
+        for b1 in tqdm(dataloader):
+            b1 = {key: value.to(device=self.device) for key, value in b1.items()}
+            t = b1["labels"]
+            mask = torch.ones_like(b1['time'])
+            mask[:, :n, :] = 0
+            b1['time'] = b1['time'] * mask
+            b1['data'] = b1['data'] * mask
             emb = self.atat(**b1)
             if pred_type == 'class':
 

@@ -49,9 +49,13 @@ class PretrainModule(pl.LightningModule):
                 nn.init.kaiming_uniform_(p)
 
     def training_step(self, batch, batch_idx):
+        embedding_1 =self.model(**batch[0])[:,0,:] #torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
+        embedding_2 = self.model(**batch[1])[  :,0,:]#torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
 
-        loss_dict = self.loss(self.model(**batch[0])[:,0,:],
-                              self.model(**batch[1])[:,0,:])
+        #embedding_1  =torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
+        #embedding_2 = torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
+        loss_dict = self.loss(embedding_1,
+                              embedding_2)
 
         with torch.no_grad():
             for key,value in loss_dict.items():
@@ -80,9 +84,14 @@ class PretrainModule(pl.LightningModule):
         return super().on_validation_batch_start()
     '''
     def validation_step(self, batch, batch_idx):
-        #if dataloader_idx == 0:
-        loss_dict = self.loss(self.model(**batch[0])[:,0,:],
-                            self.model(**batch[1])[:,0,:])
+        embedding_1 = self.model(**batch[0])[:,0,:]#torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
+        embedding_2 =self.model(**batch[1])[:,0,:] #torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
+
+
+        #embedding_1  =torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
+        #embedding_2 = torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
+        loss_dict = self.loss(embedding_1,
+                              embedding_2)
         with torch.no_grad():
             for key,value in loss_dict.items():
                     if 'emb_corr' not in key:
@@ -174,13 +183,13 @@ class PretrainModule(pl.LightningModule):
         return 0
 
     def configure_optimizers(self):
-        self.warmup = 100
-        optimizer = Lion(self.parameters(), lr=self.lr, weight_decay=1e-2)
+        self.warmup = 1000
+        optimizer = optim.AdamW(self.parameters(), lr=self.lr)
 
         constant = ConstantLR(optimizer,1)
         #cosine = CosineAnnealingWarmRestarts(optimizer,T_0=100,eta_min=1e-6)
         linear = LinearLR(optimizer, start_factor=1e-2, total_iters=self.warmup)
-        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=self.warmup,eta_min=1e-5)
+        cosine = CosineAnnealingWarmRestarts(optimizer,T_0=self.warmup,eta_min=1e-8)
 
         scheduler = SequentialLR(
                     optimizer,

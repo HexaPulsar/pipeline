@@ -1,8 +1,8 @@
 
 from typing import Literal, Union
-import scipy.signal as signal 
+import scipy.signal as signal
 import numpy as np
-import torch 
+import torch
 import torch.nn.functional as F
 from copy import deepcopy
 
@@ -28,6 +28,43 @@ class CutBand:
         return sample
 
 
+class ChessMask:
+    def __init__(self, random_flip=False):
+        self.random_flip = random_flip
+
+    def __call__(self, sample):
+        mask_tensor = sample['mask']
+        device = mask_tensor.device
+        dtype = mask_tensor.dtype
+
+        if mask_tensor.dim() == 2:
+            # (H, W)
+            H, W = mask_tensor.shape
+            prefix_shape = ()
+        elif mask_tensor.dim() == 3:
+            # (C, H, W)
+            C, H, W = mask_tensor.shape
+            prefix_shape = (C,)
+        else:
+            raise ValueError("sample['mask'] must be 2D or 3D")
+
+        rows = torch.arange(H, device=device).unsqueeze(1)
+        cols = torch.arange(W, device=device).unsqueeze(0)
+        chess = (rows + cols) % 2
+
+        if self.random_flip and torch.rand(1, device=device) < 0.5:
+            chess = 1 - chess
+
+        chess = chess.to(dtype)
+
+        # Match original mask shape exactly
+        chess = chess.expand(*prefix_shape, H, W)
+
+        sample['mask'] = mask_tensor * chess
+        return sample
+
+
+
 class GaussianFilter:
     def __init__(self, num_bands,filter_std:list, apply_to_classes:list = None):
         self.num_bands =num_bands
@@ -40,7 +77,7 @@ class GaussianFilter:
             if sample['labels'] in self.apply_to_classes:
                  self.gauss_filter(sample)
         return sample
-    
+
     def gauss_filter(self, sample):
         for i in range(self.num_bands):
                 choose_filter_std = np.random.choice(self.filter_std)
@@ -50,7 +87,29 @@ class GaussianFilter:
                 filtered_signal = gaussian_filter1d(sample['data'][:nonzero, i], choose_filter_std)
                 sample['data'][:nonzero,i] = torch.tensor(filtered_signal, dtype = torch.float)
 
-        
+class GaussianTimeFilter:
+    def __init__(self, num_bands,filter_std:list, apply_to_classes:list = None):
+        self.num_bands =num_bands
+        self.filter_std = filter_std
+        self.apply_to_classes = apply_to_classes
+    def __call__(self,sample):
+        if self.apply_to_classes is None:
+            self.gauss_filter(sample)
+        else: #apply only if correct class
+            if sample['labels'] in self.apply_to_classes:
+                 self.gauss_filter(sample)
+        return sample
+
+    def gauss_filter(self, sample):
+        for i in range(self.num_bands):
+                choose_filter_std = np.random.choice(self.filter_std)
+                if choose_filter_std == -1:
+                    return sample
+                nonzero = torch.count_nonzero(sample['time'][:,i])
+                filtered_signal = gaussian_filter1d(sample['time'][:nonzero, i], choose_filter_std)
+                sample['time'][:nonzero,i] = torch.tensor(filtered_signal, dtype = torch.float)
+
+
 class Factor:
     def __init__(self, factor = 0.5,apply_to_classes:list = None):
         self.factor = factor
@@ -58,19 +117,19 @@ class Factor:
 
         assert any([isinstance(factor, int), isinstance(factor,list)])
     def __call__(self, sample):
-        
+
         if self.apply_to_classes is None:
             if isinstance(self.factor,list):
                 return self.random_factor(sample)
-            
+
             data = sample['data']
             sample['data'] = (data * self.factor)
-            
+
         else:
             if sample['labels'] in self.apply_to_classes:
                 if isinstance(self.factor,list):
                     return self.random_factor(sample)
-            
+
                 data = sample['data']
                 sample['data'] = (data * self.factor)
 
@@ -80,7 +139,7 @@ class Factor:
         choose = np.random.choice(self.factor)
         sample['data'] =  (data * choose)
         return sample
- 
+
 
 class GaussFactor:
     def __init__(self,num_bands = 2,scale = 1e-3, apply_to_classes:list = None):
@@ -97,8 +156,8 @@ class GaussFactor:
             else:
                 if sample['labels'] in self.apply_to_classes:
                     sample['data'][:,band] = (band_data * scalars)
-        return sample 
- 
+        return sample
+
 class GaussTimeFactor:
     def __init__(self,num_bands = 2,scale = 1e-3, apply_to_classes:list = None):
         self.apply_to_classes = apply_to_classes
@@ -115,13 +174,13 @@ class GaussTimeFactor:
             else:
                 if sample['labels'] in self.apply_to_classes:
                     sample['time'][:,band] = (band_data * scalars)
-        return sample 
- 
+        return sample
+
 class GaussianNoise:
     def  __init__(self, num_bands):
         super().__init__()
         self.num_bands = num_bands
-       
+
     def __call__(self, sample):
         for i in range(self.num_bands):
             if torch.count_nonzero(sample['data'][:,i], dim = -1)  > 0:
@@ -129,13 +188,13 @@ class GaussianNoise:
                 band_data = sample['data'][:,i]
                 nonzero = torch.nonzero(band_data)
                 band_mask = band_data!=0
-                noise = torch.normal(0,abs(band_data[nonzero].mean())*(0.01), size=(band_data.size(0),)).to(device=band_data.device, non_blocking=True) 
+                noise = torch.normal(0,abs(band_data[nonzero].mean())*(0.01), size=(band_data.size(0),)).to(device=band_data.device, non_blocking=True)
                 band_data = band_data + noise * band_mask
                 sample["data"][:,i] = band_data
             else:
                 continue
         return sample
- 
+
 
 class RandomSwapAdjacentRows:
     def __init__(self, p = 0.5):

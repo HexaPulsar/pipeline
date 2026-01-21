@@ -15,8 +15,9 @@ EXPERIMENT_TYPE='MD_FEAT'
 for SEED in {0..4}; do
   for DEPTH in {1..3}; do
     for i in 32 64 128; do
+      export internal=$(( i * 2 ))
       experiment_name=${DEPTH}_${i}
-      EXPERIMENT_NAME=v2_TAB_class_${experiment_name}_${SEED}
+      EXPERIMENT_NAME=class_TAB_${experiment_name}_${SEED}
 
       export CONFIG_FILE_DIRECTORY="TF_GELU_NORM_EXP_VEL_ACC_SEQNORM.yaml"
 
@@ -42,7 +43,7 @@ for SEED in {0..4}; do
         ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
         hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
           ++ATATConfig.tab.embedding_size=${i}\
-          ++ATATConfig.tab.embedding_size_sub=${i}\
+          ++ATATConfig.tab.embedding_size_sub=$internal\
           ++ATATConfig.tab.num_encoders=${DEPTH}\
           ++ATATConfig.online_transforms.use_window_select=False\
           ++ATATConfig.online_transforms.use_max_window_select=False\

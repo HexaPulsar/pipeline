@@ -5,17 +5,17 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3 #,1
 
 for SEED in {0..4}; do
 
-experiment_name=64_128_TF_GELU_NORM_EXP_VEL_ACC_SEQNORM_MD_FT
+experiment_name=TF_GELU_NORM_EXP_VEL_ACC_SEQNORM_MD_FT_stats
 DIRECTORY=ABLATION
 EXPERIMENT_TYPE='LC'
 EXPERIMENT_NAME=class_${experiment_name}_${SEED}
 DROPOUT=0.1
 PATIENCE=20
-EMBEDDING_SIZE=64
-EMBEDDING_SIZE_SUB=128
-DEPTH=3
+EMBEDDING_SIZE=32
+EMBEDDING_SIZE_SUB=32
+DEPTH=1
 LEARNING_RATE=1e-3
-export CONFIG_FILE_DIRECTORY="TF_GELU_NORM_EXP_VEL_ACC_SEQNORM_MD_FT.yaml"
+export CONFIG_FILE_DIRECTORY="TF_GELU_NORM_EXP_VEL_ACC_SEQNORM_MD_FT_stats.yaml"
 
 export EXPERIMENT_OUTPUT_PATH=./results/${DIRECTORY}/LC/${EXPERIMENT_NAME}/
 export LOG_FILENAME=$EXPERIMENT_OUTPUT_PATH/${EXPERIMENT_NAME}.log
@@ -41,7 +41,6 @@ python training.py \
   ++ATATConfig.lc.embedding_size=$EMBEDDING_SIZE\
     ++ATATConfig.lc.embedding_size_sub=$EMBEDDING_SIZE_SUB\
     ++ATATConfig.lc.num_encoders=$DEPTH\
-    ++ATATConfig.lc.dropout=$DROPOUT\
      ++ATATConfig.learning_rate=$LEARNING_RATE\
     ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE
 done

@@ -1,8 +1,19 @@
 import torch.nn as nn
 
 import torch.nn
-
-
+'''
+self.output_layer =  nn.Sequential(
+                                     nn.Linear(embedding_size,embedding_size, bias=True),
+                                    nn.Dropout(dropout),
+                                    nn.LayerNorm(embedding_size),
+                                    nn.GELU(),
+                                    nn.Linear(embedding_size,embedding_size, bias=True),
+                                    nn.Dropout(dropout),
+                                    nn.LayerNorm(embedding_size),
+                                    nn.GELU(),
+                                    nn.Linear(embedding_size, num_classes)
+                                     )
+'''
 class TokenClassifier(nn.Module):
     def __init__(self, embedding_size,num_classes,
                   dropout = 0.01, **kwargs):
@@ -10,9 +21,8 @@ class TokenClassifier(nn.Module):
         self.num_classes = num_classes
 
         self.output_layer =  nn.Sequential(nn.Dropout(dropout),
-                                        nn.LayerNorm(embedding_size),
-                                     nn.Linear(embedding_size,num_classes, bias=True),
 
+                                     nn.Linear(embedding_size,num_classes, bias=True),
                                      )
     def forward(self, x):
 
@@ -43,9 +53,8 @@ class MultimodalClassifier(nn.Module):
         self.modalities+= ['TAB'] if 'MD' in parse_exp_type or 'FEAT' in parse_exp_type else []
         self.modalities+= ['MIX'] if ('MD' in parse_exp_type or 'FEAT' in parse_exp_type) and ('LC' in parse_exp_type) else []
         self.combine_logits = combine_logits
-        if self.combine_logits:
-            self.logit = nn.Softmax(dim= -1)
-
+        print(use_lc, use_tab, use_mix)
+        #if combine_logits:
         if use_lc:
             self.token_lc =  TokenClassifier(lc_input_size,num_classes, dropout ) # Hier(lc_input_size, 22, 3) #
         elif use_tab:
@@ -53,18 +62,25 @@ class MultimodalClassifier(nn.Module):
         #elif self.combine_logits:
          #   assert all([self.combine_logits, self.use_mix,self.use_lc, self.use_tab]), 'to combine logits use all modalities'
         else:
-            self.mixed_classifier = TokenClassifier(lc_input_size + tab_input_size,num_classes, dropout)
+           # self.mixed_classifier = TokenClassifier(lc_input_size + tab_input_size,num_classes, dropout)
+            self.mixed_classifier = nn.Sequential(nn.Linear(lc_input_size + tab_input_size,lc_input_size + tab_input_size),
+                                                  nn.Dropout(dropout),
+                                                  nn.LayerNorm(lc_input_size + tab_input_size),
+                                                  nn.GELU(),
+                                                  nn.Linear(lc_input_size + tab_input_size,num_classes),
+                                                )
     def forward(self,emb_dict):
         out_dict= {}
 
         if isinstance(emb_dict,dict):
-            if all([self.combine_logits,self.use_lc, self.use_tab]):
+
+            if self.combine_logits:
                 lc_class = self.token_lc(emb_dict['LC'])# / self.logit_scale
                 #out_dict.update({'LC':lc_class})
                 tab_class =  self.token_tab(emb_dict['TAB']) # / self.logit_scale
                 #out_dict.update({'TAB':tab_class})
 
-                out_dict.update({'MIX': lc_class[:,0,:] + tab_class[:,0,:] })
+                out_dict.update({'MIX': nn.functional.softmax(lc_class[:,0,:], dim = -1) + nn.functional.softmax(tab_class[:,0,:], dim = -1)})
             else:
                 emb = torch.concat([emb_dict['LC'][:,0,:] , emb_dict['TAB'][:,0,:] ], dim = -1)
                 out_dict.update({'MIX': self.mixed_classifier(emb)})
@@ -84,7 +100,7 @@ class MultimodalClassifier(nn.Module):
                 #mix_class = self.net(emb_dict['MIX']) #/ self.logit_scale
 
                 if all([self.combine_logits,self.use_lc, self.use_tab]):
-                    lc_class = self.token_lc(emb_dict['LC'])# / self.logit_scale
+                    lc_class = self.token_lc(emb_dict['LC']) # / self.logit_scale
                     #out_dict.update({'LC':lc_class})
                     tab_class =  self.token_tab(emb_dict['TAB']) # / self.logit_scale
                     #out_dict.update({'TAB':tab_class})

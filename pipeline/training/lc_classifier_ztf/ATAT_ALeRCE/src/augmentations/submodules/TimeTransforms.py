@@ -1,7 +1,7 @@
 from typing import Literal, Union
-import scipy.signal as signal 
+import scipy.signal as signal
 import numpy as np
-import torch 
+import torch
 import torch.nn.functional as F
 from copy import deepcopy
 from .WindowApply import WindowApply
@@ -16,15 +16,15 @@ class TimeFactor:
             if isinstance(self.factor,list):
                 return self.random_factor(sample)
             else:
-                for i in range(self.num_bands): 
+                for i in range(self.num_bands):
                     band_time = sample['time'][:,i] * self.factor
                     sample['time'][:, i] = band_time
-            
+
         else:
             if sample['labels'] in self.apply_to_classes:
                 if isinstance(self.factor,list):
                     return self.random_factor(sample)
-                for i in range(self.num_bands): 
+                for i in range(self.num_bands):
                     band_time = sample['time'][:,i] * self.factor
                     sample['time'][:, i] = band_time
         return sample
@@ -35,7 +35,28 @@ class TimeFactor:
             band_time = sample['time'][:,i] * factor
             sample['time'][:, i] = band_time
         return sample
-    
+
+class TimeDelta:
+    def __init__(self,num_bands = 2,delta_range =(0,1000), apply_to_classes: list = None):
+        self.delta_range = delta_range
+        self.num_bands = num_bands
+        self.apply_to_classes = apply_to_classes
+    def __call__(self, sample):
+        if torch.count_nonzero(sample['time']) == 0:
+            return sample
+        if self.apply_to_classes is None:
+            min_ = torch.where(sample['time'] == 0, torch.tensor(float('inf')), sample['time']).min()
+            if min_ >= np.inf:
+                return sample
+            sample['time'] = sample['time'] - (sample['time']> 0)*np.random.randint(0,min_)
+        else:
+            if sample['labels'] in self.apply_to_classes:
+                min_ = torch.where(sample['time'] == 0, torch.tensor(float('inf')), sample['time']).min()
+                if min_ >= np.inf:
+                    return sample
+                sample['time'] = sample['time'] - (sample['time']> 0)*np.random.randint(0,min_)
+        return sample
+
 from scipy.ndimage import gaussian_filter1d
 
 class TimeGaussianFilter:
@@ -50,7 +71,7 @@ class TimeGaussianFilter:
             if sample['labels'] in self.apply_to_classes:
                  self.gauss_filter(sample)
         return sample
-    
+
     def gauss_filter(self, sample):
         for i in range(self.num_bands):
                 choose_filter_std = np.random.choice(self.filter_std)
@@ -75,7 +96,7 @@ class TimeGaussianNoise:
                     band_time = sample['time'][:,i]
                     nonzero = torch.nonzero(band_time)
                     band_mask = band_time!=0
-                    noise = torch.normal(0,abs(band_time[nonzero].mean())*(1e-3), size=(band_time.size(0),)).to(device=band_time.device, non_blocking=True) 
+                    noise = torch.normal(0,abs(band_time[nonzero].mean())*(1e-3), size=(band_time.size(0),)).to(device=band_time.device, non_blocking=True)
                     noise.sort()
                     band_time = band_time + noise * band_mask
                     sample["time"][:,i] = band_time
@@ -88,11 +109,11 @@ class TimeGaussianNoise:
                         band_time = sample['time'][:,i]
                         nonzero = torch.nonzero(band_time)
                         band_mask = band_time!=0
-                        noise = torch.normal(0,abs(band_time[nonzero].mean())*(1e-4), size=(band_time.size(0),)).to(device=band_time.device, non_blocking=True) 
+                        noise = torch.normal(0,abs(band_time[nonzero].mean())*(1e-4), size=(band_time.size(0),)).to(device=band_time.device, non_blocking=True)
                         noise.sort()
                         band_time = band_time + noise * band_mask
                         sample["time"][:,i] = band_time
                     else:
                         continue
         return sample
-    
+

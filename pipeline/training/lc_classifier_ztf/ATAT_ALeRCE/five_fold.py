@@ -1,4 +1,4 @@
-from src.layers.transformer.ATAT import LightCurveTransformer, TabularTransformer
+from src.layers.transformer.ATAT import LightCurveTransformer, TabularTransformer, Combinator
 
 from src.utils.data.AlerceDictionaries import ZTF_TAXONOMY
 import numpy as np
@@ -110,22 +110,32 @@ def classification_report_to_latex(report_str):
     bottom = "\n".join(bottom)
     print(bottom)
 
+import pandas as pd
 
-
-def local_five_fold(type_ ='lc', use_lc = True, use_tab = True, use_mix= True):
+def local_five_fold(type_, use_lc, use_tab, use_mix, range_):
 
     for EXPERIMENT_NAME in EXPERIMENT_NAME_LIST:
         for SUBSET in ["test"]:
             TRANSIENT = []
             STOCHASTIC = []
             PERIODIC = []
-            for i in range(5):
+            for i in range(range_):
+                # SETUP MODEL
                 # SETUP MODEL
                 print("Using seed:{}".format(i))
-                PATH = f"{FIVE_FOLD_DIRECTORY}/{EXPERIMENT_NAME}_{i}/"
+                PATH = f"{FIVE_FOLD_DIRECTORY}/{EXPERIMENT_NAME}_{i}_FROZEN/"
+                print(PATH)
+
+                if type_ == 'lc':
+                    model_type = LightCurveTransformer
+                elif type_ == 'tab':
+                    model_type = TabularTransformer
+                else:
+                    model_type = Combinator
+
                 test = InitClassifier(
                     path_to_config_yaml=PATH,
-                    model=LightCurveTransformer if type_ =='lc' else TabularTransformer,
+                    model= model_type,
                     classifier=MultimodalClassifier,
                     use_lc=use_lc,
                     use_tab = use_tab,
@@ -135,7 +145,7 @@ def local_five_fold(type_ ='lc', use_lc = True, use_tab = True, use_mix= True):
                 backbone_od = test.create_ordered_dict(
                     remove_if_in_key_list=[
                         "projection",
-                        "transformer_tab" if type == 'tab' else 'transformer_lc',
+                      # "transformer_tab" if type == 'lc' else 'transformer_lc',
                         "classifier",
                     ],
                     rename_keys=("model.", ""),
@@ -152,7 +162,6 @@ def local_five_fold(type_ ='lc', use_lc = True, use_tab = True, use_mix= True):
                 test.load_backbone_weights(backbone_od)
                 test.load_classifier_weights(classifier_od)
                 test.args.datamodule.val_use_sampler = False
-
                 # INIT DATALOADER
                 dl = InitDataLoader(
                     update_dataset_path=DATASET,
@@ -237,19 +246,27 @@ def local_five_fold(type_ ='lc', use_lc = True, use_tab = True, use_mix= True):
             print(30 * "==")
 
 
-def global_five_fold(type_, use_lc, use_tab, use_mix):
+def global_five_fold(type_, use_lc, use_tab, use_mix, range_):
 
     for EXPERIMENT_NAME in EXPERIMENT_NAME_LIST:
         for SUBSET in ["test"]:
             REPORT = []
-            for i in range(5):
+            for i in range(range_):
                 # SETUP MODEL
                 print("Using seed:{}".format(i))
                 PATH = f"{FIVE_FOLD_DIRECTORY}/{EXPERIMENT_NAME}_{i}/"
                 print(PATH)
+
+                if type_ == 'lc':
+                    model_type = LightCurveTransformer
+                elif type_ == 'tab':
+                    model_type = TabularTransformer
+                else:
+                    model_type = Combinator
+
                 test = InitClassifier(
                     path_to_config_yaml=PATH,
-                    model=LightCurveTransformer if type_ =='lc' else TabularTransformer,
+                    model= model_type,
                     classifier=MultimodalClassifier,
                     use_lc=use_lc,
                     use_tab = use_tab,
@@ -259,7 +276,7 @@ def global_five_fold(type_, use_lc, use_tab, use_mix):
                 backbone_od = test.create_ordered_dict(
                     remove_if_in_key_list=[
                         "projection",
-                       "transformer_tab" if type == 'tab' else 'transformer_lc',
+                      # "transformer_tab" if type == 'lc' else 'transformer_lc',
                         "classifier",
                     ],
                     rename_keys=("model.", ""),
@@ -335,6 +352,8 @@ def global_five_fold(type_, use_lc, use_tab, use_mix):
                 "w",
             ) as f:
                 f.write(summarize_classification_reports(REPORT))
+           # for report in REPORT:
+           #     pd.DataFrame(report).to_csv(f"metric_report/{SUBSET}_{EXPERIMENT_NAME.split('/')[-1]}_classification_report.csv")
             print(30 * "==")
 
 
@@ -343,66 +362,55 @@ DATASET = "/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h
 DEVICE = "cuda:3"
 FIVE_FOLD_DIRECTORY = "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/"
 EXPERIMENT_NAME_LIST = [
-     "ABLATION/LC/class_BASELINE_TF",
-     "ABLATION/LC/class_CONV_TF",
-     "ABLATION/LC/class_TF_GELU_NORM",
-     "ABLATION/LC/class_TF_GELU_NORM_EXP",
-     "ABLATION/LC/class_TF_GELU_NORM_EXP_VEL",
-     "ABLATION/LC/class_TF_GELU_NORM_EXP_VEL_ACC",
-     "ABLATION/LC/class_TF_GELU_NORM_EXP_VEL_ACC_SEQNORM",
-    # "AUGMENTATIONS/LC/class_band_permute",
-    # "AUGMENTATIONS/LC/class_windows",
-    # "AUGMENTATIONS/LC/class_time_gauss_factor",
-    # "AUGMENTATIONS/LC/class_roll",
-    # "AUGMENTATIONS/LC/class_data_factor",
-    # "AUGMENTATIONS/LC/class_random_factor",
-     #"AUGMENTATIONS/LC/class_random_factor_05",
-     #"AUGMENTATIONS/LC/class_all_p1",
-    # "AUGMENTATIONS/LC/class_all_p1_128"
-    #"AUGMENTATIONS/LC/class_datatime_gauss_factor",
-]
+     #'ABLATION/LC/class_BASELINE_TF',
+     #'ABLATION/LC/class_CONV_TF',
+     #'ABLATION/LC/class_TF_GELU_NORM',
+     #'ABLATION/LC/class_TF_GELU_NORM_EXP',
+     #'ABLATION/LC/class_TF_GELU_NORM_EXP_VEL',
+     #'ABLATION/LC/class_TF_GELU_NORM_EXP_VEL_ACC',
+     #'ABLATION/LC/class_TF_GELU_NORM_EXP_VEL_ACC_SEQNORM'
+    # 'ABLATION/LC/class_TF_GELU_NORM_EXP_VEL_ACC_SEQNORM_MD_FT'
+    #    'ABLATION/LC/class_TF_GELU_NORM_EXP_VEL_ACC_SEQNORM_MD_FT_stats'
+     #'SCALING/LC/class_1_32',
+     #'SCALING/LC/class_1_64',
+     #'SCALING/LC/class_1_128',
+     #'SCALING/LC/class_2_32',
+     #'SCALING/LC/class_2_64',
+     #'SCALING/LC/class_2_128',
+     #'SCALING/LC/class_3_32',
+     #'SCALING/LC/class_3_64',
+     #'SCALING/LC/class_3_128',
+    'MM_class_64_128',
+    #'FINAL/LC_MD_FEAT/MM_class_v0000_MULTIMODAL_64128_0_0_moredropout_FROZEN'
+     #'FINAL/LC_MD_FEAT/MM_class_timefilm_mm_baseline'
+      #  "SCALING/MD_FEAT/class_TAB_1_32",
+       # "SCALING/MD_FEAT/class_TAB_1_64",
+        #"SCALING/MD_FEAT/class_TAB_1_128",
+        #"SCALING/MD_FEAT/class_TAB_2_32",
+        #"SCALING/MD_FEAT/class_TAB_2_64",
+        #"SCALING/MD_FEAT/class_TAB_2_128",
+        #"SCALING/MD_FEAT/class_TAB_3_32",
+        #"SCALING/MD_FEAT/class_TAB_3_64",
+        #"SCALING/MD_FEAT/class_TAB_3_128",
+       # 'AUGMENTATION/LC/class_BAND_PERMUTE',
+       # 'AUGMENTATION/LC/class_FACTOR',
+       # 'AUGMENTATION/LC/class_GAUSS_FACTOR',
+       # 'AUGMENTATION/LC/class_ROLL',
+       # 'AUGMENTATION/LC/class_TIME_FACTOR',
+       # 'AUGMENTATION/LC/class_TIME_GAUSS',
+       # 'AUGMENTATION/LC/class_WINDOWS',
+    ]
 
-EXPERIMENT_NAME_LIST = [#"SCALING/LC/class_1_32",
-                        #"SCALING/LC/class_1_64",
-                        #"SCALING/LC/class_1_128",
-
-                        #"SCALING/LC/class_2_32",
-                        #"SCALING/LC/class_2_64",
-                        #"SCALING/LC/class_2_128",
-
-                        #"SCALING/LC/class_3_32",
-                        #"SCALING/LC/class_3_64",
-                        #"SCALING/LC/class_3_128",
-
-
-
-
-                        #"SCALING/LC/v2_TAB_class_1_32",
-                       # "SCALING/LC/v2_TAB_class_1_64",
-                       # "SCALING/LC/v2_TAB_class_1_128",
-
-                       # "SCALING/LC/v2_TAB_class_2_32",
-                      #  "SCALING/LC/v2_TAB_class_2_64",
-                      #  "SCALING/LC/v2_TAB_class_2_128",
-
-                       # "SCALING/LC/v2_TAB_class_3_32",
-                       # "SCALING/LC/v2_TAB_class_3_64",
-                       # "SCALING/LC/v2_TAB_class_3_128",
-                        'SCALING/LC_MD_FEAT/MOSPERF_class_'
-
-
-]
-#PLOT_TITLE = "ZTF-ATAT LC ONLY"
-#global_five_fold('tab', use_lc=False, use_tab=True, use_mix = False)
-#local_five_fold('tab', use_lc=False, use_tab=True, use_mix = False)
-
+PLOT_TITLE = "ZTF-ATAT LC ONLY"
+global_five_fold('lc', use_lc=True, use_tab=False, use_mix = False,range_ = 5)
+#local_five_fold('lc', use_lc=True, use_tab=False, use_mix = False,range_ = 5)
 
 
 #PLOT_TITLE = "ZTF-ATAT TAB ONLY"
-#global_five_fold('tab', use_lc=False, use_tab=True, use_mix = False)
+#global_five_fold('tab', use_lc=False, use_tab=True, use_mix = False, range_ = 5)
 #local_five_fold('tab', use_lc=False, use_tab=True, use_mix = False)
 
 
-PLOT_TITLE = "ZTF-ATAT MULTIMODAL"
-global_five_fold('tab', use_lc=False, use_tab=False, use_mix = True)
-local_five_fold('tab', use_lc=False, use_tab=False, use_mix = True)
+#PLOT_TITLE = "ZTF-ATAT MULTIMODAL"
+#global_five_fold('tab', use_lc=False, use_tab=False, use_mix = True, range_=5)
+#local_five_fold('tab', use_lc=False, use_tab=False, use_mix = True, range_=1)

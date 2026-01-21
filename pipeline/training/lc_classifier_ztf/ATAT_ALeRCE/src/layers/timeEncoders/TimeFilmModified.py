@@ -6,13 +6,14 @@ def roll_tensor(v):
     v[:, 0, :] = 0
     return v
 
+
 def d_dt(x, t, use_exp=False, tmax=2048):
     dt = t - roll_tensor(t)
     dx = x - roll_tensor(x)
     if use_exp:
-        exp_ = torch.exp(torch.sin(dx / dt.masked_fill_(dt == 0, 1) / tmax))
+        exp_ = torch.exp(torch.sin(dx / dt.masked_fill_(dt == 0, 1)  ))
         return dx, dt, exp_
-    return dx, dt, torch.sin(dx / dt.masked_fill_(dt == 0, 1) / tmax)
+    return dx, dt, torch.sin(dx / dt.masked_fill_(dt == 0, 1)  )
 
 class EarlyFusionEncoder(nn.Module):
     def __init__(
@@ -22,7 +23,7 @@ class EarlyFusionEncoder(nn.Module):
         projections_inner_size=64,
         Tmax=1000.0,
         input_size=1,
-        dropout=0.01,
+        dropout=0.001,
         bias=True,
         metadata_num_features=None,
         features_num_features=None,
@@ -60,9 +61,8 @@ class EarlyFusionEncoder(nn.Module):
         self.use_conv = use_conv
         self.dropout = nn.Dropout(dropout)
         if self.use_conv:
-            self.conv = nn.Sequential(nn.Conv1d(in_channels=input_size, out_channels=inner_size, bias=bias, kernel_size=3,padding = 1) )
+            self.conv = nn.Sequential(nn.Conv1d(in_channels=input_size, out_channels=inner_size, bias=bias, kernel_size=5,padding = 2) )
             self.linear_x = nn.Sequential(
-                #nn.Linear(in_features=input_size, out_features=embedding_size, bias=bias),
                 nn.Dropout(dropout),
                 nn.GELU(),
                 nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
@@ -132,16 +132,17 @@ class EarlyFusionEncoder(nn.Module):
             tabular = 0
 
         if self.use_conv:
-            x_out = self.conv(roll_tensor(x).permute(0,2,1)).permute(0,2,1)
+            x_out = self.conv(x.permute(0,2,1)).permute(0,2,1)
             x_out = self.linear_x(x_out)
         else:
-            x_out = self.linear_x(roll_tensor(x))
-        alpha, beta = self.timefilm_coeffs(roll_tensor(t))
+            x_out = self.linear_x(x)
+        alpha, beta = self.timefilm_coeffs(t)
 
         x_out = (
             x_out * alpha + beta + vel + acc + stats + tabular
-        )  # + global_rnn.unsqueeze(-2).repeat(1,x_out.size(1),1)
+        )
         return self.dropout(x_out)
+
 
 
 class Velocity(nn.Module):
@@ -150,12 +151,12 @@ class Velocity(nn.Module):
         self.linear_vel = nn.Sequential(
             nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
             nn.Dropout(dropout),
-            nn.RMSNorm(inner_size),
+            nn.LayerNorm(inner_size),
             nn.GELU(),
             nn.Linear(
                 in_features=inner_size, out_features=embedding_size, bias=bias
             ),
-            nn.Dropout(dropout),
+
         )
 
     def forward(self, x, t, use_exp):
@@ -169,17 +170,16 @@ class Acceleration(nn.Module):
         self.linear_acc = nn.Sequential(
             nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
             nn.Dropout(dropout),
-            nn.RMSNorm(inner_size),
+            nn.LayerNorm(inner_size),
             nn.GELU(),
             nn.Linear(
                 in_features=inner_size, out_features=embedding_size, bias=bias
             ),
-            nn.Dropout(dropout),
         )
 
     def forward(self, x, t, use_exp):
         dx, dt, _ = d_dt(x, t, use_exp)
-        _, _, dxdtdt = d_dt(dx, dt, use_exp)
+        _, _, dxdtdt = d_dt(dx, t, use_exp)
         return self.linear_acc(dxdtdt)
 
 
@@ -199,10 +199,8 @@ class AlphaCoeffs(nn.Module):
         layers = []
         #changed order of fropout
         layers.extend([nn.Dropout(dropout)]) if dropout is not None else None
-        layers.extend([nn.RMSNorm(embedding_size)]) if norm else None
-        layers.extend([nn.Softmax(dim = -1)]) if gelu else None
+        layers.extend([nn.LayerNorm(embedding_size)]) if norm else None
         layers.extend([nn.GELU()]) if gelu else None
-
         self.normalize = nn.Sequential(*layers)
 
     def forward(self, embedding):
@@ -224,8 +222,7 @@ class BetaCoeffs(nn.Module):
         )
         layers = []
         layers.extend([nn.Dropout(dropout)]) if dropout is not None else None
-        layers.extend([nn.RMSNorm(embedding_size)]) if norm else None
-        layers.extend([nn.Softmax(dim = -1)]) if gelu else None
+        layers.extend([nn.LayerNorm(embedding_size)]) if norm else None
 
         layers.extend([nn.GELU()]) if gelu else None
 
@@ -298,16 +295,17 @@ class TimeFilmCoeffs(nn.Module):
         )
         self.register_buffer("Tmax", torch.tensor(Tmax, dtype=float))
         self.exponential = exponential
+        self.dropout = nn.Dropout(0.0)
 
     def get_sin_cos(self, t):
-        sin = nn.functional.dropout(torch.sin(t), p = 0.01)
-        cos = nn.functional.dropout(torch.cos(t), p = 0.01)
+        sin = self.dropout(torch.sin(t))
+        cos = self.dropout(torch.cos(t))
         if self.exponential:
             return torch.exp(sin).masked_fill_(sin == 0, 0), torch.exp(
                 cos.masked_fill_(cos == 1, 0)
             )
-        else:
-            return sin, cos
+
+        return sin, cos
 
     def forward(self, t):
         t = self.ar * t.repeat(1, 1, self.n_harmonics) / self.Tmax
@@ -409,7 +407,7 @@ class Stats(nn.Module):
         self.project_stats = nn.Sequential(
             nn.Linear(in_features=sum(stats), out_features=embedding_size, bias=bias),
             nn.Dropout(0.01),
-            nn.RMSNorm(embedding_size),
+            nn.LayerNorm(embedding_size),
             nn.GELU(),
             nn.Linear(
                 in_features=embedding_size, out_features=embedding_size, bias=bias
@@ -438,39 +436,3 @@ class Stats(nn.Module):
         mask = x != 0
         stats = stats * mask
         return self.project_stats(stats)
-
-class SymmetryEncoder(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, batch: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            batch: Tensor of shape (batch_size, seq_len), expected to be padded with zeros.
-
-        Returns:
-            Tensor of shape (batch_size,) containing symmetry scores in [0, 1].
-        """
-        if batch.ndim != 2:
-            raise ValueError("Input must be a 2D tensor (batch_size, seq_len)")
-
-        scores = []
-        for row in batch:
-            nonzero = (row != 0).nonzero(as_tuple=True)[0]
-            if nonzero.numel() == 0:
-                scores.append(torch.tensor(1.0, device=batch.device))  # All zeros
-                continue
-            start, end = nonzero[0].item(), nonzero[-1].item() + 1
-            core = row[start:end]
-            reversed_core = torch.flip(core, dims=[0])
-            mse = torch.mean((core - reversed_core) ** 2)
-            var = torch.var(core, unbiased=False)
-            score = (
-                1 - (mse / var)
-                if var.item() != 0
-                else torch.tensor(1.0, device=batch.device)
-            )
-            scores.append(score)
-
-        return torch.stack(scores).unsqueeze(
-            -1 )

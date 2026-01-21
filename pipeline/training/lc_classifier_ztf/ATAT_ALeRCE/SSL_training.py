@@ -10,7 +10,7 @@ from src.models.PretrainModule import PretrainModule
 from src.models.PretrainMMModule import PretrainMMModule
 from src.models.PretrainModuleFusion import PretrainModuleFusion
 from src.augmentations import LightCurveTransform as LC
-#from src.augmentations import TabularTransformations as TAB
+from src.augmentations import TabularTransformations as TAB
 from src.layers.transformer.ATAT import LightCurveTransformer, TabularTransformer, Combinator
 from src.layers.utils.projector import VICRegProjector
 from src.losses.VICReg import VICReg
@@ -51,29 +51,38 @@ def main(cfg:ATATConfig):
 
     transforms = []
 
-    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=None) for w_ in list(range(6, 60, 6))]
-    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=None) for w_ in list(range(6, 60, 6))])
+    apply_  = None
+
+    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=None) for w_ in list(range(6, 204, 6))]
+    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=None) for w_ in list(range(6, 204, 6))])
     transforms.extend([RandomApply([RandomChoice(windows
                                 )],p =1)
-                                ]
-                                )  if cfg.online_transforms.use_window_select else None
+                                ])  if cfg.online_transforms.use_window_select else None
 
-    transforms.extend([ RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-3, apply_to_classes=None)], p = p_)]) if cfg.online_transforms.use_time_gauss_factor else None
-    transforms.extend([ RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-3, apply_to_classes=None)], p = p_)]) if cfg.online_transforms.use_gauss_factor else None
+    #transforms.extend([ RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_time_gauss_factor else None
+    #transforms.extend([ RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_gauss_factor else None
 
-    transforms.extend([ RandomApply([LC.TimeFactor( factor = list(np.linspace(0.95,1.05, 100)), apply_to_classes=None)], p = p_),]) if cfg.online_transforms.use_simple_time_factor else None
-    transforms.extend([ RandomApply([LC.Factor( factor = list(np.linspace(0.95,1.05, 100)), apply_to_classes=None)], p = p_),]) if cfg.online_transforms.use_simple_data_factor else None
+    #transforms.extend([ RandomApply([LC.TimeFactor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_time_factor else None
+    #transforms.extend([ RandomApply([LC.Factor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_data_factor else None
 
-    transforms.extend([ RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=None)], p = p_)]) if cfg.online_transforms.use_band_permute else None
+    #transforms.extend([ RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_band_permute else None
 
-    transforms.extend([ RandomApply([LC.Roll(2,max_roll = 200,  apply_to_classes=None)], p = p_)]) if cfg.online_transforms.use_roll else None
-    transforms.extend([ RandomApply([LC.GaussianNoise(2)], p = p_)]) if cfg.online_transforms.use_gauss_noise else None
+    #transforms.extend([ RandomApply([LC.GaussianFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
+    #transforms.extend([ RandomApply([LC.GaussianTimeFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
+#########
 
-    #windows =[LC.BlockWindow(cfg.lc.num_bands, window_size=w_, apply_to_classes=None) for w_ in list(range(6, 60, 6))]
+#########
+
+    transforms.extend([LC.RandomMaskTimeVector(2,0.5,None)])
+    transforms.extend([LC.RandomMaskDataVector(2,0.5,None)])
+
+   # transforms.extend([TAB.TABGaussianNoise(0,1e-2)])
+    #transforms.extend([TAB.RandomMask(0.01)])
+    #transforms.extend([TAB.Factor(factor = list(np.linspace(0.95,1.0, 100)))])
 
     list_of_transforms = transforms
     cfg.datamodule.dataset.transforms_1 =list_of_transforms
-    cfg.datamodule.dataset.transforms_2 = list_of_transforms #[] #[] # list_of_transforms
+    cfg.datamodule.dataset.transforms_2 = [] #list_of_transforms #[] #[] # list_of_transforms
     pl_datal = LitPretrain(**cfg.datamodule)
 
     if cfg.experiment_type == 'LC':

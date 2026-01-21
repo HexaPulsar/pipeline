@@ -5,10 +5,10 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3 #,1
 
 
 LEARNING_RATE=1e-3
-DROPOUT=0.01
-PATIENCE=10
+DROPOUT=0.1
+PATIENCE=20
 
-VERSION=2
+VERSION=0
 DIRECTORY=SCALING
 EXPERIMENT_TYPE='LC'
 
@@ -16,14 +16,14 @@ for SEED in {0..4}; do
   for DEPTH in {1..3}; do
     for i in 32 64 128; do
       experiment_name=${DEPTH}_${i}
-      EXPERIMENT_NAME=class_${experiment_name}_${SEED}_noseqnorm
+      EXPERIMENT_NAME=class_${experiment_name}_${SEED}
 
       export CONFIG_FILE_DIRECTORY="TF_GELU_NORM_EXP_VEL_ACC_SEQNORM.yaml"
 
       export EXPERIMENT_OUTPUT_PATH=./results/${DIRECTORY}/LC/${EXPERIMENT_NAME}/
       export LOG_FILENAME=$EXPERIMENT_OUTPUT_PATH/${EXPERIMENT_NAME}.log
       export CHECKPOINT=/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/${DIRECTORY}/LC/${experiment_name}/
-
+      export internal=$(( i * 2 ))
       # Ensure directories exist
       mkdir -p "$EXPERIMENT_OUTPUT_PATH"
       export HYDRA_FULL_ERROR=1
@@ -42,10 +42,10 @@ for SEED in {0..4}; do
         ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
         hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
           ++ATATConfig.lc.embedding_size=${i}\
-          ++ATATConfig.lc.embedding_size_sub=${i}\
+          ++ATATConfig.lc.embedding_size_sub=$internal\
           ++ATATConfig.lc.num_encoders=${DEPTH}\
-          ++ATATConfig.online_transforms.use_window_select=True\
-          ++ATATConfig.online_transforms.use_max_window_select=True\
+          ++ATATConfig.online_transforms.use_window_select=False\
+          ++ATATConfig.online_transforms.use_max_window_select=False\
           ++ATATConfig.lc.dropout=$DROPOUT\
           ++ATATConfig.learning_rate=$LEARNING_RATE\
           ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE\
@@ -54,5 +54,3 @@ for SEED in {0..4}; do
     done
   done
 done
-
-

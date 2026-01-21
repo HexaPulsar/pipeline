@@ -3,15 +3,15 @@
 cd ../../
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 
-for SEED in {0..0}; do
+for SEED in {2..2}; do
 
 LEARNING_RATE=1e-3
 MAX_EPOCHS=500
 PATIENCE=20
 
-experiment_name=TEST_NEWACC_64128_allaug
+experiment_name=PERMUTE
 #experiment_name=test_2019_v7
-DIRECTORY=newacc
+DIRECTORY=AUGMENTATION
 EXPERIMENT_TYPE='LC'
 EXPERIMENT_NAME=class_${experiment_name}_${SEED} # _with_random_mask_p001_d001 #_1e5
 
@@ -39,16 +39,16 @@ python training.py \
       ++ATATConfig.loggers.csv.save_dir=$EXPERIMENT_OUTPUT_PATH\
       ++ATATConfig.callbacks.model_checkpoint.dirpath=$EXPERIMENT_OUTPUT_PATH\
       hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
-        ++ATATConfig.online_transforms.use_window_select=True\
-        ++ATATConfig.online_transforms.use_max_window_select=True\
+        ++ATATConfig.online_transforms.use_window_select=False\
+        ++ATATConfig.online_transforms.use_max_window_select=False\
         ++ATATConfig.online_transforms.use_time_gauss_factor=True\
         ++ATATConfig.online_transforms.use_gauss_factor=True\
-        ++ATATConfig.online_transforms.use_simple_time_factor=True\
-        ++ATATConfig.online_transforms.use_simple_data_factor=True\
+        ++ATATConfig.online_transforms.use_simple_time_factor=False\
+        ++ATATConfig.online_transforms.use_simple_data_factor=False\
         ++ATATConfig.online_transforms.use_band_permute=True\
         ++ATATConfig.online_transforms.use_roll=False\
         ++ATATConfig.online_transforms.use_gauss_noise=False\
-        ++ATATConfig.online_transforms.p_=0.5\
+        ++ATATConfig.online_transforms.p_=1\
     ++ATATConfig.lc.embedding_size=64\
     ++ATATConfig.lc.embedding_size_sub=128\
     ++ATATConfig.lc.num_encoders=3\

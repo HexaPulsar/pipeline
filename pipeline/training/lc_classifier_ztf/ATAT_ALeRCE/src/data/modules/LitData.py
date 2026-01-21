@@ -33,11 +33,11 @@ class LitData(pl.LightningDataModule):
     drop_last: bool = False
     def __post_init__(self):
         super().__init__()
-       
+
     def prepare_data(self):
         h5_ = h5py.File("{}".format(self.dataset.data_root))
         assert all([self.dataset.metadata_key in h5_.keys()]), 'metadata_key {} not in dataset keys. dataset keys are {}'.format(self.dataset.metadata_key, h5_.keys())
-        
+
         get_data = h5_.get("%s_%s" % ('training', self.dataset.seed))
         assert get_data is not None, '{}_{} not a key of the dataset'.format('training',self.dataset.seed)
         train_idx = get_data[:]
@@ -69,21 +69,24 @@ class LitData(pl.LightningDataModule):
         )
        # print('class_sampler_count', class_sample_count)
         weight = 1.0 / class_sample_count
+        weight = 1.0 / np.sqrt(class_sample_count)
+
         uniques = np.unique(labels).astype(int)
         d = {key: value for key, value in zip(uniques, weight)}
         samples_weight = np.array([d[labels[i].item()] for i in range(len(labels))])
         samples_weight = torch.from_numpy(samples_weight)
         return samples_weight
+
     def setup(self, stage):
         logging.debug(f'{self.dataset.train_transforms}')
         if stage == 'fit':
             logging.info(f'Apply train transforms: {self.dataset.train_apply_transform}')
         if stage == 'validate':
             logging.info(f'Apply validation transforms: {self.dataset.validation_apply_transform}')
-        
+
         return super().setup(stage)
-    
-    def train_dataloader(self): 
+
+    def train_dataloader(self):
         dataset_used = ATATDataset(set_type="train", **self.dataset)
         if self.train_use_sampler:
 

@@ -1,7 +1,7 @@
 from typing import Literal, Union
-import scipy.signal as signal 
+import scipy.signal as signal
 import numpy as np
-import torch 
+import torch
 import torch.nn.functional as F
 from copy import deepcopy
 from .submodules import *
@@ -33,23 +33,23 @@ class Roll:
 import torch
 class ZScoreUndersample:
     """samplear elementos de la curva excluyendo aquellas observaciones que no estan contenidas en abs(zscore) > thr"""
-    
+
     def __init__(self, thr =None, min_samples = 6, impose_seqlen:int = 200, inject_gauss_noise = False):
         """_summary_
 
         Args:
             thr (float, optional): El threshold de zscore sobre el cual se deberían seleccionar samples. Defaults to torch.rand(1).
-            min_samples (int, optional): El minimo de punto que debe tener la curva. Si no cumple este minimo no bajosamplea, solo retorna el original. 
+            min_samples (int, optional): El minimo de punto que debe tener la curva. Si no cumple este minimo no bajosamplea, solo retorna el original.
             De la misma manera si originalmente se tienen mas de 6 muestras y a través del bajosampleo se seleccionan menos de 6, se devuelve el array original.  Defaults to 6.
             impose_seqlen (int, optional): impone un largo de la secuencia de salida. Para cuando la secuencia de entrada tiene ++ puntos que lo que se quiere a la salida. Defaults to 200.
-        """        
+        """
         self.impose_seqlen = impose_seqlen
         self.thr = thr
         self.min_samples = min_samples
         self.inject_gauss_noise = inject_gauss_noise
-        
+
     def __call__(self,sample):
-        data = sample['data'] 
+        data = sample['data']
         time = sample['time']
         if torch.count_nonzero(data) <= self.min_samples:
             return sample
@@ -81,7 +81,7 @@ class ZScoreUndersample:
                     rand_idx = None
                 new_data[:torch.count_nonzero(select_mask),i] = torch.masked_select(band_data,select_mask)[rand_idx]
                 new_time[:torch.count_nonzero(select_mask),i] = torch.masked_select(band_time,select_mask)[rand_idx]
-        
+
         if torch.count_nonzero(new_data) == 0:
             return sample
         sample['data']  = new_data
@@ -96,11 +96,11 @@ class BandPermute:
     def __call__(self,sample):
         if self.apply_to_classes is None:
            self.permute(sample)
-        else: 
+        else:
             if sample['labels'] in self.apply_to_classes:
                self.permute(sample)
         return sample
-    
+
     def permute(self, sample):
         shift_ = torch.randint(0,self.num_bands,size  =(1,))
         sample['data'] = torch.roll(sample['data'], shifts=(shift_,), dims=0)
@@ -109,7 +109,7 @@ class BandPermute:
 
 class TimeNormalization:
     def __call__(self,sample):
-        
+
         time = sample['time']
         mask_min = 9999999999.0 * (time == 0).float()
         # Compute minimum over non-zero time values by adding the mask
@@ -118,31 +118,72 @@ class TimeNormalization:
         # Normalize and keep zeros in place
         sample['time'] = (time.float() - t_min) * (time != 0).float()
         return sample
-    
+
+
+class RandomMaskTimeVector:
+    def __init__(self,num_bands:int,p:int,apply_to_classes=None):
+        self.num_bands = num_bands
+        self.p = p
+        self.apply_to_classes = apply_to_classes
+
+    def __call__(self,sample:dict):
+        random_mask = torch.rand_like(sample['data']) >= self.p
+      #  sample['data'] = sample['data']*random_mask
+        sample['time'] = sample['time']*random_mask
+        #sample['mask'] = sample['data'] != 0
+        return sample
+
+class RandomMaskDataVector:
+    def __init__(self,num_bands:int,p:int,apply_to_classes=None):
+        self.num_bands = num_bands
+        self.p = p
+        self.apply_to_classes = apply_to_classes
+
+    def __call__(self,sample:dict):
+        random_mask = torch.rand_like(sample['data']) >= self.p
+        sample['data'] = sample['data']*random_mask
+        #sample['time'] = sample['time']*random_mask
+        #sample['mask'] = sample['data'] != 0
+        return sample
+
+
+class RandomMaskMaskVector:
+    def __init__(self,num_bands:int,p:int,apply_to_classes=None):
+        self.num_bands = num_bands
+        self.p = p
+        self.apply_to_classes = apply_to_classes
+
+    def __call__(self,sample:dict):
+        random_mask = torch.rand_like(sample['mask']) >= self.p
+        sample['mask'] = sample['mask']*random_mask
+        #sample['time'] = sample['time']*random_mask
+        #sample['mask'] = sample['data'] != 0
+        return sample
+
 class WindowSelect:
     def __init__(self,num_bands:int,window_size:int,apply_to_classes=None):
         self.num_bands = num_bands
         self.window_size = window_size
         self.apply_to_classes = apply_to_classes
 
-    def __call__(self,sample:dict): 
+    def __call__(self,sample:dict):
         if self.apply_to_classes is None:
             self.window_select(sample)
         else:
             self.window_select(sample)
         return sample
-    
+
     def window_select(self,  sample):
         for i in range(self.num_bands):
                 nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
                 intersection_check = nonzero_measures - self.window_size
-                if  torch.count_nonzero((sample['data'][:,i])<= self.window_size):
+                if torch.count_nonzero((sample['data'][:,i])<= self.window_size):
                     continue
                 else:
                     if intersection_check == 0:
                         start = 0
                     else:
-                        start = torch.randint(0,intersection_check ,size = (1,)) 
+                        start = torch.randint(0,intersection_check ,size = (1,))
                     end = start + self.window_size
                     sample["data"][:start,i] = 0
                     sample["data"][end:,i] = 0
@@ -158,13 +199,13 @@ class BlockWindow:
         self.window_size = window_size
         self.apply_to_classes = apply_to_classes
 
-    def __call__(self,sample:dict): 
+    def __call__(self,sample:dict):
         if self.apply_to_classes is None:
             self.window_select(sample)
         else:
             self.window_select(sample)
         return sample
-    
+
     def window_select(self,  sample):
         for i in range(self.num_bands):
             nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
@@ -175,13 +216,13 @@ class BlockWindow:
                 if intersection_check == 0:
                     start = 0
                 else:
-                    start = torch.randint(0,intersection_check ,size = (1,)) 
+                    start = torch.randint(0,intersection_check ,size = (1,))
                 end = start + self.window_size
-                
+
                 sample['data'][start:end, i] =0
                 sample['time'][start:end, i] =0
                 sample['mask'] = (sample['data'] == 0).bool()
-    
+
 import torch
 
 class MAXWindowSelect:
@@ -237,7 +278,7 @@ class RandomSubsample:
         self.num_bands = num_bands
         self.window_size = window_size
 
-    def __call__(self,sample:dict): 
+    def __call__(self,sample:dict):
         new_data = torch.zeros_like(sample['data'][:self.window_size,:])
         new_time = torch.zeros_like(sample['data'][:self.window_size,:])
         for band in range(self.num_bands):
@@ -256,4 +297,4 @@ class RandomSubsample:
                 sample['time'] = new_time
         return sample
 
-    
+

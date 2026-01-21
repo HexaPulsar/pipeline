@@ -1,6 +1,6 @@
 import warnings
 import logging
-import colorlog 
+import colorlog
 
 warnings.filterwarnings("ignore")
 
@@ -12,7 +12,7 @@ from src.data.modules.LitData import LitData
 from src.models.ClassifierModule import ClassifierModule
 from src.models.ClassifierModuleHier import ClassifierModuleHier
 from src.models.ClassifierModuleELA import ClassifierModuleELA
- 
+
 from pytorch_lightning import Trainer
 
 from src.layers.transformer.ATAT import LightCurveTransformer, TabularTransformer, Combinator
@@ -49,10 +49,10 @@ class HierLoss(nn.Module):
         hier_preds = nn.functional.softmax(hier_preds, dim=-1)
         hier_classes = torch.argmax(hier_preds, dim=-1).int()
         class_probs = nn.functional.softmax(class_preds, dim=-1)
-        
 
 
-        modified_logits = [] 
+
+        modified_logits = []
         for i in range(class_preds.shape[0]):
             valid_indices = mapping_dict[int(hier_classes[i].item())]
             mask = torch.zeros_like(class_probs[i])
@@ -62,7 +62,7 @@ class HierLoss(nn.Module):
         modified_logits = torch.stack(modified_logits, dim=0)
         return modified_logits
 
-        
+
     def map_label_tensor(self,labels):
         mapping_dict = {
             0: 1, 1: 1, 3: 1, 5: 1, 8: 1,
@@ -71,26 +71,23 @@ class HierLoss(nn.Module):
         }
         mapping_tensor = torch.tensor([mapping_dict.get(int(label), -1) for label in labels], device = labels.device)
         return mapping_tensor
-    
+
     def forward(self, preds ,labels):
-        
+
         hier_loss = self.loss(preds[0],  self.map_label_tensor(labels.long()))
-        modified_logits = self.modify_logits(preds[0],preds[1]) 
+        modified_logits = self.modify_logits(preds[0],preds[1])
         class_loss = self.loss(modified_logits,  labels)
         hier_weight =1
         class_weight =1
         loss =(hier_weight* hier_loss + class_weight *class_loss)/2
         return loss
-    
-        return loss
 
-@hydra.main(version_base=None, config_path="./src/configs/ZTF/", config_name= 'supervised_training')
+@hydra.main(version_base=None, config_path="./src/configs/ELASTICC/", config_name= 'supervised_training')
 #@hydra.main(version_base=None, config_path="./src/configs/ZTF/", config_name= 'LC_MD')
 def main(cfg:ATATConfig):
-    #print(cfg)
-    
+
     cfg = instantiate(cfg).ATATConfig
-    
+
     logger = logging.getLogger()
     logging.root.handlers = []
     handler = colorlog.StreamHandler()
@@ -114,31 +111,46 @@ def main(cfg:ATATConfig):
     transients = set(ZTF_TAXONOMY.transient().values())
     stochastic = set(ZTF_TAXONOMY.stochastic().values())
     periodic = set(ZTF_TAXONOMY.periodic().values())
-         
-    p_ =cfg.online_transforms.p_ 
-    
+
+    p_ =cfg.online_transforms.p_
+
     transforms = []
     apply_ = None
-    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 48, 6))]
-    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 204, 6))])
-    transforms.extend([RandomApply([RandomChoice(windows       
+    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 50, 6))]
+    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 50, 6))])
+    transforms.extend([RandomApply([RandomChoice(windows
                                 )],p =1)
                                 ])  if cfg.online_transforms.use_window_select else None
-    
+
     transforms.extend([ RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_time_gauss_factor else None
     transforms.extend([ RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_gauss_factor else None
-    
-    transforms.extend([ RandomApply([LC.TimeFactor( factor = list(np.linspace(0.95,1.05, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_time_factor else None
-    transforms.extend([ RandomApply([LC.Factor( factor = list(np.linspace(0.95,1.05, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_data_factor else None
-    
-    transforms.extend([ RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_band_permute else None
-    
-    transforms.extend([ RandomApply([LC.Roll(2,max_roll = 200,  apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_roll else None
-    transforms.extend([ RandomApply([LC.GaussianNoise(2)], p = p_)]) if cfg.online_transforms.use_gauss_noise else None
 
- 
+    transforms.extend([ RandomApply([LC.TimeFactor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_time_factor else None
+    transforms.extend([ RandomApply([LC.Factor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_data_factor else None
+
+    transforms.extend([ RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_band_permute else None
+
+####
+
+    transforms.extend([ RandomApply([LC.GaussianFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
+    transforms.extend([ RandomApply([LC.GaussianTimeFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
+#########
+    #transforms.extend([ RandomApply([TAB.TABGaussianNoise(0,1e-2)], p = p_)])
+    #transforms.extend([ RandomApply([TAB.RandomMask(0.1)], p = 1)])
+    #transforms.extend([ RandomApply([TAB.Factor(factor = list(np.linspace(0.95,1.00, 100)))], p = p_)])
+
+    #transforms.extend([ RandomApply([LC.RandomMaskDataVector(2,0.05,None)], p = p_)])
+    #transforms.extend([ RandomApply([LC.RandomMaskTimeVector(2,0.05,None)], p = p_)])
+
+
+    #transforms.extend([ RandomApply([LC.ChessMask(True)], p = 0.1)])
+
+
+
+    #transforms.extend([LC.TimeDelta(2,(0,10000),None)])
+
     cfg.datamodule.dataset.train_transforms = transforms
-    print(transforms)
+    #print(transforms)
    # cfg.datamodule.dataset.val_transforms = transforms
 
     pl_datal = LitData(**cfg.datamodule)
@@ -154,7 +166,7 @@ def main(cfg:ATATConfig):
         f"• Use_features      : {'✓' if cfg.lc.use_features else '✗'}\n"
         f"{'='*30}\n"
         f"• Sequence l2 norm  : {'✓' if cfg.lc.use_sequence_norm else '✗'}\n"
-        f"• Depth            : {cfg.lc.num_encoders}\n"    
+        f"• Depth            : {cfg.lc.num_encoders}\n"
         f"• Heads            : {cfg.lc.num_heads}\n"
         f"• Dropout           : {cfg.lc.dropout}\n"
         f"{'='*30}\n"
@@ -166,27 +178,26 @@ def main(cfg:ATATConfig):
         print(log_message)
         transformer = LightCurveTransformer(**cfg.lc)
         #classifier = TokenClassifier(num_classes=cfg.num_classes,embedding_size=cfg.lc.embedding_size)
-        classifier = MultimodalClassifier(lc_input_size=cfg.lc.embedding_size,
-                                          inner_size=cfg.lc.embedding_size*2,
-                                          tab_input_size=None, 
-                                          use_lc = True,
-                                          dropout=cfg.lc.dropout,
-                                          num_classes= cfg.num_classes)
+        classifier = MultimodalClassifier(experiment_type=cfg.experiment_type,
+                                          lc_input_size=cfg.lc.embedding_size,
+                                                tab_input_size=cfg.tab.embedding_size,
+                                                use_mix = False,
+                                                use_lc = True,
+                                                use_tab=False,
+                                                combine_logits=False,
+                                                num_classes= cfg.num_classes)
         #classifier = Hier(cfg.lc.embedding_size,num_classes= cfg.num_classes)
         loss =nn.CrossEntropyLoss() # HierLoss()#
-        
-        class_sampler_count  = np.array([1783,1804,1785,1526,1566,1008,1855,1440,872,891,1858,1860,1814,1876,763,973,278,121,56,70,172,17])
+        #class_sampler_count  = np.array([1783,1804,1785,1526,1566,1008,1855,1440,872,891,1858,1860,1814,1876,763,973,278,121,56,70,172,17])
 
-    
-        #loss = FocalLoss(gamma = 5, alpha = torch.tensor(1), task_type='multi-class', num_classes=cfg.num_classes)
-       # loss = HierLoss()
+
         pl_model = ClassifierModule(model = transformer,
                                     classifier= classifier,
-                                     loss =  loss, 
+                                     loss =  loss,
                                      freeze_lc=False,
                                      freeze_tab=False,
                                      report_lc =False,
-                                     report_mix = False, 
+                                     report_mix = False,
                                     lc_load_ckpt= cfg.lc.checkpoint,
                                     tab_load_ckpt=cfg.tab.checkpoint,
                                     lc_freeze= cfg.lc.freeze_weights,
@@ -194,7 +205,7 @@ def main(cfg:ATATConfig):
                                     weight_str_parse_lc= ('model.',''),
                                     #weight_str_parse_tab='model.transformer_tab.',
                                     **cfg)
-    
+
     if cfg.experiment_type == 'MD' or cfg.experiment_type == 'MD_FEAT':
         transformer = TabularTransformer(**cfg.tab)
         print(cfg.callbacks.model_checkpoint.monitor)
@@ -203,14 +214,14 @@ def main(cfg:ATATConfig):
                                           use_tab=True,
                                           num_classes= cfg.num_classes)
         loss = nn.CrossEntropyLoss()
-       # print(cfg.checkpoint) 
+       # print(cfg.checkpoint)
         pl_model = ClassifierModule(model = transformer,
                                     classifier= classifier,
-                                     loss =  loss, 
+                                     loss =  loss,
                                      freeze_lc=False,
                                      freeze_tab=False,
                                      report_lc =False,
-                                     report_mix = False, 
+                                     report_mix = False,
                                     lc_load_ckpt= cfg.lc.checkpoint,
                                     tab_load_ckpt=cfg.tab.checkpoint,
                                     lc_freeze= cfg.lc.freeze_weights,
@@ -223,40 +234,8 @@ def main(cfg:ATATConfig):
         transformer_md = TabularTransformer(**cfg.tab)
         model  = Combinator(transformer_lc,transformer_md)
         classifier = MultimodalClassifier(experiment_type=cfg.experiment_type,
-                                          lc_input_size=cfg.lc.embedding_size, 
-
-                                                tab_input_size=cfg.tab.embedding_size, 
-                                                use_mix = True,
-                                                use_lc = True,
-                                                use_tab=True,
-                                                combine_logits=True,
-                                                num_classes= cfg.num_classes)
-        loss = nn.CrossEntropyLoss()
-        pl_model = ClassifierModule(model = model,
-                                    classifier= classifier,
-                                     loss =  loss, 
-                                     freeze_lc=False,
-                                     freeze_tab=False,
-                                     report_lc =False,
-                                     report_mix = False, 
-                                     lc_load_ckpt= cfg.lc.checkpoint,
-                                    tab_load_ckpt=cfg.tab.checkpoint,
-                                    lc_freeze= cfg.lc.freeze_weights,
-                                    tab_freeze = cfg.tab.freeze_weights,
-                                     weight_str_parse_lc= ('model.',''),
-                                    weight_str_parse_tab=None,
-                                    **cfg)
-        
-
-
-
-    if cfg.experiment_type == 'LC_MD_FEAT':
-        transformer_lc = LightCurveTransformer(**cfg.lc)
-        transformer_md = TabularTransformer(**cfg.tab)
-        model  = Combinator(transformer_lc,transformer_md)
-        classifier = MultimodalClassifier(experiment_type=cfg.experiment_type,
-                                          lc_input_size=cfg.lc.embedding_size, 
-                                                tab_input_size=cfg.tab.embedding_size, 
+                                          lc_input_size=cfg.lc.embedding_size,
+                                                tab_input_size=cfg.tab.embedding_size,
                                                 use_mix = True,
                                                 use_lc = False,
                                                 use_tab=False,
@@ -265,26 +244,55 @@ def main(cfg:ATATConfig):
         loss = nn.CrossEntropyLoss()
         pl_model = ClassifierModule(model = model,
                                     classifier= classifier,
-                                     loss =  loss, 
+                                     loss =  loss,
                                      freeze_lc=False,
                                      freeze_tab=False,
-                                     report_lc =False,
-                                     report_mix = False, 
-                                    #lc_load_ckpt= cfg.lc.checkpoint,
+                                     report_lc =True,
+                                     report_mix = False,
+                                    lc_load_ckpt= cfg.lc.checkpoint,
                                     #tab_load_ckpt=cfg.tab.checkpoint,
-                                    #lc_freeze= cfg.lc.freeze_weights,
-                                    #tab_freeze = cfg.tab.freeze_weights,
-                                    #weight_str_parse_lc=('model.',''),
-                                   # weight_str_parse_tab=('model.',''),
-                                    **cfg) 
+
+                                     weight_str_parse_lc= ('model.',''),
+                                    weight_str_parse_tab=('model.',''),
+                                    **cfg)
+
+    if cfg.experiment_type == 'LC_MD_FEAT':
+        transformer_lc = LightCurveTransformer(**cfg.lc)
+        transformer_md = TabularTransformer(**cfg.tab)
+        model  = Combinator(transformer_lc,transformer_md)
+        classifier = MultimodalClassifier(experiment_type=cfg.experiment_type,
+                                          lc_input_size=cfg.lc.embedding_size,
+                                                tab_input_size=cfg.tab.embedding_size,
+                                                use_mix = True,
+                                                use_lc = False,
+                                                use_tab=False,
+                                                combine_logits=False,
+                                                num_classes= cfg.num_classes)
+        loss = nn.CrossEntropyLoss()
+        #loss = FocalLoss(gamma = 1, alpha = torch.tensor(1), task_type='multi-class', num_classes=cfg.num_classes)
+        pl_model = ClassifierModule(model = model,
+                                    classifier= classifier,
+                                     loss =  loss,
+                                     freeze_lc=False,
+                                     freeze_tab=False,
+                                     report_lc =True,
+                                     report_mix = False,
+                                    lc_load_ckpt= cfg.lc.checkpoint,
+                                    #tab_load_ckpt=cfg.tab.checkpoint,
+
+                                     weight_str_parse_lc= ('model.',''),
+                                    weight_str_parse_tab=('model.',''),
+                                    **cfg)
     #cfg.callbacks.update({'f1log':MacroF1PerClassLogger()})
     trainer = Trainer(
+       # profiler="simple",
         callbacks=list(cfg.callbacks.values()),
         logger= list(cfg.loggers.values()),
         **cfg.trainer
         )
 
     trainer.fit(pl_model, pl_datal)
+    #trainer.test(pl_model,pl_datal)
 
     #pref_ = global_config.CHECKPOINT_PREFIX
 

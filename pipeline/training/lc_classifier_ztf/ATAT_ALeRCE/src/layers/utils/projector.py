@@ -14,28 +14,28 @@ class VICRegProjector(nn.Module):
         else:
             layers = []
             f = list(map(int, shape_projector_1.split("-")))
-            layers.append(nn.LayerNorm(f[-2]))#
+            #layers.append(nn.BatchNorm1d(f[0]))#
 
             if len(f) == 2:
-                layers.append(nn.LayerNorm(f[-2]))
+                layers.append(nn.BatchNorm1d(f[-2]))
             for i in range(len(f) - 2):
                 layers.append(nn.Linear(f[i], f[i + 1]))
-                layers.append(nn.LayerNorm(f[i + 1]))
+                layers.append(nn.BatchNorm1d(f[i + 1]))
                 layers.append(nn.GELU())
             if len(f) == 2:
-                layers.append(nn.LayerNorm(f[-2]))
+                layers.append(nn.BatchNorm1d(f[-2]))
             layers.append(nn.Linear(f[-2], f[-1], bias=False))
 
             self.projection_x = nn.Sequential(*layers)
             layers = []
             f = list(map(int, shape_projector_2.split("-")))
-            layers.append(nn.LayerNorm(f[-2]))#
+            #layers.append(nn.BatchNorm1d(f[0]))#
             for i in range(len(f) - 2):
                 layers.append(nn.Linear(f[i], f[i + 1]))
-                layers.append(nn.LayerNorm(f[i + 1]))
+                layers.append(nn.BatchNorm1d(f[i + 1]))
                 layers.append(nn.GELU())
             if len(f) == 2:
-                layers.append(nn.LayerNorm(f[-2]))
+                layers.append(nn.BatchNorm1d(f[-2]))
             layers.append(nn.Linear(f[-2], f[-1], bias=False))
             self.projection_y = nn.Sequential(*layers)
         self.vicreg = vicreg
@@ -51,10 +51,10 @@ class CLIPProjector(nn.Module):
         self.l2norm = l2norm
         hidden_size = 128
         self.projection = nn.Sequential(
-            # nn.LayerNorm(input_size),
+            # nn.BatchNorm1d(input_size),
             nn.Linear(input_size, hidden_size, bias=False),
             nn.GELU(),
-            #nn.LayerNorm(hidden_size),
+            #nn.BatchNorm1d(hidden_size),
             nn.Linear(hidden_size, output_size, bias=False),
         )
 

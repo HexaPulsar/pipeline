@@ -51,6 +51,7 @@ class InitClassifier(InitBackbone):
                         model,
                         arg_key,
                         device)
+
         self.classifier = classifier(lc_input_size = self.args.lc.embedding_size,
                                      inner_size = self.args.lc.embedding_size,
                  tab_input_size = self.args.tab.embedding_size,
@@ -101,7 +102,43 @@ class InitClassifier(InitBackbone):
         self.backbone.to(device="cpu")
         self.classifier.to(device="cpu")
         return preds_out, target
+    def embeddings(self,dataloader, device = None, pred_type = 'class'):
+        if device is not None:
+            self.device = device
+            print("device set to {}".format(device))
+        target = None
+        preds_out = None
+        self.backbone.eval().to(device=self.device)
+        self.classifier.eval().to(device=self.device)
 
+        for b1 in tqdm(dataloader):
+            b1 = {key: value.to(device=self.device) for key, value in b1.items()}
+            t = b1["labels"]
+            emb = self.backbone(**b1)
+            if pred_type == 'class':
+                emb = self.classifier(emb)
+                if isinstance(emb, dict):
+                    if 'LC' in emb.keys():
+                        output = emb["LC"]
+                    if 'TAB' in emb.keys():
+                        output = emb["TAB"]
+                    if 'MIX' in emb.keys():
+                        output = emb["MIX"]
+            if pred_type == 'embeddings':
+                output = emb
+            preds_out = (
+                np.concatenate([preds_out, output.detach().cpu().numpy()])
+                if preds_out is not None
+                else output.cpu().detach().numpy()
+            )
+            target = (
+                np.concatenate([target, t.cpu().detach().numpy()])
+                if target is not None
+                else t.detach().cpu().numpy()
+            )
+        self.backbone.to(device="cpu")
+        self.classifier.to(device="cpu")
+        return preds_out, target
     def predict_by_time(self,dataloader, device = None, pred_type = 'class', eval_times = [8,16,32,64,128,256,512,1024,2048]):
 
         time_eval ={time:[] for time in eval_times}

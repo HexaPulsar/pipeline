@@ -10,13 +10,13 @@ ATATConfig:
   online_transforms:
     use_window_select: True
     use_max_window_select: True
-    use_time_gauss_factor: True
-    use_gauss_factor: True
+    use_time_gauss_factor: false
+    use_gauss_factor: false
     use_simple_time_factor: true
     use_simple_data_factor: True
     use_band_permute: True
     use_roll: True
-    use_gauss_noise: True
+    use_gauss_noise: False
     p_: 0.5
 
   lc:
@@ -67,6 +67,7 @@ ATATConfig:
       _target_: src.utils.CustomParser.SSLDatasetArgs
       experiment_type: *experiment_type
       data_root:
+        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2019/200_2019.h5
         - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2020/200_2020.h5
         - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2021/200_2021.h5
         - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2022/200_2022.h5
@@ -108,7 +109,7 @@ ATATConfig:
     min_epochs: 1
     #accumulate_grad_batches: 4
     val_check_interval: 0.5
-    log_every_n_steps: 1
+    log_every_n_steps: 10
 
   callbacks:
     learning_rate:
@@ -119,7 +120,7 @@ ATATConfig:
       mode: min # *mode
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
-      patience: 10 # number of checks with no improvement after which training will be stopped
+      patience: 30 # number of checks with no improvement after which training will be stopped
       verbose: False # verbosity mode
       strict: True # whether to crash the training if monitor is not found in the validation metrics
       check_finite: True # when set True, stops training when the monitor becomes NaN or infinite

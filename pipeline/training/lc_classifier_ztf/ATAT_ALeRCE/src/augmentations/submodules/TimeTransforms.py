@@ -81,7 +81,17 @@ class TimeGaussianFilter:
                 filtered_signal = gaussian_filter1d(sample['time'][:nonzero, i], choose_filter_std)
                 sample['time'][:nonzero,i] = torch.tensor(filtered_signal, dtype = torch.float)
 
+class TimeNormalization:
+    def __call__(self,sample):
 
+        time = sample['time']
+        mask_min = 9999999999.0 * (time == 0).float()
+        # Compute minimum over non-zero time values by adding the mask
+        t_min = torch.min(time.float() + mask_min)
+
+        # Normalize and keep zeros in place
+        sample['time'] = (time.float() - t_min) * (time != 0).float()
+        return sample
 
 
 class TimeGaussianNoise:

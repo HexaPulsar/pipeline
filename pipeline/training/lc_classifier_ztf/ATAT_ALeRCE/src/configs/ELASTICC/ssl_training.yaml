@@ -85,7 +85,7 @@ ATATConfig:
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 1024
+    batch_size: 256
   vicreg:
     shape_projector_1:  '32-512-512'
     shape_projector_2:  '32-512-512'

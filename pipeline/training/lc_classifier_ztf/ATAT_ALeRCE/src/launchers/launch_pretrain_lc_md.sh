@@ -7,7 +7,7 @@ for SEED in {0..0}; do
 
 # Set experiment variables correctly
 EXPERIMENT_TYPE='LC'
-EXPERIMENT_NAME=diciembre_8_${SEED}
+EXPERIMENT_NAME=20260314_${SEED}
 export HYDRA_FULL_ERROR=1
 # Run the Python script with Hydra
 EXPERIMENT_OUTPUT_PATH=./results/PLUS/${EXPERIMENT_TYPE}/${EXPERIMENT_NAME}/

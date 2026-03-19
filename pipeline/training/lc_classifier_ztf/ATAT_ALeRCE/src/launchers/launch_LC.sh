@@ -7,13 +7,14 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 for SEED in {0..0}; do
 
 
-expname=ELASTICCLC
+expname=BASELINE
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
 export DIR=LINEAR
 export EXPERIMENT_NAME=class_${expname}_${seed}
 LEARNING_RATE=5e-4
-export DIRECTORY=PRETRAIN
+export DIRECTORY="20260314"
+export PATIENCE=10
 export EXPERIMENT_OUTPUT_PATH="./results/$DIRECTORY/LC/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifsier_ztf/ATAT_ALeRCE/src/configs"
@@ -52,11 +53,11 @@ python training.py \
   ++ATATConfig.lc.use_sequence_norm=True\
   ++ATATConfig.lc.use_timefilm_gelu=True\
   ++ATATConfig.lc.use_timefilm_norm=True\
-    ++ATATConfig.online_transforms.use_window_select=False\
-    ++ATATConfig.online_transforms.use_max_window_select=False\
+    ++ATATConfig.online_transforms.use_window_select=True\
+    ++ATATConfig.online_transforms.use_max_window_select=True\
     ++ATATConfig.online_transforms.use_gauss_factor=False\
-      ++ATATConfig.online_transforms.use_simple_time_factor=False\
-      ++ATATConfig.online_transforms.use_simple_data_factor=False\
+      ++ATATConfig.online_transforms.use_simple_time_factor=True\
+      ++ATATConfig.online_transforms.use_simple_data_factor=True\
       ++ATATConfig.online_transforms.use_band_permute=False\
       ++ATATConfig.online_transforms.use_roll=False\
       ++ATATConfig.online_transforms.use_gauss_noise=False\
@@ -64,15 +65,15 @@ python training.py \
         ++ATATConfig.learning_rate=$LEARNING_RATE\
         ++ATATConfig.lc.dropout=0.1\
         ++ATATConfig.tab.dropout=0.1\
-          ++ATATConfig.tab.embedding_size=64\
-          ++ATATConfig.tab.embedding_size_sub=128\
+          ++ATATConfig.tab.embedding_size=128\
+          ++ATATConfig.tab.embedding_size_sub=512\
           ++ATATConfig.tab.num_encoders=3\
-          ++ATATConfig.lc.embedding_size=64\
-          ++ATATConfig.lc.embedding_size_sub=128\
+          ++ATATConfig.lc.embedding_size=128\
+          ++ATATConfig.lc.embedding_size_sub=512\
           ++ATATConfig.lc.num_encoders=3\
           ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE\
-          ++ATATConfig.callbacks.model_checkpoint.monitor='validation/MIX/f1_macro'\
-          ++ATATConfig.datamodule.batch_size=128\
+          ++ATATConfig.callbacks.model_checkpoint.monitor='validation/LC/f1_macro'\
+          ++ATATConfig.datamodule.batch_size=64\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
           ++ATATConfig.loggers.csv.version=$VERSION #\
   #++ATATConfig.lc.checkpoint=$CHECKPOINT\

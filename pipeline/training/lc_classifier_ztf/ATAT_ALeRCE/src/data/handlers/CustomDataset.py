@@ -11,6 +11,19 @@ from torchvision.transforms import Compose
 from copy import deepcopy
 from src.augmentations import LightCurveTransform as LC
 
+
+class TimeNormalization:
+    def __call__(self,sample):
+
+        time = sample['time']
+        mask_min = 9999999999.0 * (time == 0).float()
+        # Compute minimum over non-zero time values by adding the mask
+        t_min = torch.min(time.float() + mask_min)
+
+        # Normalize and keep zeros in place
+        sample['time'] = (time.float() - t_min) * (time != 0).float()
+        return sample
+
 @dataclass
 class ATATDataset(BaseDataset):
     data_root:str
@@ -44,7 +57,7 @@ class ATATDataset(BaseDataset):
         self.use_metadata  = True if 'MD' in self.experiment_type else False
         self.use_features  = True if 'FEAT' in self.experiment_type else False
         self.use_lightcurves_err  = True if 'ERR' in self.experiment_type else False
-
+        self.time_norm = TimeNormalization()
     def __getitem__(self, idx):
         """idx is used for pytorch to select samples to construct its batch"""
         """ idx_ is to map a valid index over all samples in dataset  """
@@ -84,11 +97,12 @@ class ATATDataset(BaseDataset):
         elif self.use_features:
             data_dict["tabular_feat"] = data_dict["features"]
         #'''
-
+        data_dict = self.time_norm(deepcopy(data_dict))
         if all([self.set_type == 'train',self.train_transforms is not None]):
             data_dict = self.train_transforms(data_dict)
         if all([self.set_type == 'validation',self.val_transforms is not None]):
             data_dict = self.val_transforms(data_dict)
+
         return data_dict
 
     def __len__(self):

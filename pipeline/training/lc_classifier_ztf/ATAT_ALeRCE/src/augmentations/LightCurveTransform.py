@@ -107,17 +107,7 @@ class BandPermute:
         sample['time'] = torch.roll(sample['time'], shifts=(shift_,), dims=0)
         sample['mask'] = torch.roll(sample['mask'], shifts=(shift_,), dims=0)
 
-class TimeNormalization:
-    def __call__(self,sample):
 
-        time = sample['time']
-        mask_min = 9999999999.0 * (time == 0).float()
-        # Compute minimum over non-zero time values by adding the mask
-        t_min = torch.min(time.float() + mask_min)
-
-        # Normalize and keep zeros in place
-        sample['time'] = (time.float() - t_min) * (time != 0).float()
-        return sample
 
 
 class RandomMaskTimeVector:

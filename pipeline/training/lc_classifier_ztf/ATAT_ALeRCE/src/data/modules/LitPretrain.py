@@ -38,25 +38,25 @@ class LitPretrain(pl.LightningDataModule):
             weight = 1.0 / class_sample_count
             uniques = np.unique(labels)
             d = {key: value for key, value in zip(uniques, weight)}
-           
+
             samples_weight = np.array([d[labels[i].item()] for i in range(len(labels))])
             samples_weight = torch.from_numpy(samples_weight)
             return samples_weight
-    def train_dataloader(self): 
+    def train_dataloader(self):
 
         if isinstance(self.dataset.data_root, str):
             dataset_used = SSLDataset(set_type="train", **self.dataset)
         else:
             datasets = []
-            
+
             for i in range(len(self.dataset.data_root)):
                 dataset_config = {key:value for key,value in self.dataset.items() if key != 'data_root'}
                 datasets.append(SSLDataset(set_type='train',data_root = self.dataset.data_root[i], **dataset_config))
             dataset_used = ConcatDataset(datasets)
             print('full dataset size:', len(dataset_used))
-        
+
         print('using sampler')
-         
+
 
         loader =loader = DataLoader(
                 dataset_used,
@@ -76,11 +76,11 @@ class LitPretrain(pl.LightningDataModule):
             datasets = []
             for i in range(len(self.dataset.data_root)):
                 dataset_config = {key:value for key,value in self.dataset.items() if key != 'data_root'}
-                print(dataset_config)
+                #print(dataset_config)
                 datasets.append(SSLDataset(set_type='validation',data_root = self.dataset.data_root[i], **dataset_config))
             dataset_used = ConcatDataset(datasets)
             print('full dataset size:', len(dataset_used))
-            
+
         unlabeled_loader = DataLoader(
                 dataset_used,
                 batch_size=self.batch_size,
@@ -90,7 +90,7 @@ class LitPretrain(pl.LightningDataModule):
                 num_workers= self.num_workers,
                 pin_memory=self.pin_memory
             )
-        
+
         labeled_train_dataset = ATATDataset(data_root = '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5',
                                             set_type = 'train',
                                             experiment_type=self.dataset.experiment_type,
@@ -102,7 +102,7 @@ class LitPretrain(pl.LightningDataModule):
                                                 train_key =  'training',
                                                 validation_key =  'validation',
                                                 test_key =  'test',
-                                                observation_key =  'flux' , 
+                                                observation_key =  'flux' ,
                                                 observation_err_key =  'flux_err',
                                                 time_key =  'time',
                                                 time_alert_key =  'time_alert' ,
@@ -112,7 +112,7 @@ class LitPretrain(pl.LightningDataModule):
                                                 feature_key =  'extracted_features',
                                                 metadata_key =  'metadata_feat',
                                                 label_key =  'labels' )
-        
+
         labeled_val_dataset = ATATDataset(data_root = '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5',
                                             set_type = 'validation',
                                             experiment_type=self.dataset.experiment_type,
@@ -134,7 +134,7 @@ class LitPretrain(pl.LightningDataModule):
                                             feature_key =  'extracted_features',
                                             metadata_key =  'metadata_feat',
                                             label_key =  'labels' )
-        
+
         labeled_train_loader = DataLoader(
                 labeled_train_dataset,
                 batch_size=self.batch_size,
@@ -160,7 +160,7 @@ class LitPretrain(pl.LightningDataModule):
             dataset_used = SSLDataset(set_type="test", **self.dataset)
         else:
             datasets = []
-            
+
             for i in range(len(self.dataset.data_root)):
                 dataset_config = {key:value for key,value in self.dataset.items() if key != 'data_root'}
                 datasets.append(SSLDataset(set_type='test',data_root = self.dataset.data_root[i], **dataset_config))

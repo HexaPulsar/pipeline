@@ -82,7 +82,7 @@ class HierLoss(nn.Module):
         loss =(hier_weight* hier_loss + class_weight *class_loss)/2
         return loss
 
-@hydra.main(version_base=None, config_path="./src/configs/ELASTICC/", config_name= 'supervised_training')
+@hydra.main(version_base=None, config_path="./src/configs/ZTF/", config_name= 'supervised_training')
 #@hydra.main(version_base=None, config_path="./src/configs/ZTF/", config_name= 'LC_MD')
 def main(cfg:ATATConfig):
 
@@ -116,8 +116,8 @@ def main(cfg:ATATConfig):
 
     transforms = []
     apply_ = None
-    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 50, 6))]
-    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 50, 6))])
+    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 25, 6))]
+    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 25, 6))])
     transforms.extend([RandomApply([RandomChoice(windows
                                 )],p =1)
                                 ])  if cfg.online_transforms.use_window_select else None
@@ -129,11 +129,11 @@ def main(cfg:ATATConfig):
     transforms.extend([ RandomApply([LC.Factor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_data_factor else None
 
     transforms.extend([ RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_band_permute else None
-
 ####
 
     transforms.extend([ RandomApply([LC.GaussianFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
     transforms.extend([ RandomApply([LC.GaussianTimeFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
+   # transforms.extend([ ])
 #########
     #transforms.extend([ RandomApply([TAB.TABGaussianNoise(0,1e-2)], p = p_)])
     #transforms.extend([ RandomApply([TAB.RandomMask(0.1)], p = 1)])

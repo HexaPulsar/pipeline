@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from joblib import load
 import numpy as np
 import pandas as pd
+
+
 class BaseDataset(Dataset):
     def __init__(self,
         data_root:str,
@@ -89,9 +91,9 @@ class BaseDataset(Dataset):
         #    self.target = h5_.get('nonzero_count')
         #    self.nz_count =  torch.from_numpy(self.target[:][self.these_idx])
         #logging.info(f"Partition : {self.seed} Set Type : {self.set_type}")
-        use_metadata = True
+        use_metadata = False
 
-        use_features = True
+        use_features = False
 
         if use_metadata:
             metadata_feat = h5_.get(self.metadata_key)[:]
@@ -106,7 +108,7 @@ class BaseDataset(Dataset):
             print(path_QT)
             #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_0.joblib'
             #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_md_fold_{}.joblib'.format(self.seed)
-            path_QT = '/home/mdelafuente/ORIGINAL/QT-New/OG/md_fold_{}.joblib'.format(self.seed)
+            #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/OG/md_fold_{}.joblib'.format(self.seed)
             self.metadata_feat = self.get_tabular_data(
                 metadata_feat, path_QT, "metadata"
             )
@@ -123,7 +125,7 @@ class BaseDataset(Dataset):
                 self.data_root, self.seed
             )
             #path_QT = '/home/mdelafuente/ORIGINAL/QT-New/finetune/finetune_qt-fold-0.joblib'
-            path_QT = f'/home/mdelafuente/ORIGINAL/QT-New/OG/qt-feat-{self.seed}.joblib'
+            #path_QT = f'/home/mdelafuente/ORIGINAL/QT-New/OG/qt-feat-{self.seed}.joblib'
             #path_QT = ''
             data = self.get_tabular_data(
                         extracted_feat, path_QT, self.feature_key

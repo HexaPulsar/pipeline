@@ -2,17 +2,17 @@
 cd ../../
 export CUDA_VISIBLE_DEVICES=2,3
 
-PATIENCE=5
+PATIENCE=20
 for SEED in {0..1}; do
 
 
-experiment_name=og_dataset_v2
+experiment_name=all_v4_band_permute_time_normalization
 #experiment_name=v0000_MULTIMODAL_64128_0 ##${SEED}
 
 EXPERIMENT_NAME=class_${experiment_name}_${SEED}
-DIRECTORY=OLD_ELASTICC
+DIRECTORY=ZTF
 LEARNING_RATE=1e-3
-EXPERIMENT_TYPE='LC_MD_FEAT'
+EXPERIMENT_TYPE='LC'
 
 export CONFIG_FILE_DIRECTORY="TF_GELU_NORM_EXP_VEL_ACC_SEQNORM.yaml"
 #export CONFIG_FILE_DIRECTORY="supervised_training.yaml"
@@ -28,11 +28,12 @@ export HYDRA_FULL_ERROR=1
 
 export early_stopping='loss_validation/total'
 export early_stoppin_mode='min'
-export checkpoint='validation/MIX/f1_macro'
+export checkpoint='validation/LC/f1_macro'
 export checkpoint_mode='max'
-#  --config-name $CONFIG_FILE_DIRECTORY\
+
 python training.py \
   --config-dir /home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs/\
+  --config-name $CONFIG_FILE_DIRECTORY\
   ++ATATConfig.experiment_type=$EXPERIMENT_TYPE\
   ++ATATConfig.experiment_name=$EXPERIMENT_NAME\
   ++ATATConfig.log_filename=$LOG_FILENAME \
@@ -61,7 +62,7 @@ python training.py \
     ++ATATConfig.online_transforms.use_time_gauss_factor=False\
       ++ATATConfig.online_transforms.use_simple_time_factor=True\
       ++ATATConfig.online_transforms.use_simple_data_factor=True\
-      ++ATATConfig.online_transforms.use_band_permute=False\
+      ++ATATConfig.online_transforms.use_band_permute=True\
       ++ATATConfig.online_transforms.use_roll=False\
       ++ATATConfig.online_transforms.use_gauss_noise=False\
       ++ATATConfig.online_transforms.p_=1\
@@ -75,7 +76,7 @@ python training.py \
           ++ATATConfig.lc.embedding_size_sub=128\
           ++ATATConfig.lc.num_encoders=3\
           ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE\
-          ++ATATConfig.callbacks.model_checkpoint.monitor='validation/MIX/f1_macro'\
+          ++ATATConfig.callbacks.model_checkpoint.monitor='validation/LC/f1_macro'\
           ++ATATConfig.datamodule.batch_size=512\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
           ++ATATConfig.loggers.csv.version=$VERSION #\

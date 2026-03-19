@@ -414,12 +414,12 @@ class ClassifierModule(pl.LightningModule):
         #    total_iters=1000,
         #)
 
-        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=100,
-            eta_min=self.learning_rate * 0.01,
-        )
-
+        #cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        #    optimizer,
+        #    T_max=100,
+        #    eta_min=self.learning_rate * 0.01,
+        #)
+        return optimizer
         return {
             "optimizer": optimizer,
             "lr_scheduler": {

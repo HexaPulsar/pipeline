@@ -6,7 +6,7 @@ ATATConfig:
   log_filename: 'default.log'
   learning_rate: 1e-4
   num_classes: 22
-  
+
   online_transforms:
     use_window_select: True
     use_max_window_select: True
@@ -18,7 +18,7 @@ ATATConfig:
     use_roll: True
     use_gauss_noise: True
     p_: 0.5
-  lc: 
+  lc:
     _target_: src.utils.CustomParser.LightcurveArgs
     input_size: 1
     embedding_size: 128
@@ -32,18 +32,18 @@ ATATConfig:
     dropout: 0.01
     checkpoint: null
 
-    use_acceleration : False 
-    use_velocity : False 
-    use_stats : False 
+    use_acceleration : False
+    use_velocity : False
+    use_stats : False
     use_features : False
     use_metadata: False
-    sequence_norm: False
+    use_sequence_norm: False
     use_tabular_transformer: false
-    timefilm_gelu: False
-    timefilm_norm: False
+    use_timefilm_gelu: False
+    use_timefilm_norm: False
     features_num_features: 181
     metadata_num_features: 6
-  tab: 
+  tab:
     _target_: src.utils.CustomParser.TabularArgs
     embedding_size: 32
     embedding_size_sub: 32
@@ -53,16 +53,16 @@ ATATConfig:
     dropout: 0.05
     checkpoint: null
     sequence_norm: True
-  
+
   #mode: &mode 'max'
   mode: &mode 'min'
 
   monitor: null
- 
+
   datamodule:
     _target_: src.utils.CustomParser.DataModuleArgs
     dataset:
-      _target_: src.utils.CustomParser.ATATDatasetArgs 
+      _target_: src.utils.CustomParser.ATATDatasetArgs
       experiment_type: *experiment_type
       #data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
       data_root: '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5'
@@ -74,10 +74,10 @@ ATATConfig:
       train_key: training
       validation_key: validation
       test_key: test
-      observation_key: 'flux' 
+      observation_key: 'flux'
       observation_err_key: 'flux_err'
       time_key: time
-      time_alert_key: time_alert 
+      time_alert_key: time_alert
       mask_key: mask
       mask_photometry_key: ''
       mask_detection_key: ''
@@ -107,14 +107,14 @@ ATATConfig:
     log_every_n_steps: 1
     #accumulate_grad_batches: 4
 
-    #check_val_every_n_epoch: 5 
+    #check_val_every_n_epoch: 5
 
   callbacks:
     learning_rate:
       _target_:  pytorch_lightning.callbacks.LearningRateMonitor
       logging_interval: 'step'
     early_stopping:
-      monitor: loss_validation/total  #validation/LC/f1 
+      monitor: loss_validation/total  #validation/LC/f1
       mode: min
       _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
       min_delta: 0.00 # minimum change in the monitored quantity to qualify as an improvement
@@ -144,7 +144,7 @@ ATATConfig:
       save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
 
   loggers:
-    
+
     tensorboard:
       _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
       name: 'tensorboard'

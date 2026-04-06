@@ -4,7 +4,7 @@ ATATConfig:
   experiment_type: &experiment_type 'default_type'
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
-  learning_rate: 1e-6
+  learning_rate: 1e-3
   num_classes: 22
 
   online_transforms:
@@ -67,11 +67,11 @@ ATATConfig:
       _target_: src.utils.CustomParser.SSLDatasetArgs
       experiment_type: *experiment_type
       data_root:
-        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2019/200_2019.h5
-        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2020/200_2020.h5
-        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2021/200_2021.h5
-        - /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2022/200_2022.h5
-       #- /home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/2023/200_2023.h5
+        - /home/magdalena/Desktop/sambashare/H5_files/2019/200_2019.h5
+       # - /home/magdalena/Desktop/sambashare/H5_files/2020/200_2020.h5
+       # - /home/magdalena/Desktop/sambashare/H5_files/2021/200_2021.h5
+       # - /home/magdalena/Desktop/sambashare/H5_files/2022/200_2022.h5
+       #-/home/magdalena/Desktop/sambashare/H5_files/2023/200_2023.h5
       seed: 0
       train_apply_transform: True
       validation_apply_transform: True
@@ -93,7 +93,7 @@ ATATConfig:
     train_shuffle: true
     num_workers: 8
     pin_memory: true
-    batch_size: 256
+    batch_size: 512
   vicreg:
     shape_projector_1:  '64-64-64'
     shape_projector_2:  '64-64-64'
@@ -109,7 +109,7 @@ ATATConfig:
     min_epochs: 1
     #accumulate_grad_batches: 4
     val_check_interval: 0.5
-    log_every_n_steps: 10
+    log_every_n_steps: 1
 
   callbacks:
     learning_rate:

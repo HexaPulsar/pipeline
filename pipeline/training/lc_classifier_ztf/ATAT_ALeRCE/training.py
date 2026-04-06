@@ -10,16 +10,12 @@ from src.augmentations import TabularTransformations as TAB
 
 from src.data.modules.LitData import LitData
 from src.models.ClassifierModule import ClassifierModule
-from src.models.ClassifierModuleHier import ClassifierModuleHier
-from src.models.ClassifierModuleELA import ClassifierModuleELA
 
 from pytorch_lightning import Trainer
 
 from src.layers.transformer.ATAT import LightCurveTransformer, TabularTransformer, Combinator
 from src.layers.classifiers.MultimodalClassifier import MultimodalClassifier
-from src.layers.classifiers.HierClassifiery import Hier
 
-from src.losses.FocalLoss import FocalLoss
 import torch.nn as nn
 import hydra
 import numpy as np
@@ -29,9 +25,6 @@ from torchvision.transforms import RandomChoice, RandomApply, Compose
 
 
 import torch
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import Callback
-from sklearn.metrics import f1_score
 import numpy as np
 
 class HierLoss(nn.Module):
@@ -177,7 +170,6 @@ def main(cfg:ATATConfig):
         )
         print(log_message)
         transformer = LightCurveTransformer(**cfg.lc)
-        #classifier = TokenClassifier(num_classes=cfg.num_classes,embedding_size=cfg.lc.embedding_size)
         classifier = MultimodalClassifier(experiment_type=cfg.experiment_type,
                                           lc_input_size=cfg.lc.embedding_size,
                                                 tab_input_size=cfg.tab.embedding_size,
@@ -186,10 +178,7 @@ def main(cfg:ATATConfig):
                                                 use_tab=False,
                                                 combine_logits=False,
                                                 num_classes= cfg.num_classes)
-        #classifier = Hier(cfg.lc.embedding_size,num_classes= cfg.num_classes)
-        loss =nn.CrossEntropyLoss() # HierLoss()#
-        #class_sampler_count  = np.array([1783,1804,1785,1526,1566,1008,1855,1440,872,891,1858,1860,1814,1876,763,973,278,121,56,70,172,17])
-
+        loss =nn.CrossEntropyLoss()
 
         pl_model = ClassifierModule(model = transformer,
                                     classifier= classifier,
@@ -269,7 +258,6 @@ def main(cfg:ATATConfig):
                                                 combine_logits=False,
                                                 num_classes= cfg.num_classes)
         loss = nn.CrossEntropyLoss()
-        #loss = FocalLoss(gamma = 1, alpha = torch.tensor(1), task_type='multi-class', num_classes=cfg.num_classes)
         pl_model = ClassifierModule(model = model,
                                     classifier= classifier,
                                      loss =  loss,
@@ -282,8 +270,7 @@ def main(cfg:ATATConfig):
 
                                      weight_str_parse_lc= ('model.',''),
                                     weight_str_parse_tab=('model.',''),
-                                    **cfg)
-    #cfg.callbacks.update({'f1log':MacroF1PerClassLogger()})
+                                    **cfg) 
     trainer = Trainer(
        # profiler="simple",
         callbacks=list(cfg.callbacks.values()),

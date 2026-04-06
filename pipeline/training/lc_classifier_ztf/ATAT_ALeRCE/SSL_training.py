@@ -16,14 +16,13 @@ from src.losses.VICReg import VICReg
 from pytorch_lightning import Trainer
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
 from src.utils.CustomParser import ATATConfig
 from  hydra.utils import instantiate
 from torchvision.transforms import RandomChoice, RandomApply, Compose, RandomOrder
 
 import numpy as np
 
-@hydra.main(version_base=None, config_path="./src/configs/ELASTICC", config_name= 'ssl_training')
+@hydra.main(version_base=None, config_path="./src/configs/ZTF/", config_name= 'ssl_training')
 def main(cfg:ATATConfig):
     cfg = instantiate(cfg).ATATConfig
     logger = logging.getLogger()
@@ -58,22 +57,23 @@ def main(cfg:ATATConfig):
                                 )],p =1)
                                 ])  if cfg.online_transforms.use_window_select else None
 
-    #transforms.extend([ RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_time_gauss_factor else None
-    #transforms.extend([ RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_gauss_factor else None
+    transforms.extend([ RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_time_gauss_factor else None
+    transforms.extend([ RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_gauss_factor else None
 
     transforms.extend([ RandomApply([LC.TimeFactor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_time_factor else None
     transforms.extend([ RandomApply([LC.Factor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_data_factor else None
 
     transforms.extend([ RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_band_permute else None
 
-    #transforms.extend([ RandomApply([LC.GaussianFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
-    #transforms.extend([ RandomApply([LC.GaussianTimeFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
+
+    transforms.extend([ RandomApply([LC.GaussianFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
+    transforms.extend([ RandomApply([LC.GaussianTimeFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
 #########
 
 #########
 
-   # transforms.extend([LC.RandomMaskTimeVector(2,0.5,None)])
-   # transforms.extend([LC.RandomMaskDataVector(2,0.5,None)])
+    transforms.extend([LC.RandomMaskTimeVector(2,0.1,None)])
+    transforms.extend([LC.RandomMaskDataVector(2,0.1,None)])
 
    # transforms.extend([TAB.TABGaussianNoise(0,1e-2)])
     #transforms.extend([TAB.RandomMask(0.01)])
@@ -92,7 +92,7 @@ def main(cfg:ATATConfig):
                                            cfg.datamodule.batch_size),
                                            cfg.vicreg.shape_projector_1,
                                            cfg.vicreg.shape_projector_2)
-        pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate, eval_regressor=False)
+        pl_model = PretrainModule(model=transformer,loss=projector,lr = cfg.learning_rate, eval_regressor=False, **cfg)
 
     if cfg.experiment_type == 'MD' or cfg.experiment_type == 'FEAT':
         transformer = TabularTransformer(**cfg.tab)

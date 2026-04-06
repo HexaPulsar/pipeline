@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
 import numpy as np
 import torch
-from pytorch_metric_learning.samplers import MPerClassSampler
 import logging
 from src.utils.CustomParser import ATATDatasetArgs
 

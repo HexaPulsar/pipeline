@@ -1,18 +1,11 @@
 import pytorch_lightning as pl
 from src.data.handlers.SSLDataset import SSLDataset
-import glob
 from torch.utils.data import ConcatDataset
-import logging
-from torchvision.transforms import Compose, RandomApply, RandomChoice
-from typing import Union, Optional
-from dataclasses import asdict
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
 
 from src.utils.CustomParser import SSLDatasetArgs
 from dataclasses import dataclass
-from src.data.handlers.CustomDataset import ATATDataset
-from torch.utils.data import SequentialSampler
 import torch
 import numpy as np
 @dataclass
@@ -87,69 +80,6 @@ class LitPretrain(pl.LightningDataModule):
                 sampler=None,
                 shuffle=False,
                 drop_last=True,
-                num_workers= self.num_workers,
-                pin_memory=self.pin_memory
-            )
-
-        labeled_train_dataset = ATATDataset(data_root = '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5',
-                                            set_type = 'train',
-                                            experiment_type=self.dataset.experiment_type,
-                                             train_apply_transform=False,
-                                              validation_apply_transform=False,
-                                               seed = self.dataset.seed,
-                                                train_transforms = [],  # List of transform modules
-                                                val_transforms = [],  # List of transform modules
-                                                train_key =  'training',
-                                                validation_key =  'validation',
-                                                test_key =  'test',
-                                                observation_key =  'flux' ,
-                                                observation_err_key =  'flux_err',
-                                                time_key =  'time',
-                                                time_alert_key =  'time_alert' ,
-                                                mask_key =  'mask',
-                                                mask_photometry_key =  '',
-                                                mask_detection_key =  '',
-                                                feature_key =  'extracted_features',
-                                                metadata_key =  'metadata_feat',
-                                                label_key =  'labels' )
-
-        labeled_val_dataset = ATATDataset(data_root = '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5',
-                                            set_type = 'validation',
-                                            experiment_type=self.dataset.experiment_type,
-                                            train_apply_transform=False,
-                                            validation_apply_transform=False,
-                                            seed = self.dataset.seed,
-                                            train_transforms = [],  # List of transform modules
-                                            val_transforms = [],  # List of transform modules
-                                            train_key =  'training',
-                                            validation_key =  'validation',
-                                            test_key =  'test',
-                                            observation_key =  'flux' ,
-                                            observation_err_key =  'flux_err',
-                                            time_key =  'time',
-                                            time_alert_key =  'time_alert' ,
-                                            mask_key =  'mask',
-                                            mask_photometry_key =  '',
-                                            mask_detection_key =  '',
-                                            feature_key =  'extracted_features',
-                                            metadata_key =  'metadata_feat',
-                                            label_key =  'labels' )
-
-        labeled_train_loader = DataLoader(
-                labeled_train_dataset,
-                batch_size=self.batch_size,
-                sampler=SequentialSampler(labeled_train_dataset),  # prevents sharding,
-                shuffle=False,
-                drop_last=False,
-                num_workers= self.num_workers,
-                pin_memory=self.pin_memory
-            )
-        labeled_val_loader = DataLoader(
-                labeled_val_dataset,
-                batch_size=self.batch_size,
-                sampler=SequentialSampler(labeled_val_dataset),
-                shuffle=False,
-                drop_last=False,
                 num_workers= self.num_workers,
                 pin_memory=self.pin_memory
             )

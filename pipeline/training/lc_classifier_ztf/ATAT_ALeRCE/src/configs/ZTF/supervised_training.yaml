@@ -32,15 +32,17 @@ ATATConfig:
     dropout: 0.01
     checkpoint: null
 
-    use_acceleration : False
-    use_velocity : False
+    use_acceleration : True
+    use_velocity : True
     use_stats : False
     use_features : False
     use_metadata: False
-    use_sequence_norm: False
+    use_sequence_norm: True
     use_tabular_transformer: false
-    use_timefilm_gelu: False
-    use_timefilm_norm: False
+    use_timefilm_gelu: True
+    use_timefilm_norm: True
+    use_exp: True
+    use_conv: True
     features_num_features: 181
     metadata_num_features: 6
   tab:
@@ -65,7 +67,7 @@ ATATConfig:
       _target_: src.utils.CustomParser.ATATDatasetArgs
       experiment_type: *experiment_type
       #data_root: "/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/data/datasets/ZTF_ff/final/LC_MD_FEAT_240627_windows_200_12/dataset.h5"
-      data_root: '/home/mdelafuente/ZTF_SSL_Dataset/data/H5_files/BY_PARTITION/200_FF.h5'
+      data_root: '/home/magdalena/Desktop/sambashare/H5_files/BY_PARTITION/200_FF.h5'
       seed: 0
       train_apply_transform: True
       validation_apply_transform: false

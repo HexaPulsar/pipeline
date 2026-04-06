@@ -4,17 +4,22 @@ import torch.nn as nn
 
 class VICRegProjector(nn.Module):
     def __init__(
-        self,vicreg, shape_projector_1:str = '',  shape_projector_2:str = '', norm_seqdim=False, norm_embdim = False, **kwargs
+        self,
+        vicreg,
+        shape_projector_1: str = "",
+        shape_projector_2: str = "",
+        norm_seqdim=False,
+        norm_embdim=False,
+        **kwargs
     ):
         super(VICRegProjector, self).__init__()
-        if shape_projector_1 == '' and shape_projector_2 == '':
+        if shape_projector_1 == "" and shape_projector_2 == "":
 
             self.projection_x = nn.Sequential()
             self.projection_y = nn.Sequential()
         else:
             layers = []
             f = list(map(int, shape_projector_1.split("-")))
-            #layers.append(nn.BatchNorm1d(f[0]))#
 
             if len(f) == 2:
                 layers.append(nn.BatchNorm1d(f[-2]))
@@ -29,7 +34,6 @@ class VICRegProjector(nn.Module):
             self.projection_x = nn.Sequential(*layers)
             layers = []
             f = list(map(int, shape_projector_2.split("-")))
-            #layers.append(nn.BatchNorm1d(f[0]))#
             for i in range(len(f) - 2):
                 layers.append(nn.Linear(f[i], f[i + 1]))
                 layers.append(nn.BatchNorm1d(f[i + 1]))
@@ -40,8 +44,8 @@ class VICRegProjector(nn.Module):
             self.projection_y = nn.Sequential(*layers)
         self.vicreg = vicreg
 
-    def forward(self, emb_x,emb_y):
-        return self.vicreg(self.projection_x(emb_x),self.projection_y(emb_y))
+    def forward(self, emb_x, emb_y):
+        return self.vicreg(self.projection_x(emb_x), self.projection_y(emb_y))
 
 
 class CLIPProjector(nn.Module):
@@ -51,15 +55,12 @@ class CLIPProjector(nn.Module):
         self.l2norm = l2norm
         hidden_size = 128
         self.projection = nn.Sequential(
-            # nn.BatchNorm1d(input_size),
             nn.Linear(input_size, hidden_size, bias=False),
             nn.GELU(),
-            #nn.BatchNorm1d(hidden_size),
             nn.Linear(hidden_size, output_size, bias=False),
         )
 
     def forward(self, embedding):
-        # embedding = embedding / torch.norm(embedding,dim = 1,keepdim=True)
         embedding = self.projection(embedding)
         embedding = embedding / embedding.norm(dim=1, keepdim=True)
         return embedding

@@ -1,25 +1,25 @@
 #!/bin/bash
 
 cd ../../
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=0 #,1,2,3
 
 
-for SEED in {0..0}; do
+for SEED in {0..1}; do
 
 
-expname=BASELINE
+expname=20260314_ema_optim_change_1491_1e3
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
 export DIR=LINEAR
-export EXPERIMENT_NAME=class_${expname}_${seed}
+export EXPERIMENT_NAME=class_${expname}_${seed}_v2
 LEARNING_RATE=5e-4
-export DIRECTORY="20260314"
+export DIRECTORY="PRETRAIN"
 export PATIENCE=10
 export EXPERIMENT_OUTPUT_PATH="./results/$DIRECTORY/LC/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
-export CONFIGS_PATH="/home/mdelafuente/pipeline/pipeline/training/lc_classifsier_ztf/ATAT_ALeRCE/src/configs"
+export CONFIGS_PATH="/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 
-export CHECKPOINT=/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/$DIRECTORY/LC/${expname}/
+export CHECKPOINT=/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/$DIRECTORY/LC/${expname}/
 # Ensure directories exist
 mkdir -p "$EXPERIMENT_OUTPUT_PATH"
 export HYDRA_FULL_ERROR=1
@@ -30,7 +30,7 @@ export checkpoint='validation/LC/f1_macro'
 export checkpoint_mode=max
 
 python training.py \
-  --config-dir /home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs/\
+  --config-dir /home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs/\
   ++ATATConfig.experiment_type=$EXPERIMENT_TYPE\
   ++ATATConfig.experiment_name=$EXPERIMENT_NAME\
   ++ATATConfig.log_filename=$LOG_FILENAME \
@@ -58,25 +58,25 @@ python training.py \
     ++ATATConfig.online_transforms.use_gauss_factor=False\
       ++ATATConfig.online_transforms.use_simple_time_factor=True\
       ++ATATConfig.online_transforms.use_simple_data_factor=True\
-      ++ATATConfig.online_transforms.use_band_permute=False\
+      ++ATATConfig.online_transforms.use_band_permute=True\
       ++ATATConfig.online_transforms.use_roll=False\
       ++ATATConfig.online_transforms.use_gauss_noise=False\
       ++ATATConfig.online_transforms.p_=1\
         ++ATATConfig.learning_rate=$LEARNING_RATE\
         ++ATATConfig.lc.dropout=0.1\
         ++ATATConfig.tab.dropout=0.1\
-          ++ATATConfig.tab.embedding_size=128\
-          ++ATATConfig.tab.embedding_size_sub=512\
+          ++ATATConfig.tab.embedding_size=64\
+          ++ATATConfig.tab.embedding_size_sub=128\
           ++ATATConfig.tab.num_encoders=3\
-          ++ATATConfig.lc.embedding_size=128\
-          ++ATATConfig.lc.embedding_size_sub=512\
+          ++ATATConfig.lc.embedding_size=64\
+          ++ATATConfig.lc.embedding_size_sub=128\
           ++ATATConfig.lc.num_encoders=3\
           ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE\
           ++ATATConfig.callbacks.model_checkpoint.monitor='validation/LC/f1_macro'\
           ++ATATConfig.datamodule.batch_size=64\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
-          ++ATATConfig.loggers.csv.version=$VERSION #\
-  #++ATATConfig.lc.checkpoint=$CHECKPOINT\
+          ++ATATConfig.loggers.csv.version=$VERSION\
+          ++ATATConfig.lc.checkpoint=$CHECKPOINT
   #++ATATConfig.tab.checkpoint=$CHECKPOINT
 done
   #++ATATConfig.lc.checkpoint='/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/200/LC/just_roll_v2/'\

@@ -2,21 +2,13 @@ import torch
 import torch.nn as nn
 from ..timeEncoders import TimeHandler
 
+
 class Token(nn.Module):
-    def __init__(self, embedding_size,dropout, **kwargs):
+    def __init__(self, embedding_size, dropout, **kwargs):
         super(Token, self).__init__()
-
-        # self.token = nn.parameter.Parameter(
-        #    torch.rand(embedding_size), requires_grad=True
-        # )
-        self.dropout = nn.Dropout(dropout)
         self.token = nn.Parameter(torch.zeros(embedding_size), requires_grad=True)
-        #self.token = nn.Parameter(torch.randn(embedding_size) * 0.02, requires_grad=True)
-        #self.token = nn.Parameter(torch.rand(embedding_size), requires_grad=True)
-        #self.ln = nn.Sequential() #nn.LayerNorm(embedding_size)
-    def forward(self, n_batch):
 
-        #return self.ln(self.dropout(self.token.repeat(n_batch, 1, 1).permute(2,1,0)).permute(2,1,0))
+    def forward(self, n_batch):
         return self.token.repeat(n_batch, 1, 1)
 
 
@@ -46,7 +38,7 @@ class LightCurveTransformer(nn.Module):
         use_timefilm_norm=False,
         use_timefilm_gelu=False,
         use_exp: bool = False,
-        use_conv:bool = False,
+        use_conv: bool = False,
         use_tabular_transformer=False,
     ):
         super().__init__()
@@ -68,7 +60,7 @@ class LightCurveTransformer(nn.Module):
             use_timefilm_gelu=use_timefilm_gelu,
             use_timefilm_norm=use_timefilm_norm,
             use_exp=use_exp,
-            use_conv = use_conv,
+            use_conv=use_conv,
         )
 
         self.transformer_lc = nn.TransformerEncoder(
@@ -82,7 +74,7 @@ class LightCurveTransformer(nn.Module):
                 norm_first=True,
             ),
             num_layers=num_encoders,
-             norm=nn.LayerNorm(embedding_size),
+            norm=nn.LayerNorm(embedding_size),
         )
         self.token_lc = Token(embedding_size, 0.0)
         self.register_buffer("ones", torch.ones(1, 1, 1, dtype=torch.bool))
@@ -100,7 +92,7 @@ class LightCurveTransformer(nn.Module):
 
         if self.sequence_norm:
             x_mod = x_mod / (
-            torch.sqrt(torch.linalg.norm(x_mod, dim=(1), keepdim=True)) + 1e-8
+                torch.sqrt(torch.linalg.norm(x_mod, dim=(1), keepdim=True)) + 1e-8
             )
         x_mod[x_mod == 0] = -1e9
         x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)
@@ -122,17 +114,15 @@ class LightCurveTransformer(nn.Module):
         x_emb = self.transformer_lc(
             src=x_mod, src_key_padding_mask=~(m_mod.squeeze(-1))
         )
-        return x_emb#[:, 0, :]
+        return x_emb  # [:, 0, :]
 
 
 class Embedding(nn.Module):
     def __init__(self, length_size, embedding_size, dropout, **kwargs):
         super(Embedding, self).__init__()
-        #self.tab_W_feat = nn.Parameter(torch.randn(1, length_size, embedding_size))
-        #self.tab_b_feat = nn.Parameter(torch.randn(1, length_size, embedding_size))
         self.tab_W_feat = nn.Parameter(torch.zeros(1, length_size, embedding_size))
         self.tab_b_feat = nn.Parameter(torch.zeros(1, length_size, embedding_size))
-        #self.dropout = nn.Dropout(dropout)
+
     def forward(self, f):
         return self.tab_W_feat * f + self.tab_b_feat
 
@@ -161,8 +151,7 @@ class TabularTransformer(nn.Module):
 
         super().__init__()
         self.embedding_tab = Embedding(
-            self.length_size, self.embedding_size,
-            dropout
+            self.length_size, self.embedding_size, dropout
         )  # nn.Linear(kwargs['TAB_ARGS']['length_size'],kwargs['TAB_ARGS']['embedding_size']) #
         self.transformer_tab = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(
@@ -199,15 +188,21 @@ class TabularTransformer(nn.Module):
         f_mod = self.embedding_feats(**{"f": tabular_feat})
         if tab_mask is not None:
             tab_mask = torch.cat(
-            [
-                self.ones.repeat(f_mod.size(0),1),
-                tab_mask,
-            ],
-            axis=1,
-        )
+                [
+                    self.ones.repeat(f_mod.size(0), 1),
+                    tab_mask,
+                ],
+                axis=1,
+            )
         # assert tab_mask is not None
-        f_emb = self.transformer_tab(**{"src": f_mod, "src_key_padding_mask": ~tab_mask if tab_mask is not None else tab_mask})
+        f_emb = self.transformer_tab(
+            **{
+                "src": f_mod,
+                "src_key_padding_mask": ~tab_mask if tab_mask is not None else tab_mask,
+            }
+        )
         return self.dropout(f_emb)
+
 
 class Combinator(nn.Module):
     def __init__(self, lc_model, tab_model, how="concat", as_dict=True):
@@ -225,7 +220,7 @@ class Combinator(nn.Module):
         tabular_feat=None,
         metadata_feat=None,
         extracted_feat=None,
-        tab_mask = None,
+        tab_mask=None,
         **kwargs
     ):
 
@@ -237,6 +232,8 @@ class Combinator(nn.Module):
             return {
                 "LC": lc_emb,
                 "TAB": ft_emb,
-                #"MIX": torch.concat([lc_emb, ft_emb], axis=-1),
+                # "MIX": torch.concat([lc_emb, ft_emb], axis=-1),
             }
+
+
 #

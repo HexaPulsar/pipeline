@@ -14,9 +14,6 @@ class WindowApply:
         seq_window = np.random.randint(0, max_sample_n, size=(2,))
         seq_window.sort()
 
-        start, end = int(seq_window[0]), int(seq_window[1])  # Explicitly convert to Python integers
-        #print(start,end,abs(start-end), max_sample_n)
-        if abs(start-end) > max_sample_n:
-            return tensor_in
+        start, end = int(seq_window[0]), int(seq_window[1])
         tensor_out[start:end] = tensor_in[start:end]
         return tensor_out

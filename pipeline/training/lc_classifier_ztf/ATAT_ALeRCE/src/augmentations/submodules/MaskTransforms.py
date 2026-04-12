@@ -28,19 +28,26 @@ class MaskFirstN:
         self.num_bands = num_bands
         self.mask_first = mask_first
     def __call__(self,sample):
-        #
-        if self.mask_first ==-1:
+        if self.mask_first == -1:
             return sample
-        if isinstance(self.mask_first,list):
+        if isinstance(self.mask_first, list):
             for i in range(self.num_bands):
                 mask_first = np.random.choice(self.mask_first)
-                if mask_first ==-1:
+                if mask_first == -1:
                     return sample
                 if torch.count_nonzero(sample['data'][:,i]) < mask_first:
                     continue
                 else:
                     sample['mask'][:mask_first,i] = 0
-            
+            return sample
+        else:
+            if self.mask_first == -1:
+                return sample
+            for i in range(self.num_bands):
+                if torch.count_nonzero(sample['data'][:,i]) < self.mask_first:
+                    continue
+                else:
+                    sample['mask'][:self.mask_first,i] = 0
             return sample
 
 class CutFromN:
@@ -48,13 +55,12 @@ class CutFromN:
         self.num_bands = num_bands
         self.mask_first = cut_from_n
     def __call__(self,sample):
-        #
-        if self.mask_first ==-1:
+        if self.mask_first == -1:
             return sample
-        if isinstance(self.mask_first,list):
+        if isinstance(self.mask_first, list):
             for i in range(self.num_bands):
                 mask_first = np.random.choice(self.mask_first)
-                if mask_first ==-1:
+                if mask_first == -1:
                     return sample
                 if torch.count_nonzero(sample['data']) < mask_first:
                     return sample
@@ -62,20 +68,30 @@ class CutFromN:
                     sample['data'][mask_first:,i] = 0
                     sample['time'][mask_first:,i] = 0
                     sample['mask'] = sample['data']!=0
-                    return sample 
+                    return sample
+        else:
+            if self.mask_first == -1:
+                return sample
+            for i in range(self.num_bands):
+                if torch.count_nonzero(sample['data']) < self.mask_first:
+                    return sample
+                else:
+                    sample['data'][self.mask_first:,i] = 0
+                    sample['time'][self.mask_first:,i] = 0
+            sample['mask'] = sample['data'] != 0
+            return sample 
 
 class CutFirstN:
     def __init__(self,num_bands = 2,mask_first = 8):
         self.num_bands = num_bands
         self.mask_first = mask_first
     def __call__(self,sample):
-        #
-        if self.mask_first ==-1:
+        if self.mask_first == -1:
             return sample
-        if isinstance(self.mask_first,list):
+        if isinstance(self.mask_first, list):
             for i in range(self.num_bands):
                 mask_first = np.random.choice(self.mask_first)
-                if mask_first ==-1:
+                if mask_first == -1:
                     return sample
                 if torch.count_nonzero(sample['data']) < mask_first:
                     return sample
@@ -83,22 +99,18 @@ class CutFirstN:
                     sample['data'][:mask_first,i] = 0
                     sample['time'][:mask_first,i] = 0
                     sample['mask'] = sample['data']!=0
-                    return sample 
-
-class MaskBand:
-    def __init__(self,num_bands):
-        self.num_bands = num_bands
-    def __call__(self,sample):
-        band = sample['data']
-        for band in range(self.num_bands):
-            obs_count  = torch.count_nonzero(sample['mask'][:,band])
-            if all([obs_count <=6 + self.window]):
+                    return sample
+        else:
+            if self.mask_first == -1:
                 return sample
-            seq_window = np.random.randint(0, obs_count- self.window, size=(2,))
-            seq_window.sort()
-            start, end = int(seq_window[0]), int(seq_window[1])  # Explicitly convert to Python integers
-            sample['mask'][start:end,band] = 0
-            return sample
+            for i in range(self.num_bands):
+                if torch.count_nonzero(sample['data']) < self.mask_first:
+                    return sample
+                else:
+                    sample['data'][:self.mask_first,i] = 0
+                    sample['time'][:self.mask_first,i] = 0
+            sample['mask'] = sample['data'] != 0
+            return sample 
 
 class MaskWindow:
     def __init__(self,num_bands:int,window_size:int):
@@ -128,16 +140,14 @@ class MaXMask:
         self.num_bands = num_bands
         self.window_size = window_size
         self.range = range
-    def __call__(self,sample:dict): 
+    def __call__(self,sample:dict):
         for i in range(self.num_bands):
             get_max_idx = torch.argmax(sample['data'][:,i])
             if get_max_idx < self.range:
-                sample['mask'][0:get_max_idx+self.range] = 1
-                
+                sample['mask'][0:get_max_idx+self.range, i] = 1
             elif get_max_idx >= self.range:
-                sample['mask'][ get_max_idx-self.range :get_max_idx+self.range] = 1
+                sample['mask'][get_max_idx-self.range:get_max_idx+self.range, i] = 1
 
-        #assert sample['mask'].sum() !=0
         return sample
 
 class ThreeTimeMask:

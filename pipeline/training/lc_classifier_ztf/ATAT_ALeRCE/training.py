@@ -6,7 +6,6 @@ warnings.filterwarnings("ignore")
 
 from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY, ZTF_TAXONOMY
 from src.augmentations import LightCurveTransform as LC
-from src.augmentations import TabularTransformations as TAB
 
 from src.data.modules.LitData import LitData
 from src.models.ClassifierModule import ClassifierModule
@@ -109,38 +108,23 @@ def main(cfg:ATATConfig):
 
     transforms = []
     apply_ = None
-    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 25, 6))]
-    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=apply_) for w_ in list(range(6, 25, 6))])
+    windows =[LC.WindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=None) for w_ in list(range(6, 204, 6))]
+    windows.extend([ LC.MAXWindowSelect(cfg.lc.num_bands, window_size=w_, apply_to_classes=None) for w_ in list(range(6, 204, 6))])
     transforms.extend([RandomApply([RandomChoice(windows
                                 )],p =1)
                                 ])  if cfg.online_transforms.use_window_select else None
 
-    transforms.extend([ RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_time_gauss_factor else None
-    transforms.extend([ RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_gauss_factor else None
+   # transforms.extend([ RandomApply([LC.GaussTimeFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_time_gauss_factor else None
+   # transforms.extend([ RandomApply([LC.GaussFactor(cfg.lc.num_bands, scale = 1e-4, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_gauss_factor else None
 
     transforms.extend([ RandomApply([LC.TimeFactor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_time_factor else None
     transforms.extend([ RandomApply([LC.Factor( factor = list(np.linspace(0.99,1.01, 100)), apply_to_classes=apply_)], p = p_),]) if cfg.online_transforms.use_simple_data_factor else None
 
     transforms.extend([ RandomApply([LC.BandPermute(cfg.lc.num_bands, apply_to_classes=apply_)], p = p_)]) if cfg.online_transforms.use_band_permute else None
-####
+
 
     transforms.extend([ RandomApply([LC.GaussianFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
     transforms.extend([ RandomApply([LC.GaussianTimeFilter(cfg.lc.num_bands,filter_std = [1e-5,1e-4,1e-3,1e-2,1e-1,-1], apply_to_classes=apply_)], p = p_)])
-   # transforms.extend([ ])
-#########
-    #transforms.extend([ RandomApply([TAB.TABGaussianNoise(0,1e-2)], p = p_)])
-    #transforms.extend([ RandomApply([TAB.RandomMask(0.1)], p = 1)])
-    #transforms.extend([ RandomApply([TAB.Factor(factor = list(np.linspace(0.95,1.00, 100)))], p = p_)])
-
-    #transforms.extend([ RandomApply([LC.RandomMaskDataVector(2,0.05,None)], p = p_)])
-    #transforms.extend([ RandomApply([LC.RandomMaskTimeVector(2,0.05,None)], p = p_)])
-
-
-    #transforms.extend([ RandomApply([LC.ChessMask(True)], p = 0.1)])
-
-
-
-    #transforms.extend([LC.TimeDelta(2,(0,10000),None)])
 
     cfg.datamodule.dataset.train_transforms = transforms
     #print(transforms)
@@ -183,7 +167,7 @@ def main(cfg:ATATConfig):
         pl_model = ClassifierModule(model = transformer,
                                     classifier= classifier,
                                      loss =  loss,
-                                     freeze_lc=False,
+                                     freeze_lc=True,
                                      freeze_tab=False,
                                      report_lc =False,
                                      report_mix = False,
@@ -270,7 +254,8 @@ def main(cfg:ATATConfig):
 
                                      weight_str_parse_lc= ('model.',''),
                                     weight_str_parse_tab=('model.',''),
-                                    **cfg) 
+                                    **cfg)
+    torch.set_float32_matmul_precision('medium')
     trainer = Trainer(
        # profiler="simple",
         callbacks=list(cfg.callbacks.values()),

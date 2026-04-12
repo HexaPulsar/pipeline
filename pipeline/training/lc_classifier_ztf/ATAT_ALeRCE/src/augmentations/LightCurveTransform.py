@@ -1,11 +1,6 @@
 from typing import Literal, Union
-import scipy.signal as signal
-import numpy as np
 import torch
-import torch.nn.functional as F
-from copy import deepcopy
 from .submodules import *
-import torch
 
 
 class Roll:
@@ -30,7 +25,6 @@ class Roll:
             sample['mask'][:,band] = torch.roll(sample['mask'][:,band],shifts= (seq_roll,), dims = 0)
 
 
-import torch
 class ZScoreUndersample:
     """samplear elementos de la curva excluyendo aquellas observaciones que no estan contenidas en abs(zscore) > thr"""
 
@@ -74,13 +68,16 @@ class ZScoreUndersample:
 
                 if torch.count_nonzero(select_mask) ==0:
                     return sample
-                if torch.count_nonzero(select_mask) >= self.impose_seqlen:
+                num_selected = torch.count_nonzero(select_mask)
+                if num_selected >= self.impose_seqlen:
                     rand_idx = torch.randperm(self.impose_seqlen)
                     rand_idx.sort()
                 else:
-                    rand_idx = None
-                new_data[:torch.count_nonzero(select_mask),i] = torch.masked_select(band_data,select_mask)[rand_idx]
-                new_time[:torch.count_nonzero(select_mask),i] = torch.masked_select(band_time,select_mask)[rand_idx]
+                    rand_idx = torch.arange(num_selected)
+                new_data[:num_selected,i] = torch.masked_select(band_data,select_mask)[rand_idx]
+                new_time[:num_selected,i] = torch.masked_select(band_time,select_mask)[rand_idx]
+        else:
+            return sample
 
         if torch.count_nonzero(new_data) == 0:
             return sample
@@ -103,9 +100,9 @@ class BandPermute:
 
     def permute(self, sample):
         shift_ = torch.randint(0,self.num_bands,size  =(1,))
-        sample['data'] = torch.roll(sample['data'], shifts=(shift_,), dims=0)
-        sample['time'] = torch.roll(sample['time'], shifts=(shift_,), dims=0)
-        sample['mask'] = torch.roll(sample['mask'], shifts=(shift_,), dims=0)
+        sample['data'] = torch.roll(sample['data'], shifts=(shift_,), dims=1)
+        sample['time'] = torch.roll(sample['time'], shifts=(shift_,), dims=1)
+        sample['mask'] = torch.roll(sample['mask'], shifts=(shift_,), dims=1)
 
 
 
@@ -118,9 +115,8 @@ class RandomMaskTimeVector:
 
     def __call__(self,sample:dict):
         random_mask = torch.rand_like(sample['data']) >= self.p
-      #  sample['data'] = sample['data']*random_mask
+
         sample['time'] = sample['time']*random_mask
-        #sample['mask'] = sample['data'] != 0
         return sample
 
 class RandomMaskDataVector:
@@ -132,8 +128,6 @@ class RandomMaskDataVector:
     def __call__(self,sample:dict):
         random_mask = torch.rand_like(sample['data']) >= self.p
         sample['data'] = sample['data']*random_mask
-        #sample['time'] = sample['time']*random_mask
-        #sample['mask'] = sample['data'] != 0
         return sample
 
 
@@ -157,10 +151,7 @@ class WindowSelect:
         self.apply_to_classes = apply_to_classes
 
     def __call__(self,sample:dict):
-        if self.apply_to_classes is None:
-            self.window_select(sample)
-        else:
-            self.window_select(sample)
+        self.window_select(sample)
         return sample
 
     def window_select(self,  sample):
@@ -179,8 +170,8 @@ class WindowSelect:
                     sample["data"][end:,i] = 0
                     sample["time"][:start,i] = 0
                     sample["time"][end:,i] = 0
-                    sample['data'] = torch.roll(sample['data'], shifts=(-start,), dims = 1)
-                    sample['time'] = torch.roll(sample['time'], shifts=(-start,), dims = 1)
+                    sample['data'] = torch.roll(sample['data'], shifts=(-start,), dims = 0)
+                    sample['time'] = torch.roll(sample['time'], shifts=(-start,), dims = 0)
                     sample['mask'] = (sample['data'] != 0).bool()
 
 class BlockWindow:
@@ -190,10 +181,7 @@ class BlockWindow:
         self.apply_to_classes = apply_to_classes
 
     def __call__(self,sample:dict):
-        if self.apply_to_classes is None:
-            self.window_select(sample)
-        else:
-            self.window_select(sample)
+        self.window_select(sample)
         return sample
 
     def window_select(self,  sample):
@@ -211,7 +199,7 @@ class BlockWindow:
 
                 sample['data'][start:end, i] =0
                 sample['time'][start:end, i] =0
-                sample['mask'] = (sample['data'] == 0).bool()
+                sample['mask'] = (sample['data'] != 0).bool()
 
 import torch
 
@@ -274,17 +262,16 @@ class RandomSubsample:
         for band in range(self.num_bands):
             nonzero_measures = torch.count_nonzero(sample['data'][:,band], dim = 0)
             if  torch.count_nonzero((sample['data'][:,band])<= self.window_size):
-                sample['data'] = sample['data'][:self.window_size, band]
-                sample['time'] = sample['time'][:self.window_size, band]
-                sample['mask'] = sample['mask'][:self.window_size, band]
+                new_data[:, band] = sample['data'][:self.window_size, band]
+                new_time[:, band] = sample['time'][:self.window_size, band]
             else:
                 indices = torch.randint(0, nonzero_measures, size=(self.window_size,))
                 indices.sort()
-                new_data = sample['data'][indices, band]
-                new_time = sample['time'][indices, band]
-                sample['data'] = new_data
-                sample['mask'] = (new_data !=0).bool()
-                sample['time'] = new_time
+                new_data[:, band] = sample['data'][indices, band]
+                new_time[:, band] = sample['time'][indices, band]
+        sample['data'] = new_data
+        sample['time'] = new_time
+        sample['mask'] = (new_data != 0).bool()
         return sample
 
 

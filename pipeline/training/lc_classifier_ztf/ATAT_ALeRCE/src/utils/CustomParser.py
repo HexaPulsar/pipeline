@@ -102,6 +102,7 @@ class LightcurveArgs:
     use_exp:bool = False
     use_conv:bool = False
     use_tabular_transformer:bool = False
+    use_anomaly_gate:bool = False
 
 @dataclass
 class VICRegArgs:
@@ -127,7 +128,9 @@ class ATATConfig:
     log_filename: str
     num_classes:int 
     mode: str
-    monitor: Optional[str] 
+    monitor: Optional[str]
     checkpoint: Optional[str] = None
+    warmup_steps: int = 1000
+    eta_min_factor: float = 1e-2
 
  

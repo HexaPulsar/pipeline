@@ -194,11 +194,11 @@ class InitClassifier(InitBackbone):
         std_pipeline.fit(X_train,y_train)
         train_y_pred = std_pipeline.predict(X_train)
 
-        classification = classification_report(y_train,train_y_pred, target_names=list(taxonomy.keys()),digits = 4)
+        classification = classification_report(y_train,train_y_pred, target_names=list(taxonomy.keys()),digits = 4, zero_division=0)
         #print(classification)
         test_y_pred = std_pipeline.predict(X_test)
 
-        classification = classification_report(y_test,test_y_pred, target_names=list(taxonomy.keys()),digits = 4)
+        classification = classification_report(y_test,test_y_pred, target_names=list(taxonomy.keys()),digits = 4, zero_division=0)
         print(classification)
 
     def knn_classifier(self, X_train, y_train,X_test, y_test,taxonomy,knn_args:dict):
@@ -212,7 +212,7 @@ class InitClassifier(InitBackbone):
         knn_pipeline.fit(X_train, y_train)
         knn_preds = knn_pipeline.predict(X_test)
 
-        classification = classification_report(y_test,knn_preds, target_names=list(taxonomy.keys()),digits = 4)
+        classification = classification_report(y_test,knn_preds, target_names=list(taxonomy.keys()),digits = 4, zero_division=0)
         print(classification)
         return knn_preds
 

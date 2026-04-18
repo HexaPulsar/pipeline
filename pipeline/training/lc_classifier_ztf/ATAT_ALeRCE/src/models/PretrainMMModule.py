@@ -133,7 +133,8 @@ class PretrainMMModule(pl.LightningModule):
                         labels=labels,
                         target_names=class_names,
                         digits=4,
-                        output_dict=True
+                        output_dict=True,
+                        zero_division=0
                     )
                     for key,value in dict(lr_report['macro avg']).items():
                         if key =='support':
@@ -147,7 +148,8 @@ class PretrainMMModule(pl.LightningModule):
                         labels=labels,
                         target_names=class_names,
                         digits=4,
-                        output_dict=True
+                        output_dict=True,
+                        zero_division=0
                     )
                     for key,value in dict(knn_report[ 'macro avg']).items():
                         if key =='support':

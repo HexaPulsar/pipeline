@@ -1,15 +1,11 @@
 
 import logging
 import torch
-from src.data.handlers.BaseDataset import BaseDataset
-from joblib import load
-from dataclasses import dataclass
-import logging
 from .BaseDataset import BaseDataset
+from dataclasses import dataclass
 from typing import Literal, Union, Optional
 from torchvision.transforms import Compose
 from copy import deepcopy
-from src.augmentations import LightCurveTransform as LC
 
 
 class TimeNormalization:
@@ -73,7 +69,7 @@ class ATATDataset(BaseDataset):
                               "mask":torch.tensor(self.mask[_idx,:,:],dtype = bool)})
             if self.mask_photometry_key != '':
                 data_dict.update({'mask_photometry':torch.tensor(self.mask_photometry[_idx,:,:],dtype = bool)})
-            if self.mask_photometry_key != '':
+            if self.mask_detection_key != '':
                 data_dict.update({'mask_detection':torch.tensor(self.mask_detection[_idx,:,:],dtype = bool)})
 
         if self.use_lightcurves_err:

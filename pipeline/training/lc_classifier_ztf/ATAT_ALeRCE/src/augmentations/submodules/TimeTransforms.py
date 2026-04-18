@@ -13,20 +13,15 @@ class TimeFactor:
         self.apply_to_classes = apply_to_classes
     def __call__(self, sample):
         if self.apply_to_classes is None:
-            if isinstance(self.factor,list):
+            if isinstance(self.factor, list):
                 return self.random_factor(sample)
             else:
-                for i in range(self.num_bands):
-                    band_time = sample['time'][:,i] * self.factor
-                    sample['time'][:, i] = band_time
-
+                sample['time'] = sample['time'] * self.factor
         else:
             if sample['labels'] in self.apply_to_classes:
-                if isinstance(self.factor,list):
+                if isinstance(self.factor, list):
                     return self.random_factor(sample)
-                for i in range(self.num_bands):
-                    band_time = sample['time'][:,i] * self.factor
-                    sample['time'][:, i] = band_time
+                sample['time'] = sample['time'] * self.factor
         return sample
 
     def random_factor(self,sample):
@@ -42,19 +37,27 @@ class TimeDelta:
         self.num_bands = num_bands
         self.apply_to_classes = apply_to_classes
     def __call__(self, sample):
-        if torch.count_nonzero(sample['time']) == 0:
+        if torch.count_nonzero(sample['time']).item() == 0:
             return sample
         if self.apply_to_classes is None:
-            min_ = torch.where(sample['time'] == 0, torch.tensor(float('inf')), sample['time']).min()
+            nonzero_times = sample['time'][sample['time'] > 0]
+            if len(nonzero_times) == 0:
+                return sample
+            min_ = nonzero_times.min().item()
             if min_ >= np.inf:
                 return sample
-            sample['time'] = sample['time'] - (sample['time']> 0)*np.random.randint(0,min_)
+            delta = np.random.randint(0, int(min_))
+            sample['time'] = sample['time'] - (sample['time'] > 0) * delta
         else:
             if sample['labels'] in self.apply_to_classes:
-                min_ = torch.where(sample['time'] == 0, torch.tensor(float('inf')), sample['time']).min()
+                nonzero_times = sample['time'][sample['time'] > 0]
+                if len(nonzero_times) == 0:
+                    return sample
+                min_ = nonzero_times.min().item()
                 if min_ >= np.inf:
                     return sample
-                sample['time'] = sample['time'] - (sample['time']> 0)*np.random.randint(0,min_)
+                delta = np.random.randint(0, int(min_))
+                sample['time'] = sample['time'] - (sample['time'] > 0) * delta
         return sample
 
 from scipy.ndimage import gaussian_filter1d
@@ -74,12 +77,12 @@ class TimeGaussianFilter:
 
     def gauss_filter(self, sample):
         for i in range(self.num_bands):
-                choose_filter_std = np.random.choice(self.filter_std)
-                if choose_filter_std == -1:
-                    return sample
-                nonzero = torch.count_nonzero(sample['time'][:,i])
-                filtered_signal = gaussian_filter1d(sample['time'][:nonzero, i], choose_filter_std)
-                sample['time'][:nonzero,i] = torch.tensor(filtered_signal, dtype = torch.float)
+            choose_filter_std = np.random.choice(self.filter_std)
+            if choose_filter_std == -1:
+                return sample
+            nonzero = torch.count_nonzero(sample['time'][:, i]).item()
+            filtered_signal = gaussian_filter1d(sample['time'][:nonzero, i].cpu().numpy(), choose_filter_std)
+            sample['time'][:nonzero, i] = torch.from_numpy(filtered_signal).to(sample['time'].dtype).to(sample['time'].device)
 
 class TimeNormalization:
     def __call__(self,sample):
@@ -102,28 +105,20 @@ class TimeGaussianNoise:
     def __call__(self, sample):
         if self.apply_to_classes is None:
             for i in range(self.num_bands):
-                if torch.count_nonzero(sample['time'][:,i], dim = -1)  > 0:
-                    band_time = sample['time'][:,i]
-                    nonzero = torch.nonzero(band_time)
-                    band_mask = band_time!=0
-                    noise = torch.normal(0,abs(band_time[nonzero].mean())*(1e-3), size=(band_time.size(0),)).to(device=band_time.device, non_blocking=True)
-                    noise.sort()
-                    band_time = band_time + noise * band_mask
-                    sample["time"][:,i] = band_time
-                else:
-                    continue
+                band_time = sample['time'][:, i]
+                if torch.count_nonzero(band_time).item() > 0:
+                    band_mask = band_time != 0
+                    nonzero_mean = torch.abs(band_time[band_mask].mean())
+                    noise = torch.normal(0, nonzero_mean * 1e-3, size=band_time.shape, device=band_time.device, dtype=band_time.dtype)
+                    sample['time'][:, i] = band_time + noise * band_mask
         else:
             if sample['labels'] in self.apply_to_classes:
                 for i in range(self.num_bands):
-                    if torch.count_nonzero(sample['time'][:,i], dim = -1)  > 0:
-                        band_time = sample['time'][:,i]
-                        nonzero = torch.nonzero(band_time)
-                        band_mask = band_time!=0
-                        noise = torch.normal(0,abs(band_time[nonzero].mean())*(1e-4), size=(band_time.size(0),)).to(device=band_time.device, non_blocking=True)
-                        noise.sort()
-                        band_time = band_time + noise * band_mask
-                        sample["time"][:,i] = band_time
-                    else:
-                        continue
+                    band_time = sample['time'][:, i]
+                    if torch.count_nonzero(band_time).item() > 0:
+                        band_mask = band_time != 0
+                        nonzero_mean = torch.abs(band_time[band_mask].mean())
+                        noise = torch.normal(0, nonzero_mean * 1e-4, size=band_time.shape, device=band_time.device, dtype=band_time.dtype)
+                        sample['time'][:, i] = band_time + noise * band_mask
         return sample
 

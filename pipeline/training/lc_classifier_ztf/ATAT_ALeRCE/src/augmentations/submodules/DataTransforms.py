@@ -18,10 +18,10 @@ class CutBand:
         self.num_bands =num_bands
         self.min_samples = min_samples
     def __call__(self, sample):
-        nonzero = torch.count_nonzero(sample['data'], dim = 1)
-        if all([nonzero[0] <= self.min_samples, nonzero[1] <= self.min_samples, nonzero[0] + nonzero[1] <= self.min_samples]):
+        nonzero = torch.count_nonzero(sample['data'], dim=1)
+        if all([nonzero[0].item() <= self.min_samples, nonzero[1].item() <= self.min_samples, (nonzero[0] + nonzero[1]).item() <= self.min_samples]):
             return sample
-        band = np.random.choice(list(range(self.num_bands)))
+        band = np.random.choice(self.num_bands)
         sample['data'][:, band] = 0
         sample['time'][:, band] = 0
         sample['mask'][:, band] = 0
@@ -80,12 +80,12 @@ class GaussianFilter:
 
     def gauss_filter(self, sample):
         for i in range(self.num_bands):
-                choose_filter_std = np.random.choice(self.filter_std)
-                if choose_filter_std == -1:
-                    return sample
-                nonzero = torch.count_nonzero(sample['data'][:,i])
-                filtered_signal = gaussian_filter1d(sample['data'][:nonzero, i], choose_filter_std)
-                sample['data'][:nonzero,i] = torch.tensor(filtered_signal, dtype = torch.float)
+            choose_filter_std = np.random.choice(self.filter_std)
+            if choose_filter_std == -1:
+                return sample
+            nonzero = torch.count_nonzero(sample['data'][:, i]).item()
+            filtered_signal = gaussian_filter1d(sample['data'][:nonzero, i].cpu().numpy(), choose_filter_std)
+            sample['data'][:nonzero, i] = torch.from_numpy(filtered_signal).to(sample['data'].dtype).to(sample['data'].device)
 
 class GaussianTimeFilter:
     def __init__(self, num_bands,filter_std:list, apply_to_classes:list = None):
@@ -102,12 +102,12 @@ class GaussianTimeFilter:
 
     def gauss_filter(self, sample):
         for i in range(self.num_bands):
-                choose_filter_std = np.random.choice(self.filter_std)
-                if choose_filter_std == -1:
-                    return sample
-                nonzero = torch.count_nonzero(sample['time'][:,i])
-                filtered_signal = gaussian_filter1d(sample['time'][:nonzero, i], choose_filter_std)
-                sample['time'][:nonzero,i] = torch.tensor(filtered_signal, dtype = torch.float)
+            choose_filter_std = np.random.choice(self.filter_std)
+            if choose_filter_std == -1:
+                return sample
+            nonzero = torch.count_nonzero(sample['time'][:, i]).item()
+            filtered_signal = gaussian_filter1d(sample['time'][:nonzero, i].cpu().numpy(), choose_filter_std)
+            sample['time'][:nonzero, i] = torch.from_numpy(filtered_signal).to(sample['time'].dtype).to(sample['time'].device)
 
 
 class Factor:
@@ -183,16 +183,12 @@ class GaussianNoise:
 
     def __call__(self, sample):
         for i in range(self.num_bands):
-            if torch.count_nonzero(sample['data'][:,i], dim = -1)  > 0:
-
-                band_data = sample['data'][:,i]
-                nonzero = torch.nonzero(band_data)
-                band_mask = band_data!=0
-                noise = torch.normal(0,abs(band_data[nonzero].mean())*(0.01), size=(band_data.size(0),)).to(device=band_data.device, non_blocking=True)
-                band_data = band_data + noise * band_mask
-                sample["data"][:,i] = band_data
-            else:
-                continue
+            band_data = sample['data'][:, i]
+            if torch.count_nonzero(band_data).item() > 0:
+                band_mask = band_data != 0
+                nonzero_mean = torch.abs(band_data[band_mask].mean())
+                noise = torch.normal(0, nonzero_mean * 0.01, size=band_data.shape, device=band_data.device, dtype=band_data.dtype)
+                sample['data'][:, i] = band_data + noise * band_mask
         return sample
 
 

@@ -1,12 +1,13 @@
 import torch.nn as nn
 
 class ClassifierBaseModel(nn.Module):
-    def __init__(self, model, classifier,loss= nn.CrossEntropyLoss()):
-        """_summary_
+    def __init__(self, model, classifier, loss=nn.CrossEntropyLoss()):
+        """Classification model combining an embedding model with a classifier head.
 
         Args:
-            model (_type_): _description_
-            classifier (_type_): _description_
+            model: Embedding model that produces feature representations
+            classifier: Classification head that outputs class logits
+            loss: Loss function for training (default: CrossEntropyLoss)
         """
         super().__init__()
         self.model = model

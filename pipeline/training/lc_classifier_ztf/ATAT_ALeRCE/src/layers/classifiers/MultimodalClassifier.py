@@ -1,19 +1,6 @@
+import torch
 import torch.nn as nn
 
-import torch.nn
-'''
-self.output_layer =  nn.Sequential(
-                                     nn.Linear(embedding_size,embedding_size, bias=True),
-                                    nn.Dropout(dropout),
-                                    nn.LayerNorm(embedding_size),
-                                    nn.GELU(),
-                                    nn.Linear(embedding_size,embedding_size, bias=True),
-                                    nn.Dropout(dropout),
-                                    nn.LayerNorm(embedding_size),
-                                    nn.GELU(),
-                                    nn.Linear(embedding_size, num_classes)
-                                     )
-'''
 class TokenClassifier(nn.Module):
     def __init__(self, embedding_size,num_classes,
                   dropout = 0.01, **kwargs):
@@ -31,7 +18,7 @@ class TokenClassifier(nn.Module):
 
 class MultimodalClassifier(nn.Module):
     def __init__(self,
-                 experiment_type = str,
+                 experiment_type: str = None,
                  lc_input_size = None,
                  tab_input_size = None,
                  use_lc = False,
@@ -47,27 +34,30 @@ class MultimodalClassifier(nn.Module):
         self.use_lc = use_lc
         self.use_tab = use_tab
         self.use_mix = use_mix
-        parse_exp_type = experiment_type.split('_')
         self.modalities = []
-        self.modalities+= ['LC'] if 'LC' in parse_exp_type else []
-        self.modalities+= ['TAB'] if 'MD' in parse_exp_type or 'FEAT' in parse_exp_type else []
-        self.modalities+= ['MIX'] if ('MD' in parse_exp_type or 'FEAT' in parse_exp_type) and ('LC' in parse_exp_type) else []
-        self.combine_logits = combine_logits
-        print(use_lc, use_tab, use_mix)
-        #if combine_logits:
-        if use_lc:
-            self.token_lc =  TokenClassifier(lc_input_size,num_classes, dropout ) # Hier(lc_input_size, 22, 3) #
-        elif use_tab:
-            self.token_tab = TokenClassifier(tab_input_size,num_classes, dropout )
-        #elif self.combine_logits:
-         #   assert all([self.combine_logits, self.use_mix,self.use_lc, self.use_tab]), 'to combine logits use all modalities'
+        if experiment_type is not None:
+            parse_exp_type = experiment_type.split('_')
+            self.modalities+= ['LC'] if 'LC' in parse_exp_type else []
+            self.modalities+= ['TAB'] if 'MD' in parse_exp_type or 'FEAT' in parse_exp_type else []
+            self.modalities+= ['MIX'] if ('MD' in parse_exp_type or 'FEAT' in parse_exp_type) and ('LC' in parse_exp_type) else []
         else:
-           # self.mixed_classifier = TokenClassifier(lc_input_size + tab_input_size,num_classes, dropout)
-            self.mixed_classifier = nn.Sequential(nn.Linear(lc_input_size + tab_input_size,lc_input_size + tab_input_size),
+            self.modalities+= ['LC'] if use_lc else []
+            self.modalities+= ['TAB'] if use_tab else []
+            self.modalities+= ['MIX'] if use_mix else []
+        self.combine_logits = combine_logits
+
+        if use_lc:
+            self.token_lc = TokenClassifier(lc_input_size, num_classes, dropout)
+
+        if use_tab:
+            self.token_tab = TokenClassifier(tab_input_size, num_classes, dropout)
+
+        if use_mix:
+            self.mixed_classifier = nn.Sequential(nn.Linear(lc_input_size + tab_input_size, lc_input_size + tab_input_size),
                                                   nn.Dropout(dropout),
                                                   nn.LayerNorm(lc_input_size + tab_input_size),
                                                   nn.GELU(),
-                                                  nn.Linear(lc_input_size + tab_input_size,num_classes),
+                                                  nn.Linear(lc_input_size + tab_input_size, num_classes),
                                                 )
     def forward(self,emb_dict):
         out_dict= {}

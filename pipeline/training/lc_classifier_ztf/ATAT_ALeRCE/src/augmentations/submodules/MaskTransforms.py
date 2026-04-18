@@ -116,23 +116,22 @@ class MaskWindow:
     def __init__(self,num_bands:int,window_size:int):
         self.num_bands = num_bands
         self.window_size = window_size
-    def __call__(self,sample:dict): 
+    def __call__(self, sample: dict):
         for i in range(self.num_bands):
-            nonzero_measures = torch.count_nonzero(sample['data'][:,i], dim = 0)
-            intersection_check = nonzero_measures- self.window_size
-            if  np.count_nonzero((sample['data'][:,i]) < self.window_size):
+            nonzero_measures = torch.count_nonzero(sample['data'][:, i]).item()
+            intersection_check = nonzero_measures - self.window_size
+            if nonzero_measures <= self.window_size:
                 continue
             else:
                 if intersection_check == 0:
                     start = 0
                 else:
-                    start = torch.randint(0,intersection_check ,size = (1,)) 
+                    start = torch.randint(0, intersection_check, size=(1,)).item()
 
                 end = start + self.window_size
-                new_mask = torch.zeros_like(sample['data'][:,i], dtype = bool)
-                new_mask[start:end] = 1
-                sample['mask'][:,i]= new_mask
-        #assert sample['mask'].sum() !=0
+                new_mask = torch.zeros(sample['data'].shape[0], dtype=torch.bool, device=sample['data'].device)
+                new_mask[start:end] = True
+                sample['mask'][:, i] = new_mask
         return sample
 
 class MaXMask:
@@ -140,14 +139,13 @@ class MaXMask:
         self.num_bands = num_bands
         self.window_size = window_size
         self.range = range
-    def __call__(self,sample:dict):
+    def __call__(self, sample: dict):
         for i in range(self.num_bands):
-            get_max_idx = torch.argmax(sample['data'][:,i])
+            get_max_idx = torch.argmax(sample['data'][:, i]).item()
             if get_max_idx < self.range:
-                sample['mask'][0:get_max_idx+self.range, i] = 1
-            elif get_max_idx >= self.range:
-                sample['mask'][get_max_idx-self.range:get_max_idx+self.range, i] = 1
-
+                sample['mask'][0:get_max_idx + self.range, i] = True
+            else:
+                sample['mask'][get_max_idx - self.range:get_max_idx + self.range, i] = True
         return sample
 
 class ThreeTimeMask:
@@ -175,118 +173,124 @@ from scipy import ndimage, datasets
 
 
 class SobelFilterMask:
-    def __init__(self,keep:Literal['below', 'above'] = 'above',threshold = 0.1):
+    def __init__(self, keep: Literal['below', 'above'] = 'above', threshold=0.1):
         self.threshold = threshold
         self.keep = keep
+
     def __call__(self, sample):
-        
         signal = sample['data']
-        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
-        sobel_h = torch.tensor(sobel_h) * (signal!=0)
-        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
-        sobel_v = torch.tensor(sobel_v)* (signal!=0)
-        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)  
-         
-        if magnitude.max() > 1:
-            magnitude = (magnitude/magnitude.max()) * (signal !=0)
-        
-        if self.keep == 'below': 
-            new_mask = (torch.tensor(magnitude)<= self.threshold).bool() & sample['mask'].clone()
-        if self.keep == 'above':
-            new_mask =  (torch.tensor(magnitude)>= self.threshold).bool() & sample['mask'].clone()
- 
+        signal_mask = signal != 0
+
+        sobel_h = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 0)).to(signal.device, signal.dtype) * signal_mask
+        sobel_v = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 1)).to(signal.device, signal.dtype) * signal_mask
+        magnitude = torch.sqrt(sobel_h ** 2 + sobel_v ** 2)
+
+        mag_max = magnitude.max()
+        if mag_max > 1:
+            magnitude = (magnitude / mag_max) * signal_mask
+
+        if self.keep == 'below':
+            new_mask = (magnitude <= self.threshold) & sample['mask']
+        else:  # 'above'
+            new_mask = (magnitude >= self.threshold) & sample['mask']
+
         if new_mask.sum().item() < 6:
             return sample
-        else:
-            sample['mask'] = new_mask
-            return sample
+        sample['mask'] = new_mask
+        return sample
      
 class RangeSobelFilterMask:
-    def __init__(self, threshold_range:tuple = (0.01,0.05)):
-        self.threshold_range= threshold_range
+    def __init__(self, threshold_range: tuple = (0.01, 0.05)):
+        self.threshold_range = threshold_range
+
     def __call__(self, sample):
-        
-        
         signal = sample['data']
-        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
-        sobel_h = torch.tensor(sobel_h) * (signal!=0)
-        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
-        sobel_v = torch.tensor(sobel_v)* (signal!=0)
-        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)   
-        if magnitude.max() > 1:
-            magnitude = (magnitude/magnitude.max())* (signal !=0) 
+        signal_mask = signal != 0
+
+        sobel_h = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 0)).to(signal.device, signal.dtype) * signal_mask
+        sobel_v = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 1)).to(signal.device, signal.dtype) * signal_mask
+        magnitude = torch.sqrt(sobel_h ** 2 + sobel_v ** 2)
+
+        mag_max = magnitude.max()
+        if mag_max > 1:
+            magnitude = (magnitude / mag_max) * signal_mask
+
         sample['mask'] = torch.logical_and(
             magnitude >= self.threshold_range[0],
             magnitude <= self.threshold_range[1]
-        )  
+        )
         return sample
 
 class RandomSobelFilterMask:
     def __init__(self,
-                 filter_type:Literal['horizontal', 'vertical', 'magnitude'], 
+                 filter_type: Literal['horizontal', 'vertical', 'magnitude'],
                  keep: Literal['above', 'below'],
-                 threshold_range:tuple = (0.01,0.05)):
-        self.threshold_range= threshold_range
+                 threshold_range: tuple = (0.01, 0.05)):
+        self.threshold_range = threshold_range
         self.keep = keep
         self.filter = filter_type
-        assert self.filter in ['horizontal','vertical','magnitude']
-    
+        assert self.filter in ['horizontal', 'vertical', 'magnitude']
+
     def __call__(self, sample):
-        
-        
         signal = sample['data']
-        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
-        sobel_h = torch.tensor(sobel_h) * (signal!=0)
+        signal_mask = signal != 0
+
+        sobel_h = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 0)).to(signal.device, signal.dtype)
+        sobel_h = sobel_h * signal_mask
         if sobel_h.max() > 1:
-            sobel_h = (sobel_h/sobel_h.max())* (signal !=0)
-        
-        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
-        sobel_v = torch.tensor(sobel_v)* (signal!=0)
+            sobel_h = (sobel_h / sobel_h.max()) * signal_mask
+
+        sobel_v = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 1)).to(signal.device, signal.dtype)
+        sobel_v = sobel_v * signal_mask
         if sobel_v.max() > 1:
-            sobel_v = (sobel_v/sobel_v.max())* (signal !=0)
-        
-        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)  
-        magnitude = magnitude* (signal!=0)
-        
-        threshold = torch.FloatTensor(1).uniform_(self.threshold_range[0],self.threshold_range[1]).to(signal.device)
-        
+            sobel_v = (sobel_v / sobel_v.max()) * signal_mask
+
+        magnitude = torch.sqrt(sobel_h ** 2 + sobel_v ** 2) * signal_mask
+
+        threshold = torch.rand(1, device=signal.device, dtype=signal.dtype) * (self.threshold_range[1] - self.threshold_range[0]) + self.threshold_range[0]
+        threshold = threshold.item()
+
         if self.keep == 'above':
             if self.filter == 'horizontal':
-                new_mask = (abs(sobel_h) >= threshold).bool()  & sample['mask'].clone()
+                new_mask = (torch.abs(sobel_h) >= threshold) & sample['mask']
             elif self.filter == 'vertical':
-                new_mask = (abs(sobel_v) >= threshold).bool()  & sample['mask'].clone()
-            elif self.filter == 'magnitude':
-                new_mask = (magnitude >= threshold).bool()  & sample['mask'].clone()
-        elif self.keep == 'below':
+                new_mask = (torch.abs(sobel_v) >= threshold) & sample['mask']
+            else:  # magnitude
+                new_mask = (magnitude >= threshold) & sample['mask']
+        else:  # below
             if self.filter == 'horizontal':
-                new_mask = (abs(sobel_h) <= threshold).bool()  & sample['mask'].clone()
+                new_mask = (torch.abs(sobel_h) <= threshold) & sample['mask']
             elif self.filter == 'vertical':
-                new_mask = (abs(sobel_v) <= threshold).bool()  & sample['mask'].clone()
-            elif self.filter == 'magnitude':
-                new_mask = (magnitude <= threshold).bool()  & sample['mask'].clone()
-        if (sample['mask'].sum()) <6: 
+                new_mask = (torch.abs(sobel_v) <= threshold) & sample['mask']
+            else:  # magnitude
+                new_mask = (magnitude <= threshold) & sample['mask']
+
+        if new_mask.sum().item() < 6:
             return sample
-        else:
-            sample['mask'] = new_mask
-            return sample
+        sample['mask'] = new_mask
+        return sample
     
 class RandomRangeSobelFilterMask:
-    def __init__(self, threshold_range:tuple = (0.01,0.05)):
-        self.threshold_range= threshold_range
+    def __init__(self, threshold_range: tuple = (0.01, 0.05)):
+        self.threshold_range = threshold_range
+
     def __call__(self, sample):
-        
-        
         signal = sample['data']
-        sobel_h = ndimage.sobel(signal, 0) # horizontal gradient
-        sobel_h = torch.tensor(sobel_h) * (signal!=0)
-        sobel_v = ndimage.sobel(signal, 1)    # vertical gradient
-        sobel_v = torch.tensor(sobel_v)* (signal!=0)
-        magnitude = np.sqrt(sobel_h**2 + sobel_v**2)   
-        if magnitude.max() > 1:
-            magnitude = (magnitude/magnitude.max())* (signal !=0)
-        threshold = torch.FloatTensor(2).uniform_(self.threshold_range[0],self.threshold_range[1]).to(signal.device)
+        signal_mask = signal != 0
+
+        sobel_h = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 0)).to(signal.device, signal.dtype) * signal_mask
+        sobel_v = torch.from_numpy(ndimage.sobel(signal.cpu().numpy(), 1)).to(signal.device, signal.dtype) * signal_mask
+        magnitude = torch.sqrt(sobel_h ** 2 + sobel_v ** 2)
+
+        mag_max = magnitude.max()
+        if mag_max > 1:
+            magnitude = (magnitude / mag_max) * signal_mask
+
+        threshold_max = torch.rand(1, device=signal.device, dtype=signal.dtype) * (self.threshold_range[1] - self.threshold_range[0]) + self.threshold_range[0]
+        threshold_max = threshold_max.item()
+
         sample['mask'] = torch.logical_and(
             magnitude >= self.threshold_range[0],
-            magnitude <= threshold[1]
-        )  
+            magnitude <= threshold_max
+        )
         return sample

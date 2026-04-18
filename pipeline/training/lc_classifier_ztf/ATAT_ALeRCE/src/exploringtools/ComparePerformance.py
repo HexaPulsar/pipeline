@@ -38,8 +38,8 @@ class ComparePerformance:
         )
         preds_1, target = self.model_1._predict(dataloader)
         preds_2,_ = self.model_2._predict(dataloader)
-        cr_1  = classification_report(np.argmax(preds_1, axis = -1), target, output_dict=True)
-        cr_2  = classification_report(np.argmax(preds_2, axis = -1), target, output_dict=True)
+        cr_1  = classification_report(np.argmax(preds_1, axis = -1), target, output_dict=True, zero_division=0)
+        cr_2  = classification_report(np.argmax(preds_2, axis = -1), target, output_dict=True, zero_division=0)
         f1_1 = []
         f1_2 = []
         fig,ax = plt.subplots(1,1,figsize = (8,5))

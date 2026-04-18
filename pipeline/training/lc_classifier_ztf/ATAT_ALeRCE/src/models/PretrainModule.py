@@ -1,20 +1,9 @@
-from src.augmentations import LightCurveTransform as LC
-import torch.nn.functional as F
-import torch.nn as nn
-import torch.optim as optim
 import torch
-from typing import Dict, Optional, Literal
+import torch.nn as nn
 import pytorch_lightning as pl
-from torch.optim.lr_scheduler import (
-    SequentialLR,
-    ConstantLR,
-    CosineAnnealingWarmRestarts,
-    CosineAnnealingLR,
-    LinearLR,
-    ExponentialLR,
-)
+from torch.optim.lr_scheduler import SequentialLR, CosineAnnealingLR, LinearLR
+from typing import Dict, Optional
 import logging
-from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY, ZTF_TAXONOMY
 import numpy as np
 
 from sklearn.linear_model import LogisticRegression
@@ -25,23 +14,25 @@ from sklearn.neighbors import KNeighborsClassifier
 
 class PretrainModule(pl.LightningModule):
     def __init__(
-        self, model, loss, lr=0.001, eval_knn=False, eval_regressor=True, **kwargs
+        self, model, loss, eval_knn=False, eval_regressor=True, **kwargs
     ):
         """
         Batch must be a tuple of batches: (batch, augmented batch)
         Model output must be of shape (bsz,embeddings)
         Loss input is (embedding_batch_1, embedding_batch_2)
         Args:
-            model (_type_): _description_
-            loss (_type_): _description_
+            model: neural network model for embedding generation
+            loss: loss function that takes two embeddings and returns a dict with at least 'loss' key
 
         """
         super().__init__()
         self.gradients_ = None
-        self.lr = lr
         self.model = model
         self.loss = loss
-        logging.debug("using learning rate {}".format(self.lr))
+        self.learning_rate = kwargs["learning_rate"]
+        self.warmup_steps = kwargs.get("warmup_steps", 1000)
+        self.eta_min_factor = kwargs.get("eta_min_factor", 1e-2)
+        logging.debug("using learning rate %s", self.learning_rate)
         self.init_model()
         self.collect_train_embs = None
         self.collect_train_labels = None
@@ -49,47 +40,45 @@ class PretrainModule(pl.LightningModule):
         self.collect_val_labels = None
         self.eval_knn = eval_knn
         self.eval_regressor = eval_regressor
-        self.learning_rate = kwargs["learning_rate"]
-        self.warmup = 0
+        self._histogram_keys = None
+        self._scalar_keys = None
 
     def init_model(self):
-        for name, p in self.named_parameters():
+        for _, p in self.named_parameters():
             if p.dim() > 1:
                 nn.init.kaiming_uniform_(p)
 
-    def training_step(self, batch, batch_idx):
-        embedding_1 = self.model(**batch[0])[
-            :, 0, :
-        ]  # torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
-        embedding_2 = self.model(**batch[1])[
-            :, 0, :
-        ]  # torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
+    def _get_embeddings(self, batch):
+        """Extract CLS token embeddings from model output for both batch elements."""
+        embedding_1 = self.model(**batch[0])[:, 0, :]
+        embedding_2 = self.model(**batch[1])[:, 0, :]
+        return embedding_1, embedding_2
 
-        # embedding_1  =torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
-        # embedding_2 = torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
+    def training_step(self, batch, _batch_idx):
+        embedding_1, embedding_2 = self._get_embeddings(batch)
         loss_dict = self.loss(embedding_1, embedding_2)
 
-        with torch.no_grad():
-            for key, value in loss_dict.items():
-                if "emb_corr" in key:
-                    self.logger.experiment.add_histogram(key, value, self.global_step)
-                elif "mean_" in key:
-                    self.logger.experiment.add_histogram(key, value, self.global_step)
-
+        # Precompute key categories on first call
+        if self._histogram_keys is None:
+            self._histogram_keys = set()
+            self._scalar_keys = set()
+            self._percent_keys = set()
+            for key in loss_dict.keys():
+                if "emb_corr" in key or "mean_" in key:
+                    self._histogram_keys.add(key)
                 elif "percent" in key:
-                    self.log(
-                        f"{key}", value, on_epoch=False, on_step=True, sync_dist=True
-                    )
+                    self._percent_keys.add(key)
                 else:
-                    self.log(
-                        f"loss_train/{key}",
-                        value,
-                        on_epoch=False,
-                        on_step=True,
-                        sync_dist=True,
-                    )
+                    self._scalar_keys.add(key)
 
-        # self.log(f'Tmax_0',self.model.time_encoder.time_encoders[0].Tmax,on_step = True, sync_dist=True)
+        with torch.no_grad():
+            for key in self._histogram_keys & loss_dict.keys():
+                self.logger.experiment.add_histogram(key, loss_dict[key], self.global_step)
+            for key in self._percent_keys & loss_dict.keys():
+                self.log(f"{key}", loss_dict[key], on_epoch=False, on_step=True, sync_dist=False)
+            for key in self._scalar_keys & loss_dict.keys():
+                self.log(f"loss_train/{key}", loss_dict[key], on_epoch=False, on_step=True, sync_dist=False)
+
         return loss_dict["loss"]
 
     def gradfilter_ema(
@@ -114,18 +103,10 @@ class PretrainModule(pl.LightningModule):
         return grads
 
     def on_after_backward(self) -> None:
-        self.gradients = self.gradfilter_ema(m=self.model, grads=self.gradients_)
+        self.gradients_ = self.gradfilter_ema(m=self.model, grads=self.gradients_)
 
-    def validation_step(self, batch, batch_idx):
-        embedding_1 = self.model(**batch[0])[
-            :, 0, :
-        ]  # torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
-        embedding_2 = self.model(**batch[1])[
-            :, 0, :
-        ]  # torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
-
-        # embedding_1  =torch.concat([embedding[:,0,:] for embedding in self.model(**batch[0]).values()], dim = -1)
-        # embedding_2 = torch.concat([embedding[:,0,:] for embedding in self.model(**batch[1]).values()], dim = -1)
+    def validation_step(self, batch, _batch_idx):
+        embedding_1, embedding_2 = self._get_embeddings(batch)
         loss_dict = self.loss(embedding_1, embedding_2)
         with torch.no_grad():
             for key, value in loss_dict.items():
@@ -139,9 +120,6 @@ class PretrainModule(pl.LightningModule):
                     )
         return loss_dict["loss"]
 
-    def test_step(self, batch, batch_idx):
-        return 0
-
     def configure_optimizers(self):
         # -------------------------
         # Parameter grouping
@@ -154,7 +132,6 @@ class PretrainModule(pl.LightningModule):
             "token",
             "time_encoder",
         ]
-
         backbone_decay = []
         backbone_no_decay = []
         head_params = []
@@ -162,8 +139,7 @@ class PretrainModule(pl.LightningModule):
         for name, param in self.named_parameters():
             if not param.requires_grad:
                 continue
-
-            if "classifier" in name:
+            if "project" in name:
                 head_params.append(param)
             elif any(nd in name for nd in no_decay_keywords):
                 backbone_no_decay.append(param)
@@ -187,7 +163,7 @@ class PretrainModule(pl.LightningModule):
                 },
                 {
                     "params": head_params,
-                    "lr": self.learning_rate,  # best performance is  * 1e-2
+                    "lr": self.learning_rate,
                     "weight_decay": 0.0,
                 },
             ],
@@ -195,46 +171,55 @@ class PretrainModule(pl.LightningModule):
             eps=1e-8,
         )
 
-        # warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-        #    optimizer,
-        #    start_factor=0.01,
-        #    total_iters=1000,
-        # )
+        # -------------------------
+        # Two-stage scheduler
+        # -------------------------
+        warmup_scheduler = LinearLR(
+            optimizer,
+            start_factor=1e-2,
+            end_factor=1.0,
+            total_iters=self.warmup_steps,
+        )
 
-        # cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        #    optimizer,
-        #    T_max=100,
-        #    eta_min=self.learning_rate * 0.01,
-        # )
-        return optimizer
+        cosine_scheduler = CosineAnnealingLR(
+            optimizer,
+            T_max=self.trainer.estimated_stepping_batches - self.warmup_steps,
+            eta_min=self.learning_rate * self.eta_min_factor,
+        )
+
+        sequential_scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[self.warmup_steps],
+        )
+
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
-                "scheduler": cosine_scheduler,
-                "interval": "step",  # IMPORTANT for large datasets
+                "scheduler": sequential_scheduler,
+                "interval": "step",
                 "frequency": 1,
             },
         }
 
-        # return optimizer
-
     def get_real_classes_weights(self, labels):
+        # Convert labels to numpy if needed
+        if isinstance(labels, torch.Tensor):
+            labels_np = labels.cpu().numpy()
+        else:
+            labels_np = labels
 
-        class_sample_count = np.array(
-            [len(np.where(labels == t)[0]) for t in np.unique(labels)]
-        )
-        # print('class_sampler_count', class_sample_count)
+        # Use bincount for O(n) instead of O(n_classes * n)
+        class_sample_count = np.bincount(labels_np.astype(int))
         weight = 1.0 / class_sample_count
-        uniques = np.unique(labels).astype(int)
-        d = {key: value for key, value in zip(uniques, weight)}
-        samples_weight = np.array([d[labels[i].item()] for i in range(len(labels))])
+
+        # Direct indexing instead of dict lookup
+        samples_weight = weight[labels_np.astype(int)]
         samples_weight = torch.from_numpy(samples_weight)
         return samples_weight
 
-    def get_regressor_eval(
-        self,
-    ):
-        weights = self.get_real_classes_weights(torch.tensor(self.collect_train_labels))
+    def get_regressor_eval(self):
+        weights = self.get_real_classes_weights(self.collect_train_labels)
         weights_dict = {float(i): weights[i] for i in range(len(weights))}
 
         std_pipeline = Pipeline(

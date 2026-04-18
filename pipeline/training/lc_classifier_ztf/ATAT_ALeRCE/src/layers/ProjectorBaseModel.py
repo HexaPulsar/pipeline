@@ -2,11 +2,11 @@ import torch.nn as nn
 
 class ProjectorBaseModel(nn.Module):
     def __init__(self, model, projector):
-        """_summary_
+        """Projection model combining an embedding model with a projection head.
 
         Args:
-            model (_type_): _description_
-            projector (_type_): _description_
+            model: Embedding model that produces feature representations
+            projector: Projection head that maps embeddings to a projection space
         """
         super().__init__()
         self.model = model

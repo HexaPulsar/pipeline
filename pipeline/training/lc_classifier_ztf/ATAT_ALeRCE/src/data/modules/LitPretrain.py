@@ -1,13 +1,12 @@
 import pytorch_lightning as pl
+import logging
 from src.data.handlers.SSLDataset import SSLDataset
 from torch.utils.data import ConcatDataset
 from torch.utils.data import DataLoader
-from torch.utils.data.sampler import WeightedRandomSampler
 
 from src.utils.CustomParser import SSLDatasetArgs
 from dataclasses import dataclass
-import torch
-import numpy as np
+
 @dataclass
 class LitPretrain(pl.LightningDataModule):
     batch_size: int
@@ -17,6 +16,7 @@ class LitPretrain(pl.LightningDataModule):
     train_shuffle: bool = True
     num_workers: int = 8
     pin_memory: bool = True
+
     def __post_init__(self):
         super().__init__()
 

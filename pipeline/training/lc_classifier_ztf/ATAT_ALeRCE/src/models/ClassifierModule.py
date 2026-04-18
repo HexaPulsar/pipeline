@@ -1,41 +1,18 @@
-import os
 from typing import Dict, Optional
-import torch.nn.functional as F
 import torch.nn as nn
-import torch.optim as optim
 import torch
 import torchmetrics
 from collections import OrderedDict
 import numpy as np
 import pytorch_lightning as pl
 
-# from torch.optim.lr_scheduler import  SequentialLR,ConstantLR,CosineAnnealingWarmRestarts,CosineAnnealingLR, LinearLR
 import torchmetrics.classification
-from tqdm import tqdm
-from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY, ZTF_TAXONOMY
+from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY
 
 import matplotlib.pyplot as plt
-import io
-import seaborn as sns
 
-# from lion_pytorch import Lion
-
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
 import glob
-from copy import deepcopy
-from io import BytesIO
-from PIL import Image
-import torchvision.transforms as T
-from sklearn.metrics import classification_report
-import matplotlib.pyplot as plt
-
-from sklearn.metrics import confusion_matrix
-import matplotlib.pyplot as plt
-
+from sklearn.metrics import classification_report, confusion_matrix
 import pandas as pd
 
 TAXONOMY = ELASTICC_TAXONOMY
@@ -52,9 +29,6 @@ class ClassifierModule(pl.LightningModule):
         tab_load_ckpt=None,
         freeze_lc=False,
         freeze_tab=False,
-        report_lc=False,
-        report_tab=False,
-        report_mix=False,
         weight_str_parse_lc=None,
         weight_str_parse_tab=None,
         **kwargs,
@@ -65,9 +39,10 @@ class ClassifierModule(pl.LightningModule):
         self.model = model
         self.classifier = classifier
         self.init_model()
-        self.warmup = 0
         self.loss = loss
         self.learning_rate = kwargs["learning_rate"]
+        self.warmup_steps = kwargs.get("warmup_steps", 1000)
+        self.eta_min_factor = kwargs.get("eta_min_factor", 1e-2)
 
         parse_exp_type = experiment_type.split("_")
         self.modalities = []
@@ -82,72 +57,52 @@ class ClassifierModule(pl.LightningModule):
             else []
         )
 
-        self.init_metrics(report_lc, report_tab, report_mix)
+        self.init_metrics()
 
         if lc_load_ckpt is not None:
             try:
-                _ckpt = glob.glob(lc_load_ckpt + "*.ckpt")[-1]
-                print(_ckpt)
+                self._load_checkpoint(
+                    lc_load_ckpt,
+                    self.model,
+                    weight_str_parse_lc,
+                    exclude_key="loss",
+                )
             except Exception as e:
                 print(e, "path", lc_load_ckpt)
-            checkpoint_ = torch.load(_ckpt)
-            weights = OrderedDict()
-
-            for key in checkpoint_["state_dict"].keys():
-                #
-                #  print(key)
-                # nput()
-                if "loss" in key:
-                    continue
-
-                elif "model" in key:
-                    # elif 'model' in key:
-                    weights[
-                        key.replace(
-                            f"{weight_str_parse_lc[0]}", f"{weight_str_parse_lc[1]}"
-                        )
-                    ] = checkpoint_["state_dict"][key]
-                    # weights[key.replace('transformer_lc.', "")] = checkpoint_["state_dict"][key]
-
-            # self.model.load_state_dict(weights, strict=True)
-            # print(weights.keys())
-            #  print(self.model)
-            self.model.load_state_dict(weights, strict=True)
-            # print(f"loaded LC checkpoint {_ckpt}".format(_ckpt))
         if freeze_lc:
             for name, param in self.model.named_parameters():
                 param.requires_grad = False
 
         if tab_load_ckpt is not None:
-
-            _ckpt = glob.glob(lc_load_ckpt + "*.ckpt")[-1]
-            checkpoint_ = torch.load(_ckpt)
-            weights = OrderedDict()
-            for key in checkpoint_["state_dict"].keys():
-                if "loss" in key:
-                    continue
-                elif "tab" in key:
-
-                    weights[
-                        key.replace(
-                            f"{weight_str_parse_tab[0]}", f"{weight_str_parse_tab[1]}"
-                        )
-                    ] = checkpoint_["state_dict"][key]
-            self.model.transformer_tab.load_state_dict(weights, strict=True)
-            print(f"loaded TAB checkpoint {_ckpt}".format(_ckpt))
+            self._load_checkpoint(
+                tab_load_ckpt,
+                self.model.transformer_tab,
+                weight_str_parse_tab,
+                exclude_key="tab",
+            )
 
         if freeze_tab:
             for name, param in self.model.transformer_tab.named_parameters():
                 param.requires_grad = False
-                # print(f"loaded TAB checkpoint {_ckpt}".format(_ckpt))
+
+    def _load_checkpoint(self, ckpt_path, model_component, weight_parse_rule, exclude_key="loss"):
+        """Load checkpoint weights into a model component with key remapping."""
+        _ckpt = glob.glob(ckpt_path + "*.ckpt")[-1]
+        checkpoint_ = torch.load(_ckpt)
+        weights = OrderedDict()
+
+        for key in checkpoint_["state_dict"].keys():
+            if exclude_key in key:
+                continue
+            weights[key.replace(weight_parse_rule[0], weight_parse_rule[1])] = checkpoint_["state_dict"][key]
+
+        model_component.load_state_dict(weights, strict=True)
+        print(f"loaded checkpoint {_ckpt}")
 
     def init_model(self):
         for name, p in self.named_parameters():
             if p.dim() > 1:
-                # nn.init.kaiming_uniform_(p)
                 nn.init.kaiming_normal_(p)
-                # if 'alpha_' in name:
-                #        nn.init.uniform_(p,0,1)
 
     def gradfilter_ema(
         self,
@@ -171,7 +126,7 @@ class ClassifierModule(pl.LightningModule):
         return grads
 
     def on_after_backward(self) -> None:
-        self.gradients = self.gradfilter_ema(m=self.model, grads=self.gradients_)
+        self.gradients_ = self.gradfilter_ema(m=self.model, grads=self.gradients_)
 
     def training_step(self, batch_data, batch_idx):
 
@@ -233,12 +188,49 @@ class ClassifierModule(pl.LightningModule):
         self.epoch_labels = None
         return super().on_validation_epoch_start()
 
-    def infer_at_time(self, batch_data, time):
-        labels = batch_data.pop("labels")
-        batch_data["time"] = batch_data * (batch_data["time"].max() < time)
-        batch_data["data"] = batch_data * (batch_data < time)
-        embs = self.model(**batch_data)
-        preds = self.classifier(embs)
+    def _compute_hierarchical_metrics(self, predictions, labels, modality):
+        """Compute hierarchical F1 metrics for transient/stochastic/periodic groups."""
+        df = pd.DataFrame({
+            "true": labels.clone().long().detach().cpu().numpy(),
+            "pred": np.argmax(predictions.clone().detach().cpu().numpy(), axis=-1),
+        })
+
+        metrics_dict = {}
+        hierarchies = ["transient", "stochastic", "periodic"]
+
+        for hierarchy in hierarchies:
+            group = getattr(TAXONOMY, hierarchy)
+            group_df = df.query(f"true in {list(group.group.values())}")
+            report = classification_report(
+                group_df["true"],
+                group_df["pred"],
+                target_names=list(group.group.keys()),
+                labels=list(group.group.values()),
+                digits=4,
+                output_dict=True,
+                zero_division=0,
+            )
+            metrics_dict[hierarchy] = report["macro avg"]["f1-score"]
+
+        mean_f1 = sum(metrics_dict.values()) / len(metrics_dict)
+
+        # Log metrics
+        for hierarchy, f1_score in metrics_dict.items():
+            self.log(
+                f"validation/{hierarchy}",
+                f1_score,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+
+        self.log(
+            f"validation/hier_mean_f1",
+            mean_f1,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
 
     def validation_step(self, batch_data, batch_idx):
         labels = batch_data.pop("labels")
@@ -264,108 +256,7 @@ class ClassifierModule(pl.LightningModule):
                 sync_dist=True,
             )
 
-            df = pd.DataFrame(
-                {
-                    "true": labels.clone().long().detach().cpu().numpy(),
-                    "pred": np.argmax(
-                        preds["LC"].clone().detach().cpu().numpy(), axis=-1
-                    ),
-                }
-            )
-
-            transient_dict = TAXONOMY.transient.group
-            transients = df.query("true in {}".format(list(transient_dict.values())))
-
-            ##
-            stochastic_dict = TAXONOMY.stochastic.group
-            stochastics = df.query("true in {}".format(list(stochastic_dict.values())))
-
-            ####
-            periodic_dict = TAXONOMY.periodic.group
-            periodics = df.query("true in {}".format(list(periodic_dict.values())))
-
-            mean_f1 = (
-                sum(
-                    [
-                        classification_report(
-                            transients["true"],
-                            transients["pred"],
-                            target_names=list(TAXONOMY.transient.group.keys()),
-                            labels=list(TAXONOMY.transient.group.values()),
-                            digits=4,
-                            output_dict=True,
-                        )["macro avg"]["f1-score"],
-                        classification_report(
-                            stochastics["true"],
-                            stochastics["pred"],
-                            target_names=list(TAXONOMY.stochastic.group.keys()),
-                            labels=list(TAXONOMY.stochastic.group.values()),
-                            digits=4,
-                            output_dict=True,
-                        )["macro avg"]["f1-score"],
-                        classification_report(
-                            periodics["true"],
-                            periodics["pred"],
-                            target_names=list(TAXONOMY.periodic.group.keys()),
-                            labels=list(TAXONOMY.periodic.group.values()),
-                            digits=4,
-                            output_dict=True,
-                        )["macro avg"]["f1-score"],
-                    ]
-                )
-                / 3
-            )
-
-            self.log(
-                f"validation/hier_mean_f1",
-                mean_f1,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-
-            self.log(
-                f"validation/transient",
-                classification_report(
-                    transients["true"],
-                    transients["pred"],
-                    target_names=list(TAXONOMY.transient.group.keys()),
-                    labels=list(TAXONOMY.transient.group.values()),
-                    digits=4,
-                    output_dict=True,
-                )["macro avg"]["f1-score"],
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-            self.log(
-                f"validation/stochastic",
-                classification_report(
-                    stochastics["true"],
-                    stochastics["pred"],
-                    target_names=list(TAXONOMY.stochastic.group.keys()),
-                    labels=list(TAXONOMY.stochastic.group.values()),
-                    digits=4,
-                    output_dict=True,
-                )["macro avg"]["f1-score"],
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-            self.log(
-                f"validation/periodic",
-                classification_report(
-                    periodics["true"],
-                    periodics["pred"],
-                    target_names=list(TAXONOMY.periodic.group.keys()),
-                    labels=list(TAXONOMY.periodic.group.values()),
-                    digits=4,
-                    output_dict=True,
-                )["macro avg"]["f1-score"],
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
+            self._compute_hierarchical_metrics(preds["LC"], labels, "LC")
 
         if "TAB" in preds.keys():
             self.TAB_valid_metrics(preds["TAB"], labels.long())
@@ -412,108 +303,7 @@ class ClassifierModule(pl.LightningModule):
                 on_epoch=True,
                 sync_dist=True,
             )
-            df = pd.DataFrame(
-                {
-                    "true": labels.clone().long().detach().cpu().numpy(),
-                    "pred": np.argmax(
-                        preds["MIX"].clone().detach().cpu().numpy(), axis=-1
-                    ),
-                }
-            )
-
-            transient_dict = TAXONOMY.transient.group
-            transients = df.query("true in {}".format(list(transient_dict.values())))
-
-            ##
-            stochastic_dict = TAXONOMY.stochastic.group
-            stochastics = df.query("true in {}".format(list(stochastic_dict.values())))
-
-            ####
-            periodic_dict = TAXONOMY.periodic.group
-            periodics = df.query("true in {}".format(list(periodic_dict.values())))
-
-            mean_f1 = (
-                sum(
-                    [
-                        classification_report(
-                            transients["true"],
-                            transients["pred"],
-                            target_names=list(TAXONOMY.transient.group.keys()),
-                            labels=list(TAXONOMY.transient.group.values()),
-                            digits=4,
-                            output_dict=True,
-                        )["macro avg"]["f1-score"],
-                        classification_report(
-                            stochastics["true"],
-                            stochastics["pred"],
-                            target_names=list(TAXONOMY.stochastic.group.keys()),
-                            labels=list(TAXONOMY.stochastic.group.values()),
-                            digits=4,
-                            output_dict=True,
-                        )["macro avg"]["f1-score"],
-                        classification_report(
-                            periodics["true"],
-                            periodics["pred"],
-                            target_names=list(TAXONOMY.periodic.group.keys()),
-                            labels=list(TAXONOMY.periodic.group.values()),
-                            digits=4,
-                            output_dict=True,
-                        )["macro avg"]["f1-score"],
-                    ]
-                )
-                / 3
-            )
-
-            self.log(
-                f"validation/hier_mean_f1",
-                mean_f1,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-
-            self.log(
-                f"validation/transient",
-                classification_report(
-                    transients["true"],
-                    transients["pred"],
-                    target_names=list(TAXONOMY.transient.group.keys()),
-                    labels=list(TAXONOMY.transient.group.values()),
-                    digits=4,
-                    output_dict=True,
-                )["macro avg"]["f1-score"],
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-            self.log(
-                f"validation/stochastic",
-                classification_report(
-                    stochastics["true"],
-                    stochastics["pred"],
-                    target_names=list(TAXONOMY.stochastic.group.keys()),
-                    labels=list(TAXONOMY.stochastic.group.values()),
-                    digits=4,
-                    output_dict=True,
-                )["macro avg"]["f1-score"],
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-            self.log(
-                f"validation/periodic",
-                classification_report(
-                    periodics["true"],
-                    periodics["pred"],
-                    target_names=list(TAXONOMY.periodic.group.keys()),
-                    labels=list(TAXONOMY.periodic.group.values()),
-                    digits=4,
-                    output_dict=True,
-                )["macro avg"]["f1-score"],
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
+            self._compute_hierarchical_metrics(preds["MIX"], labels, "MIX")
 
         # loss = loss / len(self.modalities)
         self.log(
@@ -523,54 +313,7 @@ class ClassifierModule(pl.LightningModule):
         return loss
 
     def on_validation_epoch_end(self):
-        return
-        tax = ZTF_TAXONOMY()
-        cm = self.validation_cm.compute().cpu().numpy().astype(float)
-        fig = plt.figure(figsize=(12, 10))
-
-        sns.heatmap(
-            np.round(cm, decimals=2),
-            annot=True,
-            cmap=plt.cm.Blues,
-            ax=fig.add_subplot(111),
-        )
-        plt.xticks(
-            ticks=range(0, self.classifier.num_classes), rotation=45, labels=tax.keys()
-        )
-        plt.yticks(
-            ticks=range(0, self.classifier.num_classes), rotation=45, labels=tax.keys()
-        )
-
-        if len(self.modalities) == 3:
-            plt.title(
-                f"F1-Score: {self.MIX_valid_metrics['f1_macro'].compute().item()}"
-            )
-        else:
-            if "LC" in self.modalities:
-                plt.title(
-                    f"F1-Score: {self.LC_valid_metrics['f1_macro'].compute().item()}"
-                )
-            elif "TAB" in self.modalities:
-                plt.title(
-                    f"F1-Score: {self.TAB_valid_metrics['f1_macro'].compute().item()}"
-                )
-
-        plt.tight_layout()
-
-        # Convert the Matplotlib figure to a tensor
-        buf = BytesIO()
-        fig.savefig(buf, format="png", dpi=100, pad_inches=0.05)  # png
-        buf.seek(0)
-        image = Image.open(buf)
-        image_tensor = T.ToTensor()(
-            image
-        )  # Convert PIL image to torch tensor (C, H, W)
-        self.logger.experiment.add_image(
-            "validation cm", image_tensor, self.global_step
-        )
-        plt.close(fig)  # Close the figure to free memory
-        self.validation_cm.reset()
-        return super().on_validation_epoch_end()
+        pass
 
     def configure_optimizers(self):
         # -------------------------
@@ -625,28 +368,7 @@ class ClassifierModule(pl.LightningModule):
             eps=1e-8,
         )
 
-        # warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-        #    optimizer,
-        #    start_factor=0.01,
-        #    total_iters=1000,
-        # )
-
-        # cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        #    optimizer,
-        #    T_max=100,
-        #    eta_min=self.learning_rate * 0.01,
-        # )
-        return optimizer
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": cosine_scheduler,
-                "interval": "step",  # IMPORTANT for large datasets
-                "frequency": 1,
-            },
-        }
-
-        # return optimizer
+        return {"optimizer": optimizer}
 
     def map_label_tensor(self, labels):
         mapping_dict = {
@@ -678,7 +400,7 @@ class ClassifierModule(pl.LightningModule):
         )
         return mapping_tensor
 
-    def init_metrics(self, report_lc, report_tab, report_mix):
+    def init_metrics(self):
         thr = 0.5
         metrics = torchmetrics.MetricCollection(
             {
@@ -724,17 +446,14 @@ class ClassifierModule(pl.LightningModule):
         # self.f1_8 =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro")
         # self.prcurve = torchmetrics.classification.MulticlassPrecisionRecallCurve(num_classes=self.classifier.num_classes,average = 'macro')
         if "LC" in self.modalities:
-            self.LC_train_metrics = metrics.clone(prefix=f'{"training/LC/"}')
-            self.LC_valid_metrics = metrics.clone(prefix=f'{"validation/LC/"}')
+            self.LC_train_metrics = metrics.clone(prefix="training/LC/")
+            self.LC_valid_metrics = metrics.clone(prefix="validation/LC/")
         if "TAB" in self.modalities:
-            self.TAB_train_metrics = metrics.clone(prefix=f'{ "training/TAB/"}')
-            self.TAB_valid_metrics = metrics.clone(prefix=f'{"validation/TAB/"}')
+            self.TAB_train_metrics = metrics.clone(prefix="training/TAB/")
+            self.TAB_valid_metrics = metrics.clone(prefix="validation/TAB/")
         if "MIX" in self.modalities:
-            self.MIX_train_metrics = metrics.clone(prefix=f'{"training/MIX/"}')
-            self.MIX_valid_metrics = metrics.clone(prefix=f'{"validation/MIX/"}')
-
-    def report(self, report_lc, report_tab, report_mix):
-        pass
+            self.MIX_train_metrics = metrics.clone(prefix="training/MIX/")
+            self.MIX_valid_metrics = metrics.clone(prefix="validation/MIX/")
 
     def get_confusion_matrix(
         self,
@@ -755,34 +474,23 @@ class ClassifierModule(pl.LightningModule):
         )
         np.set_printoptions(precision=4, suppress=True)
         cmap = plt.cm.Blues
-        fig, ax = plt.subplots(figsize=(11, 11))  # , dpi=110)
+        fig, ax = plt.subplots(figsize=(11, 11))
         decimals = 2
-        im = ax.imshow(
+        ax.imshow(
             np.around(cm, decimals=decimals), interpolation="nearest", cmap=cmap
         )
-        # color map
         new_color = cmap(1.0)
 
-        # Añadiendo manualmente las anotaciones con la media y desviación estándar
+        # Añadiendo manualmente las anotaciones
         for i in range(cm.shape[0]):
             for j in range(cm.shape[1]):
-                if cm[i, j] >= 0.005:
-                    # print(cm[i, j])
-                    text = f"{np.around(cm[i, j], decimals=decimals)}"
-                    color = (
-                        "white" if cm[i, j] > 0.5 else new_color
-                    )  # Blanco para la diagonal, tono de azul para otras celdas
-                    ax.text(
-                        j, i, text, ha="center", va="center", color=color, fontsize=fs
-                    )
-                else:
-                    text = f"{np.around(cm[i, j], decimals=decimals)}"
-                    color = (
-                        "white" if cm[i, j] > 0.5 else new_color
-                    )  # Blanco para la diagonal, tono de azul para otras celdas
-                    ax.text(
-                        j, i, text, ha="center", va="center", color=color, fontsize=fs
-                    )
+                text = f"{np.around(cm[i, j], decimals=decimals)}"
+                color = (
+                    "white" if cm[i, j] > 0.5 else new_color
+                )
+                ax.text(
+                    j, i, text, ha="center", va="center", color=color, fontsize=fs
+                )
 
         # Ajustes finales y mostrar la gráfica
         ax.tick_params(axis="both", which="major", labelsize=12)
@@ -798,6 +506,7 @@ class ClassifierModule(pl.LightningModule):
             target_names=list(taxonomy().keys()),
             digits=4,
             output_dict=True,
+            zero_division=0,
         )["macro avg"]["f1-score"]
         ax.set_title(
             f"{plot_title}: {dataset_type} | macro f1: {np.round(f1_,4)}",

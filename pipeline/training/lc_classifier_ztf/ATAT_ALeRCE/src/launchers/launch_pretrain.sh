@@ -6,12 +6,13 @@ export CUDA_VISIBLE_DEVICES=0 #,1,2,3
 
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
-export EXPERIMENT_NAME='20260314_ema_optim_change_1491_1e3_v2'
+export EXPERIMENT_NAME='20260409_scheduler_v3_claude_refactor_ema_1e3'
 export EXPERIMENT_OUTPUT_PATH="./results/PRETRAIN/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
 LEARNING_RATE=1e-3
-
+WARMUP_STEPS=5000
+ETA_MIN_FACTOR=1e-2
 VERSION=0
 
 # Ensure directories exist
@@ -39,8 +40,8 @@ python SSL_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
   ++ATATConfig.lc.use_conv=True\
     ++ATATConfig.online_transforms.use_window_select=True\
     ++ATATConfig.online_transforms.use_max_window_select=True\
-    ++ATATConfig.online_transforms.use_time_gauss_factor=True\
-      ++ATATConfig.online_transforms.use_gauss_factor=True\
+    ++ATATConfig.online_transforms.use_time_gauss_factor=False\
+      ++ATATConfig.online_transforms.use_gauss_factor=False\
       ++ATATConfig.online_transforms.use_simple_time_factor=True\
       ++ATATConfig.online_transforms.use_simple_data_factor=True\
       ++ATATConfig.online_transforms.use_band_permute=True\
@@ -51,12 +52,15 @@ python SSL_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
     ++ATATConfig.lc.embedding_size_sub=128\
     ++ATATConfig.lc.num_encoders=3\
       ++ATATConfig.lc.dropout=0.1\
+      ++ATATConfig.datamodule.batch_size=512\
           ++ATATConfig.learning_rate=$LEARNING_RATE\
+          ++ATATConfig.warmup_steps=$WARMUP_STEPS\
+          ++ATATConfig.eta_min_factor=$ETA_MIN_FACTOR\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
           ++ATATConfig.loggers.csv.version=$VERSION\
           ++ATATConfig.callbacks.early_stopping.patience=3\
           ++ATATConfig.vicreg.inv_coeff=1\
-          ++ATATConfig.vicreg.var_coeff=49\
+          ++ATATConfig.vicreg.var_coeff=10\
           ++ATATConfig.vicreg.cov_coeff=1\
           ++ATATConfig.vicreg.shape_projector_1='64-128-128'\
           ++ATATConfig.vicreg.shape_projector_2='64-128-128'

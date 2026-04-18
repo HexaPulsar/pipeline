@@ -50,7 +50,7 @@ def get_confusion_matrix(preds,
         ax.set_yticklabels(order_classes)
         plt.setp(ax.get_xticklabels(), rotation=90, ha="right", rotation_mode="anchor")
 
-        f1_ = classification_report(y_true,y_pred, target_names=list(taxonomy().keys()),digits = 4, output_dict=True)['macro avg']['f1-score']
+        f1_ = classification_report(y_true,y_pred, target_names=list(taxonomy().keys()),digits = 4, output_dict=True, zero_division=0)['macro avg']['f1-score']
         ax.set_title(f'{plot_title}: {dataset_type} | macro f1: {np.round(f1_,4)}', fontsize=16, pad=13)
         ax.set_xlabel('Predicted label', fontsize=16, labelpad=13)  # Label del eje x
         ax.set_ylabel('True label', fontsize=16, labelpad=13)        # Label del eje y

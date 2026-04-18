@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 from dataclasses import dataclass
+import h5py
 
 from src.data.handlers.CustomDataset import ATATDataset
 
@@ -9,16 +10,6 @@ import numpy as np
 import torch
 import logging
 from src.utils.CustomParser import ATATDatasetArgs
-
-def map_label_tensor(labels):
-    mapping_dict = {
-        0: 1, 1: 1, 3: 1, 5: 1, 8: 1,
-        2: 2, 6: 2, 7: 2, 10: 2, 11: 2, 12: 2, 13: 2, 14: 2, 15: 2,
-        4: 0, 9: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0
-    }
-    mapping_tensor = torch.tensor([mapping_dict.get(int(label), -1) for label in labels])
-    return mapping_tensor
-import h5py
 
 @dataclass
 class LitData(pl.LightningDataModule):
@@ -56,7 +47,7 @@ class LitData(pl.LightningDataModule):
         f"• Batch Size       : {self.batch_size}\n"
         f"{'='*30}"
         )
-        print(log_message)
+        logging.info(log_message)
 
     def get_real_classes_weights(self,labels):
 
@@ -66,8 +57,6 @@ class LitData(pl.LightningDataModule):
                 for t in np.unique(labels)
             ]
         )
-       # print('class_sampler_count', class_sample_count)
-        weight = 1.0 / class_sample_count
         weight = 1.0 / np.sqrt(class_sample_count)
 
         uniques = np.unique(labels).astype(int)
@@ -129,17 +118,9 @@ class LitData(pl.LightningDataModule):
         dataset_used = ATATDataset(set_type="validation", **self.dataset)
         if self.val_use_sampler:
             samples_weight = self.get_real_classes_weights(dataset_used.labels)
-            self.samples_weight = samples_weight
             sampler = WeightedRandomSampler(
                samples_weight.type("torch.DoubleTensor"), len(samples_weight)
             )
-            #hier_class = map_label_tensor(dataset_used.labels)
-            #sampler = MPerClassSampler(
-            #    hier_class,
-            ##    m=256,
-            #    batch_size=self.batch_size,
-            #    length_before_new_iter=len(dataset_used),
-            #)
             loader = DataLoader(
                 dataset_used,
                 batch_size=self.batch_size,
@@ -150,10 +131,7 @@ class LitData(pl.LightningDataModule):
                 pin_memory=self.pin_memory
             )
         else:
-            samples_weight = self.get_real_classes_weights(dataset_used.labels)
-            self.samples_weight = samples_weight
-            #print(samples_weight)
-            loader =loader = DataLoader(
+            loader = DataLoader(
                     dataset_used,
                     batch_size=self.batch_size,
                     sampler=None,

@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 from ..timeEncoders import TimeHandler
@@ -40,6 +41,7 @@ class LightCurveTransformer(nn.Module):
         use_exp: bool = False,
         use_conv: bool = False,
         use_tabular_transformer=False,
+        use_anomaly_gate: bool = False,
     ):
         super().__init__()
 
@@ -61,6 +63,7 @@ class LightCurveTransformer(nn.Module):
             use_timefilm_norm=use_timefilm_norm,
             use_exp=use_exp,
             use_conv=use_conv,
+            use_anomaly_gate=use_anomaly_gate,
         )
 
         self.transformer_lc = nn.TransformerEncoder(
@@ -94,14 +97,13 @@ class LightCurveTransformer(nn.Module):
             x_mod = x_mod / (
                 torch.sqrt(torch.linalg.norm(x_mod, dim=(1), keepdim=True)) + 1e-8
             )
-        x_mod[x_mod == 0] = -1e9
-        x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], axis=1)
+        x_mod = torch.cat([self.token_lc(x.shape[0]), x_mod], dim=1)
         m_mod = torch.cat(
             [
                 self.ones.repeat(x.size(0), 1, 1),
                 m_mod,
             ],
-            axis=1,
+            dim=1,
         )
         assert m_mod.dtype == torch.bool, "m_mod type is {}".format(m_mod.dtype)
         return x_mod, m_mod, t_mod
@@ -114,10 +116,16 @@ class LightCurveTransformer(nn.Module):
         x_emb = self.transformer_lc(
             src=x_mod, src_key_padding_mask=~(m_mod.squeeze(-1))
         )
-        return x_emb  # [:, 0, :]
+        # Return full embedding sequence (batch, seq_len, embedding_size), not just token
+        return x_emb
 
 
 class Embedding(nn.Module):
+    """Position-wise affine transformation for tabular features.
+
+    For each position i and embedding dimension j, computes:
+        output[b, i, j] = f[b, i, 0] * weight[i, j] + bias[i, j]
+    """
     def __init__(self, length_size, embedding_size, dropout, **kwargs):
         super(Embedding, self).__init__()
         self.tab_W_feat = nn.Parameter(torch.zeros(1, length_size, embedding_size))
@@ -141,6 +149,7 @@ class TabularTransformer(nn.Module):
         freeze_weights=False,
         sequence_norm=False,
     ):
+        super().__init__()
 
         self.embedding_size = embedding_size
         self.embedding_size_sub = embedding_size_sub
@@ -148,11 +157,10 @@ class TabularTransformer(nn.Module):
         self.num_encoders = num_encoders
         self.num_bands = num_bands
         self.length_size = length_size
-
-        super().__init__()
+        # Custom position-wise embedding (not nn.Linear which applies same transform to all positions)
         self.embedding_tab = Embedding(
             self.length_size, self.embedding_size, dropout
-        )  # nn.Linear(kwargs['TAB_ARGS']['length_size'],kwargs['TAB_ARGS']['embedding_size']) #
+        )
         self.transformer_tab = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(
                 d_model=self.embedding_size,
@@ -164,7 +172,7 @@ class TabularTransformer(nn.Module):
                 norm_first=True,
             ),
             num_layers=self.num_encoders,
-            # norm=nn.LayerNorm(self.embedding_size),
+            # norm parameter disabled - using norm_first=True in encoder layer instead
         )
         self.token_tab = Token(self.embedding_size, dropout)
         self.register_buffer("ones", torch.ones(1, 1, dtype=bool))
@@ -179,7 +187,7 @@ class TabularTransformer(nn.Module):
                 torch.sqrt(torch.linalg.norm(f_mod, dim=(1), keepdim=True)) + 1e-8
             )
 
-        f_mod = torch.cat([self.token_tab(f.shape[0]), f_mod], axis=1)
+        f_mod = torch.cat([self.token_tab(f.shape[0]), f_mod], dim=1)
 
         return f_mod
 
@@ -192,7 +200,7 @@ class TabularTransformer(nn.Module):
                     self.ones.repeat(f_mod.size(0), 1),
                     tab_mask,
                 ],
-                axis=1,
+                dim=1,
             )
         # assert tab_mask is not None
         f_emb = self.transformer_tab(
@@ -224,9 +232,8 @@ class Combinator(nn.Module):
         **kwargs
     ):
 
-        lc_emb = self.transformer_lc(data, time, mask)
-        ft_emb = self.transformer_tab(tabular_feat, tab_mask)
-        # return torch.concat([lc_emb,ft_emb],axis  = -1)
+        lc_emb = self.transformer_lc(data, time, mask) if self.transformer_lc is not None else None
+        ft_emb = self.transformer_tab(tabular_feat, tab_mask) if self.transformer_tab is not None else None
 
         if self.as_dict:
             return {
@@ -234,6 +241,15 @@ class Combinator(nn.Module):
                 "TAB": ft_emb,
                 # "MIX": torch.concat([lc_emb, ft_emb], axis=-1),
             }
+        else:
+            if lc_emb is not None and ft_emb is not None:
+                return torch.concat([lc_emb, ft_emb], dim=-1)
+            elif lc_emb is not None:
+                return lc_emb
+            elif ft_emb is not None:
+                return ft_emb
+            else:
+                raise ValueError("At least one transformer (LC or TAB) must be provided")
 
 
 #

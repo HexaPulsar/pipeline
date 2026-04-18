@@ -28,43 +28,29 @@ class VICReg(nn.Module):
     
     def forward(self, x, y):
         loss_dict = {}
-         
-        repr_loss = F.mse_loss(x, y, reduce='mean')
-        #repr_loss = torch.sqrt(F.mse_loss(x, y, reduce='mean'))
-        
-        #loss_dict.update({'CORR/emb_corr_x': corr_x })
-        #loss_dict.update({'CORR/emb_corr_y':  corr_y})
-        #oss_dict.update({'CORR/75_percentile_x': np.percentile(abs(corr_x).cpu().detach().numpy(), 75) })
-        #loss_dict.update({'CORR/75_percentile_y':  np.percentile(abs(corr_y).cpu().detach().numpy(), 75)})
-        #loss_dict.update({'CORR/99_percentile_x': np.percentile(abs(corr_x).cpu().detach().numpy(), 99) })
-        #loss_dict.update({'CORR/99_percentile_y':  np.percentile(abs(corr_y).cpu().detach().numpy(), 99)})
+
+        repr_loss = F.mse_loss(x, y, reduction='mean')
+
         x = x - x.mean(dim=0)
-        y = y - y.mean(dim=0) 
+        y = y - y.mean(dim=0)
         corr_x = torch.corrcoef(x).mean(dim = 1).flatten()
         corr_y = torch.corrcoef(y).mean(dim = 1).flatten()
-       # loss_dict.update({'CORR/mean_x':  torch.mean(x,dim = 1).flatten() })
-      #  loss_dict.update({'CORR/mean_y':  torch.mean(y,dim = 1).flatten() })
-#
 
-        loss_dict.update({'CORR/emb_corr_post_norm_x':  torch.corrcoef(x).mean(dim = 1).flatten() })
-        loss_dict.update({'CORR/emb_corr_post_norm_y': torch.corrcoef(y).mean(dim = 1).flatten()})
-        loss_dict.update({'CORR/99_percentile_x': np.percentile(abs(corr_x).cpu().detach().numpy(), 99) })
-        loss_dict.update({'CORR/99_percentile_y':  np.percentile(abs(corr_y).cpu().detach().numpy(), 99)})
+        loss_dict['CORR/emb_corr_post_norm_x'] = torch.corrcoef(x).mean(dim = 1).flatten()
+        loss_dict['CORR/emb_corr_post_norm_y'] = torch.corrcoef(y).mean(dim = 1).flatten()
+
         std_loss = self.calculate_std_loss(x) +  self.calculate_std_loss(y)
         cov_loss = self.calculate_cov_loss(x) + self.calculate_cov_loss(y)
-        loss_dict.update({'loss':  self.inv * (repr_loss)
-                            + self.var * std_loss
-                            + self.cov * cov_loss
-                        ,})
+        loss_dict['loss'] = self.inv * (repr_loss) + self.var * std_loss + self.cov * cov_loss
 
         with torch.no_grad():
-            loss_dict.update({'not_weighted_inv': repr_loss,
-                'not_weighted_1menos_var': std_loss,
-                'not_weighted_cov': cov_loss,
-                'weighted_inv': self.inv * repr_loss,
-                'weighted_1mvar': self.var * std_loss,
-                'weighted_cov': self.cov * cov_loss, 
-                 
-                #'CORR_median': 
-            })
+            loss_dict['not_weighted_inv'] = repr_loss
+            loss_dict['not_weighted_1menos_var'] = std_loss
+            loss_dict['not_weighted_cov'] = cov_loss
+            loss_dict['weighted_inv'] = self.inv * repr_loss
+            loss_dict['weighted_1mvar'] = self.var * std_loss
+            loss_dict['weighted_cov'] = self.cov * cov_loss
+            loss_dict['CORR/99_percentile_x'] = np.percentile(abs(corr_x).cpu().detach().numpy(), 99)
+            loss_dict['CORR/99_percentile_y'] = np.percentile(abs(corr_y).cpu().detach().numpy(), 99)
+
         return loss_dict

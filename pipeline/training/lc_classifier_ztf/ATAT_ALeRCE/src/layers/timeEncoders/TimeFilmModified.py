@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+
 def roll_tensor(v):
     v = torch.roll(v, shifts=(1,), dims=1)
     v[:, 0, :] = 0
@@ -8,12 +9,16 @@ def roll_tensor(v):
 
 
 def d_dt(x, t, use_exp=False, tmax=2048):
-    dt = t - roll_tensor(t)
-    dx = x - roll_tensor(x)
+    x_rolled = roll_tensor(x)
+    t_rolled = roll_tensor(t)
+    dt = t - t_rolled
+    dx = x - x_rolled
+    dt_safe = dt.masked_fill(dt == 0, 1)
     if use_exp:
-        exp_ = torch.exp(torch.sin(dx / dt.masked_fill_(dt == 0, 1)  ))
+        exp_ = torch.exp(torch.sin(dx / dt_safe))
         return dx, dt, exp_
-    return dx, dt, torch.sin(dx / dt.masked_fill_(dt == 0, 1)  )
+    return dx, dt, torch.sin(dx / dt_safe)
+
 
 class EarlyFusionEncoder(nn.Module):
     def __init__(
@@ -38,6 +43,7 @@ class EarlyFusionEncoder(nn.Module):
         use_sequence_norm=False,
         use_conv=False,
         use_exp=False,
+        use_anomaly_gate=False,
     ):
         super().__init__()
         self.use_velocity = use_velocity
@@ -45,8 +51,8 @@ class EarlyFusionEncoder(nn.Module):
         self.use_stats = use_stats
         self.use_metadata = use_metadata
         self.use_features = use_features
+        self.use_anomaly_gate = use_anomaly_gate
         self.dropout = nn.Dropout(dropout)
-        embedding_size = embedding_size * 1
         self.timefilm_coeffs = TimeFilmCoeffs(
             n_harmonics,
             embedding_size,
@@ -59,23 +65,39 @@ class EarlyFusionEncoder(nn.Module):
         )
         inner_size = embedding_size
         self.use_conv = use_conv
-        self.dropout = nn.Dropout(dropout)
         if self.use_conv:
-            self.conv = nn.Sequential(nn.Conv1d(in_channels=input_size, out_channels=inner_size, bias=bias, kernel_size=5,padding = 2) )
+            self.conv = nn.Sequential(
+                nn.Conv1d(
+                    in_channels=input_size,
+                    out_channels=inner_size,
+                    bias=bias,
+                    kernel_size=5,
+                    padding=2,
+                )
+            )
             self.linear_x = nn.Sequential(
                 nn.Dropout(dropout),
                 nn.GELU(),
-                nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
+                nn.Linear(
+                    in_features=inner_size, out_features=embedding_size, bias=bias
+                ),
             )
         else:
             self.linear_x = nn.Sequential(
                 nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
                 nn.GELU(),
                 nn.Dropout(dropout),
-                nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
+                nn.Linear(
+                    in_features=inner_size, out_features=embedding_size, bias=bias
+                ),
             )
         if use_velocity:
-            self.velocity = Velocity(input_size, embedding_size=embedding_size,inner_size= inner_size, bias=bias, dropout=dropout
+            self.velocity = Velocity(
+                input_size,
+                embedding_size=embedding_size,
+                inner_size=inner_size,
+                bias=bias,
+                dropout=dropout,
             )
         if use_acceleration:
             self.acceleration = Acceleration(
@@ -87,7 +109,14 @@ class EarlyFusionEncoder(nn.Module):
             )
         if use_stats:
             self.stats = Stats(embedding_size)
-
+        if use_anomaly_gate:
+            self.anomaly_gate = AnomalyGate(
+                input_size=input_size,
+                embedding_size=embedding_size,
+                inner_size=inner_size,
+                bias=bias,
+                dropout=dropout,
+            )
 
         if use_metadata or use_features:
             if all([use_metadata, use_features]):
@@ -102,11 +131,7 @@ class EarlyFusionEncoder(nn.Module):
                 bias=bias,
                 dropout=dropout,
             )
-
-
-            print("using tabular transformer")
         self.use_tabular_transformer = use_tabular_transformer
-        # self.global_rnn = SimpleRNN(128)
         self.use_exp = use_exp
 
     def forward(self, x, t, metadata, features):
@@ -122,41 +147,41 @@ class EarlyFusionEncoder(nn.Module):
         )
         stats = self.stats(x) if self.use_stats else 0
         if all([self.use_metadata, not self.use_features]):
-            tabular = self.tabular_data(x,metadata)
-        elif all([not self.use_metadata,self.use_features]):
-            tabular = self.tabular_data(x,features)
+            tabular = self.tabular_data(x, metadata)
+        elif all([not self.use_metadata, self.use_features]):
+            tabular = self.tabular_data(x, features)
         elif all([self.use_metadata, self.use_features]):
-            tabular_data = torch.concat([metadata, features], axis = 1)
+            tabular_data = torch.concat([metadata, features], axis=1)
             tabular = self.tabular_data(x, tabular_data)
         else:
             tabular = 0
 
         if self.use_conv:
-            x_out = self.conv(x.permute(0,2,1)).permute(0,2,1)
+            x_out = self.conv(x.permute(0, 2, 1)).permute(0, 2, 1)
             x_out = self.linear_x(x_out)
         else:
             x_out = self.linear_x(x)
+
         alpha, beta = self.timefilm_coeffs(t)
 
-        x_out = (
-            x_out * alpha + beta + vel + acc + stats + tabular
-        )
+        x_out = x_out * alpha + beta + vel + acc + stats + tabular
+        if self.use_anomaly_gate:
+            x_out = x_out * self.anomaly_gate(x, t, use_exp=self.use_exp)
         return self.dropout(x_out)
 
 
-
 class Velocity(nn.Module):
-    def __init__(self, input_size, embedding_size, inner_size,bias, dropout):
+    def __init__(self, input_size, embedding_size, inner_size, bias, dropout):
         super().__init__()
+        expansion_size = inner_size * 4
         self.linear_vel = nn.Sequential(
             nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
+            nn.LayerNorm(inner_size),
+            nn.GELU(),
             nn.Dropout(dropout),
             nn.LayerNorm(inner_size),
             nn.GELU(),
-            nn.Linear(
-                in_features=inner_size, out_features=embedding_size, bias=bias
-            ),
-
+            nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
         )
 
     def forward(self, x, t, use_exp):
@@ -165,22 +190,39 @@ class Velocity(nn.Module):
 
 
 class Acceleration(nn.Module):
-    def __init__(self, input_size, embedding_size,inner_size, bias, dropout):
+    def __init__(self, input_size, embedding_size, inner_size, bias, dropout):
         super().__init__()
+        expansion_size = inner_size * 4
         self.linear_acc = nn.Sequential(
             nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
             nn.Dropout(dropout),
             nn.LayerNorm(inner_size),
             nn.GELU(),
-            nn.Linear(
-                in_features=inner_size, out_features=embedding_size, bias=bias
-            ),
+            nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
         )
 
     def forward(self, x, t, use_exp):
         dx, dt, _ = d_dt(x, t, use_exp)
         _, _, dxdtdt = d_dt(dx, t, use_exp)
         return self.linear_acc(dxdtdt)
+
+
+class AnomalyGate(nn.Module):
+    def __init__(self, input_size, embedding_size, inner_size, bias, dropout):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features=2 * input_size, out_features=inner_size, bias=bias),
+            nn.LayerNorm(inner_size),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
+        )
+
+    def forward(self, x, t, use_exp):
+        dx, _, dxdt = d_dt(x, t, use_exp)
+        _, _, dxdtdt = d_dt(dx, t, use_exp)
+        surprise = torch.cat([dxdt.abs(), dxdtdt.abs()], dim=-1)
+        return torch.sigmoid(self.mlp(surprise))
 
 
 class AlphaCoeffs(nn.Module):
@@ -197,14 +239,14 @@ class AlphaCoeffs(nn.Module):
             "alpha_sincos", nn.Parameter(torch.randn(2 * n_harmonics, embedding_size))
         )
         layers = []
-        #changed order of fropout
         layers.extend([nn.Dropout(dropout)]) if dropout is not None else None
         layers.extend([nn.LayerNorm(embedding_size)]) if norm else None
         layers.extend([nn.GELU()]) if gelu else None
         self.normalize = nn.Sequential(*layers)
 
     def forward(self, embedding):
-        return self.normalize(torch.matmul(embedding, self.alpha_sincos))
+        out = torch.einsum('...i,ij->...j', embedding, self.alpha_sincos)
+        return self.normalize(out)
 
 
 class BetaCoeffs(nn.Module):
@@ -223,13 +265,12 @@ class BetaCoeffs(nn.Module):
         layers = []
         layers.extend([nn.Dropout(dropout)]) if dropout is not None else None
         layers.extend([nn.LayerNorm(embedding_size)]) if norm else None
-
         layers.extend([nn.GELU()]) if gelu else None
-
         self.normalize = nn.Sequential(*layers)
 
     def forward(self, embedding):
-        return self.normalize(torch.matmul(embedding, self.beta_sincos))
+        out = torch.einsum('...i,ij->...j', embedding, self.beta_sincos)
+        return self.normalize(out)
 
 
 class ZeroIgnoredStats(nn.Module):
@@ -273,7 +314,6 @@ class ZeroIgnoredStats(nn.Module):
         return [mean, std]
 
 
-
 class TimeFilmCoeffs(nn.Module):
     def __init__(
         self, n_harmonics, embedding_size, Tmax, dropout, norm, gelu, bias, exponential
@@ -289,17 +329,15 @@ class TimeFilmCoeffs(nn.Module):
             )
         self.n_harmonics = n_harmonics
         self.register_buffer(
-            "ar",
-            torch.tensor(2 * torch.pi)
-            * (torch.arange(1, n_harmonics + 1).unsqueeze(0).unsqueeze(0)),
+            "ar_norm",
+            (2 * torch.pi * torch.arange(1, n_harmonics + 1) / Tmax)
+            .unsqueeze(0).unsqueeze(0),
         )
-        self.register_buffer("Tmax", torch.tensor(Tmax, dtype=float))
         self.exponential = exponential
-        self.dropout = nn.Dropout(0.0)
 
     def get_sin_cos(self, t):
-        sin = self.dropout(torch.sin(t))
-        cos = self.dropout(torch.cos(t))
+        sin = torch.sin(t)
+        cos = torch.cos(t)
         if self.exponential:
             return torch.exp(sin).masked_fill_(sin == 0, 0), torch.exp(
                 cos.masked_fill_(cos == 1, 0)
@@ -308,41 +346,47 @@ class TimeFilmCoeffs(nn.Module):
         return sin, cos
 
     def forward(self, t):
-        t = self.ar * t.repeat(1, 1, self.n_harmonics) / self.Tmax
+        t = self.ar_norm * t.expand(-1, -1, self.n_harmonics)
 
         sin_emb, cos_emb = self.get_sin_cos(t)
-        emb = torch.concat([sin_emb, cos_emb], dim=-1)
+        emb = torch.cat([sin_emb, cos_emb], dim=-1)
         return (
             (self.alpha_coeffs(emb), self.beta_coeffs(emb))
             if self.bias
             else (self.alpha_coeffs(emb), 0)
         )
 
+
 class TabularData(nn.Module):
     def __init__(self, input_size, inner_size, bias, dropout):
         super().__init__()
+        expansion_size = inner_size * 4
         self.linear = nn.Sequential(
             nn.Linear(input_size, inner_size, bias=bias),
             nn.Dropout(dropout),
-            nn.LayerNorm(inner_size),
+            nn.Linear(inner_size, expansion_size, bias=bias),
+            nn.LayerNorm(expansion_size),
             nn.GELU(),
-            nn.Linear(inner_size, inner_size, bias=bias),
+            nn.Linear(expansion_size, inner_size, bias=bias),
         )
 
     def forward(self, x, tabular):
         assert tabular is not None, "tabular data not provided."
-        tabular = tabular.unsqueeze(-2).repeat(1, x.size(1), 1)
+        tabular = tabular.unsqueeze(1).expand(-1, x.size(1), -1)
         mask = x != 0
         tabular = tabular * mask
         tabular = self.linear(tabular)
         return tabular
 
+
 class Metadata(nn.Module):
     def __init__(self, input_size, inner_size, bias, dropout):
         super().__init__()
+        expansion_size = inner_size * 4
         self.linear_metadata = nn.Sequential(
             nn.Linear(input_size, inner_size, bias=bias),
             nn.Dropout(dropout),
+            nn.Linear(inner_size, inner_size, bias=bias),
             nn.LayerNorm(inner_size),
             nn.GELU(),
             nn.Linear(inner_size, inner_size, bias=bias),
@@ -350,30 +394,34 @@ class Metadata(nn.Module):
 
     def forward(self, x, metadata):
         assert metadata is not None, "Metadata not provided."
-        metadata = metadata.unsqueeze(-2).repeat(1, x.size(1), 1)
+        metadata = metadata.unsqueeze(1).expand(-1, x.size(1), -1)
         mask = x != 0
         metadata = metadata * mask
         metadata = self.linear_metadata(metadata)
         return metadata
 
+
 class Features(nn.Module):
     def __init__(self, input_size, inner_size, bias, dropout):
         super().__init__()
+        expansion_size = inner_size * 4
         self.linear_features = nn.Sequential(
             nn.Linear(input_size, inner_size, bias=bias),
             nn.Dropout(dropout),
+            nn.Linear(inner_size, inner_size, bias=bias),
             nn.LayerNorm(inner_size),
             nn.GELU(),
             nn.Linear(inner_size, inner_size, bias=bias),
         )
 
     def forward(self, x, features):
-        assert features is not None, "Metadata not provided."
-        features = features.unsqueeze(-2).repeat(1, x.size(1), 1)
+        assert features is not None, "Features not provided."
+        features = features.unsqueeze(1).expand(-1, x.size(1), -1)
         mask = x != 0
         features = features * mask
         features = self.linear_features(features)
         return features
+
 
 class Stats(nn.Module):
     def __init__(
@@ -404,35 +452,43 @@ class Stats(nn.Module):
             q2,
             q3,
         ]
+        expansion_size = embedding_size * 4
         self.project_stats = nn.Sequential(
-            nn.Linear(in_features=sum(stats), out_features=embedding_size, bias=bias),
-            nn.Dropout(0.01),
-            nn.LayerNorm(embedding_size),
+            nn.Linear(in_features=sum(stats), out_features=expansion_size, bias=bias),
+            nn.LayerNorm(expansion_size),
             nn.GELU(),
+            nn.Dropout(0.01),
             nn.Linear(
-                in_features=embedding_size, out_features=embedding_size, bias=bias
+                in_features=expansion_size, out_features=embedding_size, bias=bias
             ),
+            nn.LayerNorm(embedding_size),
         )
         self.zero_ignore = ZeroIgnoredStats(dim=1, keepdim=False)
 
     def forward(self, x):
-        x_ = x.clone()
-        masked = x_.masked_fill(x_ == 0, float("-inf"))
-        max_ = torch.argmax(masked, dim=1)
-        masked = x_.masked_fill(x_ == 0, float("inf"))
-        min_ = torch.argmin(masked, dim=1)
-        negative_count = (x < 0).sum(dim=-2)
-        pos_count = (x > 0).sum(dim=-2)
-        stats = [
+        masked_max = x.masked_fill(x == 0, float("-inf"))
+        max_ = torch.max(masked_max, dim=1)[0]
+
+        masked_min = x.masked_fill(x == 0, float("inf"))
+        min_ = torch.min(masked_min, dim=1)[0]
+
+        negative_count = (x < 0).sum(dim=1)
+        pos_count = (x > 0).sum(dim=1)
+        mean, std = self.zero_ignore(x)
+
+        stats = torch.stack([
             max_,
             min_,
             negative_count,
             pos_count,
             max_ - min_,
-        ]
-        stats.extend(self.zero_ignore(x))
-        stats = torch.concat(stats, dim=-1)
-        stats = stats.unsqueeze(-2).repeat(1, x.size(1), 1)
+            mean,
+            std,
+        ], dim=-1)
+
+        stats = stats.unsqueeze(1).expand(
+            -1, x.size(1), -1
+        )
         mask = x != 0
         stats = stats * mask
         return self.project_stats(stats)

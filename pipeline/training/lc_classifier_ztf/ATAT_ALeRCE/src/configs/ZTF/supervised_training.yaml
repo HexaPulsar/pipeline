@@ -5,6 +5,8 @@ ATATConfig:
   save_dir_path: &save_dir_path 'default_savepath'
   log_filename: 'default.log'
   learning_rate: 1e-4
+  warmup_steps: 1000
+  eta_min_factor: 1e-2
   num_classes: 22
 
   online_transforms:

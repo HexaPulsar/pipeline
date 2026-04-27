@@ -5,12 +5,12 @@ from ..timeEncoders import TimeHandler
 
 
 class Token(nn.Module):
-    def __init__(self, embedding_size, dropout, **kwargs):
+    def __init__(self, embedding_size, **kwargs):
         super(Token, self).__init__()
-        self.token = nn.Parameter(torch.zeros(embedding_size), requires_grad=True)
+        self.token = nn.Parameter(torch.randn(1, 1, embedding_size) * 0.1)
 
     def forward(self, n_batch):
-        return self.token.repeat(n_batch, 1, 1)
+        return self.token.expand(n_batch, -1, -1)
 
 
 class LightCurveTransformer(nn.Module):
@@ -79,7 +79,7 @@ class LightCurveTransformer(nn.Module):
             num_layers=num_encoders,
             norm=nn.LayerNorm(embedding_size),
         )
-        self.token_lc = Token(embedding_size, 0.0)
+        self.token_lc = Token(embedding_size)
         self.register_buffer("ones", torch.ones(1, 1, 1, dtype=torch.bool))
         self.sequence_norm = use_sequence_norm
         self.dropout = nn.Dropout(dropout)
@@ -174,7 +174,7 @@ class TabularTransformer(nn.Module):
             num_layers=self.num_encoders,
             # norm parameter disabled - using norm_first=True in encoder layer instead
         )
-        self.token_tab = Token(self.embedding_size, dropout)
+        self.token_tab = Token(self.embedding_size)
         self.register_buffer("ones", torch.ones(1, 1, dtype=bool))
         self.dropout = nn.Dropout(dropout)
         self.sequence_norm = sequence_norm

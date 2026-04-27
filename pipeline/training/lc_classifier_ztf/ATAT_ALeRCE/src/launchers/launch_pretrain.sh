@@ -6,11 +6,11 @@ export CUDA_VISIBLE_DEVICES=0 #,1,2,3
 
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
-export EXPERIMENT_NAME='20260409_scheduler_v3_claude_refactor_ema_1e3'
+export EXPERIMENT_NAME='time_norm_v2'
 export EXPERIMENT_OUTPUT_PATH="./results/PRETRAIN/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
-LEARNING_RATE=1e-3
+LEARNING_RATE=1e-4
 WARMUP_STEPS=5000
 ETA_MIN_FACTOR=1e-2
 VERSION=0

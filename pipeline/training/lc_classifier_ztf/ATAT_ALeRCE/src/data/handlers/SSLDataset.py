@@ -7,6 +7,16 @@ from dataclasses import dataclass
 from torchvision.transforms import Compose, RandomApply
 from .BaseDataset import BaseDataset
 from typing import Union, Optional
+from copy import deepcopy
+
+
+class TimeNormalization:
+    def __call__(self, sample):
+        time = sample['time']
+        mask_min = 9999999999.0 * (time == 0).float()
+        t_min = torch.min(time.float() + mask_min)
+        sample['time'] = (time.float() - t_min) * (time != 0).float()
+        return sample
 
 
 @dataclass
@@ -45,6 +55,7 @@ class SSLDataset(BaseDataset):
 
         self.transforms_1 =  Compose(self.transforms_1)
         self.transforms_2 =  Compose(self.transforms_2)
+        self.time_norm = TimeNormalization()
 
 
     def __getitem__(self, idx):
@@ -89,8 +100,12 @@ class SSLDataset(BaseDataset):
             data_dict["features"] = ft
 
         aug_data_dict = {k: v.clone() if isinstance(v, torch.Tensor) else v for k, v in data_dict.items()}
-        data_dict = self.transforms_1(data_dict)
+
         aug_data_dict = self.transforms_2(aug_data_dict)
+        data_dict = self.transforms_1(data_dict)
+
+        aug_data_dict = self.time_norm(deepcopy(aug_data_dict))
+        data_dict = self.time_norm(deepcopy(data_dict))
 
         return (data_dict, aug_data_dict)
 
@@ -134,6 +149,8 @@ class SSLDataset(BaseDataset):
 
         aug_data_dict = {k: v.clone() if isinstance(v, torch.Tensor) else v for k, v in data_dict.items()}
 
+        data_dict = self.time_norm(deepcopy(data_dict))
+        aug_data_dict = self.time_norm(deepcopy(aug_data_dict))
         data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
         return (data_dict, aug_data_dict)
@@ -186,6 +203,8 @@ class SSLDataset(BaseDataset):
         data_dict["tabular_feat"] = torch.cat([md, ft], dim=-1)
 
         aug_data_dict = {k: v.clone() if isinstance(v, torch.Tensor) else v for k, v in data_dict.items()}
+        data_dict = self.time_norm(deepcopy(data_dict))
+        aug_data_dict = self.time_norm(deepcopy(aug_data_dict))
         data_dict = self.transforms_1(data_dict)
         aug_data_dict = self.transforms_2(aug_data_dict)
 

@@ -5,6 +5,7 @@ import torchmetrics
 from collections import OrderedDict
 import numpy as np
 import pytorch_lightning as pl
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 import torchmetrics.classification
 from src.utils.data.AlerceDictionaries import ELASTICC_TAXONOMY
@@ -43,6 +44,8 @@ class ClassifierModule(pl.LightningModule):
         self.learning_rate = kwargs["learning_rate"]
         self.warmup_steps = kwargs.get("warmup_steps", 1000)
         self.eta_min_factor = kwargs.get("eta_min_factor", 1e-2)
+        self.scheduler_type = kwargs.get("scheduler_type", None)
+        self.scheduler_t_max = kwargs.get("scheduler_t_max", 100)
 
         parse_exp_type = experiment_type.split("_")
         self.modalities = []
@@ -368,7 +371,20 @@ class ClassifierModule(pl.LightningModule):
             eps=1e-8,
         )
 
-        return {"optimizer": optimizer}
+        result = {"optimizer": optimizer}
+
+        if self.scheduler_type == "cosine":
+            scheduler = CosineAnnealingLR(
+                optimizer,
+                T_max=self.scheduler_t_max,
+                eta_min=self.learning_rate * self.eta_min_factor
+            )
+            result["lr_scheduler"] = {
+                "scheduler": scheduler,
+                "interval": "epoch"
+            }
+
+        return result
 
     def map_label_tensor(self, labels):
         mapping_dict = {
@@ -438,8 +454,7 @@ class ClassifierModule(pl.LightningModule):
         self.validation_cm = torchmetrics.classification.ConfusionMatrix(
             task="multiclass",
             num_classes=self.classifier.num_classes,
-            normalize="true",
-            threshold=thr,
+            normalize=None,
         )
         # self.f1_hier_macro_val =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro", threshold=thr)
         # self.f1_hier_macro_train =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro", threshold=thr)

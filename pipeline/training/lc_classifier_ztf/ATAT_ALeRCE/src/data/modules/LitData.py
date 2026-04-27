@@ -57,7 +57,7 @@ class LitData(pl.LightningDataModule):
                 for t in np.unique(labels)
             ]
         )
-        weight = 1.0 / np.sqrt(class_sample_count)
+        weight = 1.0 / class_sample_count**(1/3)
 
         uniques = np.unique(labels).astype(int)
         d = {key: value for key, value in zip(uniques, weight)}

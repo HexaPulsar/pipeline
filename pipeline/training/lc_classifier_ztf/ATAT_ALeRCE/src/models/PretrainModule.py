@@ -174,32 +174,15 @@ class PretrainModule(pl.LightningModule):
         # -------------------------
         # Two-stage scheduler
         # -------------------------
-        warmup_scheduler = LinearLR(
-            optimizer,
-            start_factor=1e-2,
-            end_factor=1.0,
-            total_iters=self.warmup_steps,
-        )
 
-        cosine_scheduler = CosineAnnealingLR(
-            optimizer,
-            T_max=self.trainer.estimated_stepping_batches - self.warmup_steps,
-            eta_min=self.learning_rate * self.eta_min_factor,
-        )
-
-        sequential_scheduler = SequentialLR(
-            optimizer,
-            schedulers=[warmup_scheduler, cosine_scheduler],
-            milestones=[self.warmup_steps],
-        )
 
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": sequential_scheduler,
-                "interval": "step",
-                "frequency": 1,
-            },
+           # "lr_scheduler": {
+            #    "scheduler": sequential_scheduler,
+             #   "interval": "step",
+              #  "frequency": 1,
+            #},
         }
 
     def get_real_classes_weights(self, labels):

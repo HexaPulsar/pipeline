@@ -111,11 +111,11 @@ class VICRegArgs:
     var_coeff: float
     cov_coeff: float
      
-@dataclass 
+@dataclass
 class ATATConfig:
     experiment_type: str
     experiment_name: str
-    online_transforms: Optional[list] 
+    online_transforms: Optional[list]
     lc: Optional[LightcurveArgs]
     tab: Optional[TabularArgs]
     datamodule: DataModuleArgs
@@ -123,14 +123,16 @@ class ATATConfig:
     callbacks: dict
     loggers: dict
     trainer: dict
-    learning_rate: float  
+    learning_rate: float
     save_dir_path: str
     log_filename: str
-    num_classes:int 
+    num_classes:int
     mode: str
     monitor: Optional[str]
     checkpoint: Optional[str] = None
     warmup_steps: int = 1000
     eta_min_factor: float = 1e-2
+    scheduler_type: Optional[str] = None
+    scheduler_t_max: int = 100
 
  

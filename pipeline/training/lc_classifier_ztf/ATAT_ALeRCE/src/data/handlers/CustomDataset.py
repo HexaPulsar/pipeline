@@ -93,11 +93,13 @@ class ATATDataset(BaseDataset):
         elif self.use_features:
             data_dict["tabular_feat"] = data_dict["features"]
         #'''
-        data_dict = self.time_norm(deepcopy(data_dict))
+
         if all([self.set_type == 'train',self.train_transforms is not None]):
             data_dict = self.train_transforms(data_dict)
+
         if all([self.set_type == 'validation',self.val_transforms is not None]):
             data_dict = self.val_transforms(data_dict)
+        data_dict = self.time_norm(deepcopy(data_dict))
 
         return data_dict
 

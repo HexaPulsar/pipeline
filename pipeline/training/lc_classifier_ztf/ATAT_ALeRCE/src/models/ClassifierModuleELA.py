@@ -180,10 +180,12 @@ class ClassifierModuleELA(pl.LightningModule):
         
 
     def on_validation_epoch_end(self):
-    
+
         cm = self.validation_cm.compute().cpu().numpy().astype(float)
-        fig = plt.figure(figsize=(12, 10)) 
-        
+        cm = cm / cm.sum(axis=1, keepdims=True)
+        cm = np.nan_to_num(cm, nan=0.0)
+        fig = plt.figure(figsize=(12, 10))
+
         sns.heatmap(np.round(cm, decimals=2), annot=True, cmap=plt.cm.Blues, ax=fig.add_subplot(111))
         plt.xticks(ticks=range(0, 19), rotation=45, labels=ELASTICC_TAXONOMY().keys())
         plt.yticks(ticks=range(0, 19), rotation=45, labels=ELASTICC_TAXONOMY().keys())
@@ -246,7 +248,7 @@ class ClassifierModuleELA(pl.LightningModule):
             'recall': torchmetrics.classification.Recall(task="multiclass", num_classes=self.classifier.num_classes, average="macro"),
             'precision': torchmetrics.classification.Precision(task="multiclass", num_classes=self.classifier.num_classes, average="macro"),
             })
-        self.validation_cm = torchmetrics.classification.ConfusionMatrix(task="multiclass", num_classes=self.classifier.num_classes, normalize='true')
+        self.validation_cm = torchmetrics.classification.ConfusionMatrix(task="multiclass", num_classes=self.classifier.num_classes, normalize=None)
        # self.f1_hier_macro_val =  torchmetrics.classification.F1Score(task="multiclass", num_classes=3, average="macro")
         if 'LC' in self.modalities:
             self.LC_train_metrics = metrics.clone(prefix=f'{'training/LC/'}')

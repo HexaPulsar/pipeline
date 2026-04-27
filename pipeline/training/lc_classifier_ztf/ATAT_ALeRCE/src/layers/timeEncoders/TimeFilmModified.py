@@ -14,10 +14,10 @@ def d_dt(x, t, use_exp=False, tmax=2048):
     dt = t - t_rolled
     dx = x - x_rolled
     dt_safe = dt.masked_fill(dt == 0, 1)
+    ratio = dx / dt_safe
     if use_exp:
-        exp_ = torch.exp(torch.sin(dx / dt_safe))
-        return dx, dt, exp_
-    return dx, dt, torch.sin(dx / dt_safe)
+        return dx, dt, torch.exp(torch.sin(ratio))
+    return dx, dt, torch.sin(ratio)
 
 
 class EarlyFusionEncoder(nn.Module):
@@ -135,27 +135,6 @@ class EarlyFusionEncoder(nn.Module):
         self.use_exp = use_exp
 
     def forward(self, x, t, metadata, features):
-
-        # if self.use_velocity:
-        #    x_out = x_out + self.velocity(x,t)
-
-        vel = self.velocity(x, t, use_exp=self.use_exp) if self.use_velocity else 0
-        acc = (
-            self.acceleration(x, t, use_exp=self.use_exp)
-            if self.use_acceleration
-            else 0
-        )
-        stats = self.stats(x) if self.use_stats else 0
-        if all([self.use_metadata, not self.use_features]):
-            tabular = self.tabular_data(x, metadata)
-        elif all([not self.use_metadata, self.use_features]):
-            tabular = self.tabular_data(x, features)
-        elif all([self.use_metadata, self.use_features]):
-            tabular_data = torch.concat([metadata, features], axis=1)
-            tabular = self.tabular_data(x, tabular_data)
-        else:
-            tabular = 0
-
         if self.use_conv:
             x_out = self.conv(x.permute(0, 2, 1)).permute(0, 2, 1)
             x_out = self.linear_x(x_out)
@@ -163,48 +142,62 @@ class EarlyFusionEncoder(nn.Module):
             x_out = self.linear_x(x)
 
         alpha, beta = self.timefilm_coeffs(t)
+        x_out = x_out * alpha + beta
 
-        x_out = x_out * alpha + beta + vel + acc + stats + tabular
-        if self.use_anomaly_gate:
-            x_out = x_out * self.anomaly_gate(x, t, use_exp=self.use_exp)
+        if self.use_velocity or self.use_acceleration or self.use_anomaly_gate:
+            dx, dt, vel_ratio = d_dt(x, t, use_exp=self.use_exp)
+            if self.use_velocity:
+                x_out = x_out + self.velocity(dx, dt, vel_ratio)
+            if self.use_acceleration:
+                dx_acc, _, acc_ratio = d_dt(dx, t, use_exp=self.use_exp)
+                x_out = x_out + self.acceleration(dx_acc, dt, acc_ratio)
+            if self.use_anomaly_gate:
+                x_out = x_out * self.anomaly_gate(dx, vel_ratio, acc_ratio)
+
+        if self.use_stats:
+            x_out = x_out + self.stats(x)
+
+        if self.use_metadata or self.use_features:
+            if all([self.use_metadata, not self.use_features]):
+                tabular = self.tabular_data(x, metadata)
+            elif all([not self.use_metadata, self.use_features]):
+                tabular = self.tabular_data(x, features)
+            else:
+                tabular_data = torch.concat([metadata, features], axis=1)
+                tabular = self.tabular_data(x, tabular_data)
+            x_out = x_out + tabular
+
         return self.dropout(x_out)
 
 
 class Velocity(nn.Module):
     def __init__(self, input_size, embedding_size, inner_size, bias, dropout):
         super().__init__()
-        expansion_size = inner_size * 4
         self.linear_vel = nn.Sequential(
             nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
             nn.LayerNorm(inner_size),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.LayerNorm(inner_size),
-            nn.GELU(),
             nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
         )
 
-    def forward(self, x, t, use_exp):
-        _, _, dxdt = d_dt(x, t, use_exp)
-        return self.linear_vel(dxdt)
+    def forward(self, dx, dt, vel_ratio):
+        return self.linear_vel(vel_ratio)
 
 
 class Acceleration(nn.Module):
     def __init__(self, input_size, embedding_size, inner_size, bias, dropout):
         super().__init__()
-        expansion_size = inner_size * 4
         self.linear_acc = nn.Sequential(
             nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
-            nn.Dropout(dropout),
             nn.LayerNorm(inner_size),
             nn.GELU(),
+            nn.Dropout(dropout),
             nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
         )
 
-    def forward(self, x, t, use_exp):
-        dx, dt, _ = d_dt(x, t, use_exp)
-        _, _, dxdtdt = d_dt(dx, t, use_exp)
-        return self.linear_acc(dxdtdt)
+    def forward(self, dx_acc, dt, acc_ratio):
+        return self.linear_acc(acc_ratio)
 
 
 class AnomalyGate(nn.Module):
@@ -218,10 +211,8 @@ class AnomalyGate(nn.Module):
             nn.Linear(in_features=inner_size, out_features=embedding_size, bias=bias),
         )
 
-    def forward(self, x, t, use_exp):
-        dx, _, dxdt = d_dt(x, t, use_exp)
-        _, _, dxdtdt = d_dt(dx, t, use_exp)
-        surprise = torch.cat([dxdt.abs(), dxdtdt.abs()], dim=-1)
+    def forward(self, dx, vel_ratio, acc_ratio):
+        surprise = torch.cat([vel_ratio.abs(), acc_ratio.abs()], dim=-1)
         return torch.sigmoid(self.mlp(surprise))
 
 

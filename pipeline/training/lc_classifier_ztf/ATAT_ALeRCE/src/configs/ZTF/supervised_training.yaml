@@ -19,6 +19,8 @@ ATATConfig:
     use_band_permute: True
     use_roll: True
     use_gauss_noise: True
+    use_time_gauss_noise: False
+    use_random_subsample: False
     p_: 0.5
   lc:
     _target_: src.utils.CustomParser.LightcurveArgs
@@ -102,7 +104,7 @@ ATATConfig:
     var_coeff: null
     cov_coeff: null
   trainer:
-    max_epochs: 100
+    max_epochs: 1000
     devices: 'auto'
     accelerator: 'gpu'
     #gradient_clip_val: 1e-1

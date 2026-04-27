@@ -7,14 +7,14 @@ export CUDA_VISIBLE_DEVICES=0 #,1,2,3
 for SEED in {0..0}; do
 
 
-expname=anomaly
+expname=time_norm_v6
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
 export DIR=LINEAR
 export EXPERIMENT_NAME=class_${expname}_${SEED}
-LEARNING_RATE=1e-3
+LEARNING_RATE=2e-4
 export DIRECTORY="PRETRAIN"
-export PATIENCE=10
+export PATIENCE=50
 export EXPERIMENT_OUTPUT_PATH="./results/$DIRECTORY/LC/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
@@ -50,7 +50,7 @@ python training.py \
   ++ATATConfig.lc.use_stats=False\
   ++ATATConfig.lc.use_metadata=False\
   ++ATATConfig.lc.use_features=False\
-  ++ATATConfig.lc.use_anomaly_gate=True\
+  ++ATATConfig.lc.use_anomaly_gate=False\
   ++ATATConfig.lc.use_sequence_norm=True\
   ++ATATConfig.lc.use_timefilm_gelu=True\
   ++ATATConfig.lc.use_timefilm_norm=True\
@@ -62,8 +62,12 @@ python training.py \
       ++ATATConfig.online_transforms.use_band_permute=True\
       ++ATATConfig.online_transforms.use_roll=False\
       ++ATATConfig.online_transforms.use_gauss_noise=False\
+      ++ATATConfig.online_transforms.use_time_gauss_noise=False\
+      ++ATATConfig.online_transforms.use_random_subsample=False\
       ++ATATConfig.online_transforms.p_=1\
         ++ATATConfig.learning_rate=$LEARNING_RATE\
+        ++ATATConfig.scheduler_type=cosine\
+        ++ATATConfig.scheduler_t_max=100\
         ++ATATConfig.lc.dropout=0.1\
         ++ATATConfig.tab.dropout=0.1\
           ++ATATConfig.tab.embedding_size=16\
@@ -74,9 +78,9 @@ python training.py \
           ++ATATConfig.lc.num_encoders=3\
           ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE\
           ++ATATConfig.callbacks.model_checkpoint.monitor='validation/LC/f1_macro'\
-          ++ATATConfig.datamodule.batch_size=512\
+          ++ATATConfig.datamodule.batch_size=128\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
-          ++ATATConfig.loggers.csv.version=$VERSION #\ ++ATATConfig.lc.checkpoint=$CHECKPOINT
+          ++ATATConfig.loggers.csv.version=$VERSION  #++ATATConfig.lc.checkpoint=$CHECKPOINT
   #++ATATConfig.tab.checkpoint=$CHECKPOINT
 done
   #++ATATConfig.lc.checkpoint='/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/200/LC/just_roll_v2/'\

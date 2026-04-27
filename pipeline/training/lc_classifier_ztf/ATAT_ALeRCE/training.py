@@ -46,6 +46,7 @@ LC_WINDOW_SELECT_PROB = 0.95
 LC_TIME_FACTOR_RANGE = (0.95, 1.05)
 LC_DATA_FACTOR_RANGE = (0.95, 1.05)
 NUM_FACTOR_SAMPLES = 100
+RANDOM_SUBSAMPLE_WINDOW = 200
 GAUSSIAN_FILTER_STDS = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, -1]
 
 MASK_TIME_NUM_SEGMENTS = 2
@@ -150,6 +151,24 @@ def build_transforms(cfg):
         [LC.GaussianTimeFilter(cfg.lc.num_bands, filter_std=GAUSSIAN_FILTER_STDS, apply_to_classes=None)],
         p=augmentation_prob
     ))
+
+    # Gaussian noise on flux
+    if getattr(cfg.online_transforms, 'use_gauss_noise', False):
+        transforms.append(RandomApply([LC.GaussianNoise(cfg.lc.num_bands)], p=augmentation_prob))
+
+    # Gaussian noise on time
+    if getattr(cfg.online_transforms, 'use_time_gauss_noise', False):
+        transforms.append(RandomApply(
+            [LC.TimeGaussianNoise(cfg.lc.num_bands, apply_to_classes=None)],
+            p=augmentation_prob
+        ))
+
+    # Random subsample to fixed window
+    if getattr(cfg.online_transforms, 'use_random_subsample', False):
+        transforms.append(RandomApply(
+            [LC.RandomSubsample(cfg.lc.num_bands, window_size=RANDOM_SUBSAMPLE_WINDOW)],
+            p=augmentation_prob
+        ))
 
     # Masking transforms (always applied)
    # transforms.extend([

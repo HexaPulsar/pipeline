@@ -19,6 +19,8 @@ ATATConfig:
     use_band_permute: True
     use_roll: True
     use_gauss_noise: False
+    use_time_gauss_noise: False
+    use_random_subsample: False
     p_: 0.5
 
   lc:
@@ -93,7 +95,7 @@ ATATConfig:
       transforms_2: []  # List of transform modules
     train_use_sampler: false
     train_shuffle: true
-    num_workers: 4
+    num_workers: 8
     pin_memory: true
     batch_size: 512
   vicreg:

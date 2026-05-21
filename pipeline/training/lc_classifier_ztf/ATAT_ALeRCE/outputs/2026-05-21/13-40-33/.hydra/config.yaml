@@ -1,0 +1,162 @@
+ATATConfig:
+  _target_: src.utils.CustomParser.ATATConfig
+  experiment_type: LC
+  save_dir_path: ./results/PRETRAIN/LC/ar_pretrain_multiple_obs/
+  log_filename: ./results/PRETRAIN/LC/ar_pretrain_multiple_obs//ar_pretrain_multiple_obs.log
+  learning_rate: 0.001
+  warmup_steps: 1000
+  eta_min_factor: 0.01
+  num_classes: 22
+  pretrain:
+    warmup_steps: 0
+    total_steps: 100000
+    eta_min_factor: 0.01
+  online_transforms:
+    use_window_select: true
+    use_max_window_select: true
+    use_time_gauss_factor: true
+    use_gauss_factor: true
+    use_simple_time_factor: true
+    use_simple_data_factor: true
+    use_band_permute: true
+    use_roll: true
+    use_gauss_noise: true
+    use_time_gauss_noise: false
+    use_random_subsample: false
+    p_: 0.5
+  lc:
+    _target_: src.utils.CustomParser.LightcurveArgs
+    input_size: 1
+    embedding_size: 128
+    embedding_size_sub: 512
+    num_heads: 4
+    num_encoders: 3
+    Tmax: 2048.0
+    pe_type: tm
+    num_harmonics: 1
+    num_bands: 1
+    dropout: 0.01
+    checkpoint: null
+    use_acceleration: true
+    use_velocity: true
+    use_stats: false
+    use_features: false
+    use_metadata: false
+    use_sequence_norm: true
+    use_tabular_transformer: false
+    use_timefilm_gelu: true
+    use_timefilm_norm: true
+    use_exp: true
+    use_conv: true
+    features_num_features: 181
+    metadata_num_features: 6
+    use_causal: true
+  tab:
+    _target_: src.utils.CustomParser.TabularArgs
+    embedding_size: 32
+    embedding_size_sub: 32
+    num_heads: 4
+    num_encoders: 3
+    length_size: 187
+    dropout: 0.05
+    checkpoint: null
+    sequence_norm: true
+  mode: min
+  monitor: null
+  datamodule:
+    _target_: src.utils.CustomParser.DataModuleArgs
+    dataset:
+      _target_: src.utils.CustomParser.ATATDatasetArgs
+      experiment_type: LC
+      data_root:
+      - /home/magdalena/Desktop/sambashare/H5_files/2019/200_2019.h5
+      - /home/magdalena/Desktop/sambashare/H5_files/2020/200_2020.h5
+      - /home/magdalena/Desktop/sambashare/H5_files/2021/200_2021.h5
+      - /home/magdalena/Desktop/sambashare/H5_files/2022/200_2022.h5
+      seed: 0
+      train_apply_transform: true
+      validation_apply_transform: false
+      train_transforms: []
+      val_transforms: []
+      train_key: training
+      validation_key: validation
+      test_key: test
+      observation_key: flux
+      observation_err_key: flux_err
+      time_key: time
+      time_alert_key: time_alert
+      mask_key: mask
+      mask_photometry_key: ''
+      mask_detection_key: ''
+      feature_key: extracted_features
+      metadata_key: metadata_feat
+      label_key: labels
+    train_use_sampler: true
+    val_use_sampler: false
+    train_shuffle: true
+    num_workers: 4
+    pin_memory: true
+    batch_size: 512
+    eval_probe: true
+  vicreg:
+    shape_projector_1: ''
+    shape_projector_2: ''
+    inv_coeff: null
+    var_coeff: null
+    cov_coeff: null
+  trainer:
+    max_epochs: 1000
+    devices: auto
+    accelerator: gpu
+    num_sanity_val_steps: 0
+    min_epochs: 1
+    log_every_n_steps: 100
+    check_val_every_n_epoch: 10
+  callbacks:
+    learning_rate:
+      _target_: pytorch_lightning.callbacks.LearningRateMonitor
+      logging_interval: step
+    early_stopping:
+      monitor: val/loss
+      mode: min
+      _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+      min_delta: 0.0
+      patience: 10
+      verbose: false
+      strict: true
+      check_finite: true
+      stopping_threshold: null
+      divergence_threshold: null
+      check_on_train_epoch_end: null
+    model_checkpoint:
+      monitor: val/loss
+      mode: min
+      _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      dirpath: ./results/PRETRAIN/LC/ar_pretrain_multiple_obs/
+      filename: classifier_ckpt_{step}
+      verbose: false
+      save_last: null
+      save_top_k: 1
+      auto_insert_metric_name: true
+      save_weights_only: false
+      every_n_train_steps: null
+      train_time_interval: null
+      every_n_epochs: null
+      save_on_train_epoch_end: null
+  loggers:
+    tensorboard:
+      _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
+      name: tensorboard
+      version: 0
+      save_dir: ./results/PRETRAIN/LC/ar_pretrain_multiple_obs/
+      log_graph: false
+      default_hp_metric: true
+      prefix: ''
+    csv:
+      name: metrics
+      version: 0
+      save_dir: ./results/PRETRAIN/LC/ar_pretrain_multiple_obs/
+      _target_: pytorch_lightning.loggers.csv_logs.CSVLogger
+      prefix: ''
+  experiment_name: ar_pretrain_multiple_obs
+  context_size: 4

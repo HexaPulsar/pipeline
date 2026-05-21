@@ -40,6 +40,7 @@ class ATATDatasetArgs(BaseDatasetArgs):
     experiment_type: str = ''
     train_transforms:Optional[list] = None
     val_transforms:Optional[list] = None
+    norm_stats_path: Optional[str] = None
     
 @dataclass
 class SSLDatasetArgs(BaseDatasetArgs):
@@ -53,15 +54,16 @@ class VICRegArgs:
     var_coeff: int = 25
     cov_coeff: int = 1
 
-@dataclass 
+@dataclass
 class DataModuleArgs:
     dataset: Any
-    train_use_sampler:bool = True 
-    val_use_sampler:bool = False 
+    train_use_sampler:bool = True
+    val_use_sampler:bool = False
     train_shuffle:bool=True
     num_workers:int=8
-    pin_memory:bool =True   
+    pin_memory:bool =True
     batch_size: int = 32
+    eval_probe:bool = False
 
 @dataclass
 class TabularArgs:
@@ -103,6 +105,7 @@ class LightcurveArgs:
     use_conv:bool = False
     use_tabular_transformer:bool = False
     use_anomaly_gate:bool = False
+    use_causal:bool = False
 
 @dataclass
 class VICRegArgs:
@@ -111,6 +114,12 @@ class VICRegArgs:
     var_coeff: float
     cov_coeff: float
      
+@dataclass
+class PretrainArgs:
+    warmup_steps: int = 1000
+    total_steps: int = 100000
+    eta_min_factor: float = 0.1
+
 @dataclass
 class ATATConfig:
     experiment_type: str
@@ -134,5 +143,8 @@ class ATATConfig:
     eta_min_factor: float = 1e-2
     scheduler_type: Optional[str] = None
     scheduler_t_max: int = 100
+    pretrain: Optional[PretrainArgs] = None
+    context_size: int = 1
+    normalize_flux: bool = False
 
  

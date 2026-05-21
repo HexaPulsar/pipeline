@@ -43,6 +43,7 @@ ATATConfig:
     use_timefilm_norm: True
     use_exp: True
     use_conv: True
+    use_causal: False
     features_num_features: 181
     metadata_num_features: 6
 

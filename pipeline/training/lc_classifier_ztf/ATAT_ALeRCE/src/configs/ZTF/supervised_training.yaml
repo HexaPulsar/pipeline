@@ -9,6 +9,11 @@ ATATConfig:
   eta_min_factor: 1e-2
   num_classes: 22
 
+  pretrain:
+    warmup_steps: 1000
+    total_steps: 100000
+    eta_min_factor: 0.1
+
   online_transforms:
     use_window_select: True
     use_max_window_select: True
@@ -134,8 +139,8 @@ ATATConfig:
       # log_rank_zero_only: False  # this keyword argument isn't available in stable version
 
     model_checkpoint:
-      monitor:  mean_f1_hier/lc #"loss_validation/total"
-      mode:  max
+      monitor:  val/loss #"loss_validation/total"
+      mode:  min
       _target_: pytorch_lightning.callbacks.ModelCheckpoint
       dirpath: ''
       filename: classifier_ckpt_{step} # checkpoint filename

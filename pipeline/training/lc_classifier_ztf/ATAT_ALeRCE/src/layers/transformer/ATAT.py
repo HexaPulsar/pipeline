@@ -42,6 +42,7 @@ class LightCurveTransformer(nn.Module):
         use_conv: bool = False,
         use_tabular_transformer=False,
         use_anomaly_gate: bool = False,
+        use_causal: bool = False,
     ):
         super().__init__()
 
@@ -83,6 +84,7 @@ class LightCurveTransformer(nn.Module):
         self.register_buffer("ones", torch.ones(1, 1, 1, dtype=torch.bool))
         self.sequence_norm = use_sequence_norm
         self.dropout = nn.Dropout(dropout)
+        self.use_causal = use_causal
 
     def load_weights(self):
         pass
@@ -109,15 +111,32 @@ class LightCurveTransformer(nn.Module):
         return x_mod, m_mod, t_mod
 
     def forward(self, data, time, mask, metadata=None, features=None, **kwargs):
-
-        x_mod, m_mod, _ = self.embedding_light_curve(
-            x=data, t=time, mask=mask, metadata=metadata, features=features
-        )
-        x_emb = self.transformer_lc(
-            src=x_mod, src_key_padding_mask=~(m_mod.squeeze(-1))
-        )
-        # Return full embedding sequence (batch, seq_len, embedding_size), not just token
-        return x_emb
+        if self.use_causal:
+            # Autoregressive mode: no CLS token, causal mask on sequence
+            x_mod, m_mod, _ = self.time_encoder(
+                data, time, mask=mask, metadata=metadata, features=features
+            )
+            seq_len = x_mod.size(1)
+            causal_mask = torch.triu(
+                torch.ones(seq_len, seq_len, device=x_mod.device, dtype=torch.bool),
+                diagonal=1,
+            )
+            x_emb = self.transformer_lc(
+                src=x_mod,
+                mask=causal_mask,
+                src_key_padding_mask=~(m_mod.squeeze(-1)),
+            )
+            return x_emb
+        else:
+            # Bidirectional mode: CLS token prepended (original behavior)
+            x_mod, m_mod, _ = self.embedding_light_curve(
+                x=data, t=time, mask=mask, metadata=metadata, features=features
+            )
+            x_emb = self.transformer_lc(
+                src=x_mod, src_key_padding_mask=~(m_mod.squeeze(-1))
+            )
+            # Return full embedding sequence (batch, seq_len, embedding_size), not just token
+            return x_emb
 
 
 class Embedding(nn.Module):

@@ -23,6 +23,7 @@ ATATConfig:
     input_size: 1
     embedding_size: 32
     embedding_size_sub: 32
+    projections_inner_size: 32
     num_heads: 4
     num_encoders: 1
     Tmax: 2048.0

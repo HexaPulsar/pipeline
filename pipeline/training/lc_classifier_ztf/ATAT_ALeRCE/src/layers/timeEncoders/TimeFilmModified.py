@@ -63,7 +63,7 @@ class EarlyFusionEncoder(nn.Module):
             gelu=use_timefilm_gelu,
             bias=True,
         )
-        inner_size = embedding_size
+        inner_size = projections_inner_size
         self.use_conv = use_conv
         if self.use_conv:
             self.conv = nn.Sequential(
@@ -99,6 +99,7 @@ class EarlyFusionEncoder(nn.Module):
                 bias=bias,
                 dropout=dropout,
             )
+            self.norm_vel = nn.LayerNorm(embedding_size)
         if use_acceleration:
             self.acceleration = Acceleration(
                 input_size=input_size,
@@ -107,8 +108,11 @@ class EarlyFusionEncoder(nn.Module):
                 bias=bias,
                 dropout=dropout,
             )
+            self.norm_acc = nn.LayerNorm(embedding_size)
         if use_stats:
             self.stats = Stats(embedding_size)
+            self.norm_stats = nn.LayerNorm(embedding_size)
+
         if use_anomaly_gate:
             self.anomaly_gate = AnomalyGate(
                 input_size=input_size,
@@ -131,6 +135,7 @@ class EarlyFusionEncoder(nn.Module):
                 bias=bias,
                 dropout=dropout,
             )
+            self.norm_tabular = nn.LayerNorm(embedding_size)
         self.use_tabular_transformer = use_tabular_transformer
         self.use_exp = use_exp
 
@@ -147,15 +152,15 @@ class EarlyFusionEncoder(nn.Module):
         if self.use_velocity or self.use_acceleration or self.use_anomaly_gate:
             dx, dt, vel_ratio = d_dt(x, t, use_exp=self.use_exp)
             if self.use_velocity:
-                x_out = x_out + self.velocity(dx, dt, vel_ratio)
+                x_out = x_out + self.norm_vel(self.velocity(dx, dt, vel_ratio))
             if self.use_acceleration:
                 dx_acc, _, acc_ratio = d_dt(dx, t, use_exp=self.use_exp)
-                x_out = x_out + self.acceleration(dx_acc, dt, acc_ratio)
+                x_out = x_out + self.norm_acc(self.acceleration(dx_acc, dt, acc_ratio))
             if self.use_anomaly_gate:
                 x_out = x_out * self.anomaly_gate(dx, vel_ratio, acc_ratio)
 
         if self.use_stats:
-            x_out = x_out + self.stats(x)
+            x_out = x_out + self.norm_stats(self.stats(x))
 
         if self.use_metadata or self.use_features:
             if all([self.use_metadata, not self.use_features]):
@@ -165,7 +170,7 @@ class EarlyFusionEncoder(nn.Module):
             else:
                 tabular_data = torch.concat([metadata, features], axis=1)
                 tabular = self.tabular_data(x, tabular_data)
-            x_out = x_out + tabular
+            x_out = x_out + self.norm_tabular(tabular)
 
         return self.dropout(x_out)
 
@@ -174,7 +179,7 @@ class Velocity(nn.Module):
     def __init__(self, input_size, embedding_size, inner_size, bias, dropout):
         super().__init__()
         self.linear_vel = nn.Sequential(
-            nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
+            nn.Linear(in_features=3 * input_size, out_features=inner_size, bias=bias),
             nn.LayerNorm(inner_size),
             nn.GELU(),
             nn.Dropout(dropout),
@@ -182,14 +187,14 @@ class Velocity(nn.Module):
         )
 
     def forward(self, dx, dt, vel_ratio):
-        return self.linear_vel(vel_ratio)
+        return self.linear_vel(torch.cat([dx, dt, vel_ratio], dim=-1))
 
 
 class Acceleration(nn.Module):
     def __init__(self, input_size, embedding_size, inner_size, bias, dropout):
         super().__init__()
         self.linear_acc = nn.Sequential(
-            nn.Linear(in_features=input_size, out_features=inner_size, bias=bias),
+            nn.Linear(in_features=3 * input_size, out_features=inner_size, bias=bias),
             nn.LayerNorm(inner_size),
             nn.GELU(),
             nn.Dropout(dropout),
@@ -197,7 +202,7 @@ class Acceleration(nn.Module):
         )
 
     def forward(self, dx_acc, dt, acc_ratio):
-        return self.linear_acc(acc_ratio)
+        return self.linear_acc(torch.cat([dx_acc, dt, acc_ratio], dim=-1))
 
 
 class AnomalyGate(nn.Module):
@@ -415,71 +420,54 @@ class Features(nn.Module):
 
 
 class Stats(nn.Module):
-    def __init__(
-        self,
-        embedding_size,
-        min_: bool = True,
-        max_: bool = True,
-        mean: bool = True,
-        std: bool = True,
-        range_: bool = True,
-        negative_count: bool = True,
-        positive_count: bool = True,
-        q1=False,
-        q2=False,
-        q3=False,
-        bias=False,
-    ):
+    # 9 features: max, min, range, mean, std, negative_frac, positive_frac, skewness, kurtosis
+    _N_STATS = 9
+
+    def __init__(self, embedding_size, bias=False):
         super().__init__()
-        stats = [
-            min_,
-            max_,
-            mean,
-            std,
-            range_,
-            positive_count,
-            negative_count,
-            q1,
-            q2,
-            q3,
-        ]
         expansion_size = embedding_size * 4
         self.project_stats = nn.Sequential(
-            nn.Linear(in_features=sum(stats), out_features=expansion_size, bias=bias),
+            nn.Linear(in_features=self._N_STATS, out_features=expansion_size, bias=bias),
             nn.LayerNorm(expansion_size),
             nn.GELU(),
             nn.Dropout(0.01),
-            nn.Linear(
-                in_features=expansion_size, out_features=embedding_size, bias=bias
-            ),
+            nn.Linear(in_features=expansion_size, out_features=embedding_size, bias=bias),
             nn.LayerNorm(embedding_size),
         )
-        self.zero_ignore = ZeroIgnoredStats(dim=1, keepdim=False)
+        self.residual_proj = nn.Linear(in_features=self._N_STATS, out_features=embedding_size, bias=bias)
+        self.zero_ignore = ZeroIgnoredStats(dim=1, keepdim=True)
 
     def forward(self, x):
+        mask = (x != 0).float()
+        obs_count = mask.sum(dim=1, keepdim=True).clamp(min=1)
+
         masked_max = x.masked_fill(x == 0, float("-inf"))
-        max_ = torch.max(masked_max, dim=1)[0]
+        max_ = torch.max(masked_max, dim=1, keepdim=True)[0]
 
         masked_min = x.masked_fill(x == 0, float("inf"))
-        min_ = torch.min(masked_min, dim=1)[0]
+        min_ = torch.min(masked_min, dim=1, keepdim=True)[0]
 
-        negative_count = (x < 0).sum(dim=1)
-        pos_count = (x > 0).sum(dim=1)
-        mean, std = self.zero_ignore(x)
+        negative_frac = (x < 0).float().sum(dim=1, keepdim=True) / obs_count
+        positive_frac = (x > 0).float().sum(dim=1, keepdim=True) / obs_count
 
-        stats = torch.stack([
+        mean, std = self.zero_ignore(x)  # both [B, 1, input_size]
+        std_safe = std.clamp(min=1e-6)
+
+        centered = (x - mean) * mask
+        skewness = (centered ** 3 * mask).sum(dim=1, keepdim=True) / obs_count / std_safe ** 3
+        kurtosis = (centered ** 4 * mask).sum(dim=1, keepdim=True) / obs_count / std_safe ** 4
+
+        stats = torch.cat([
             max_,
             min_,
-            negative_count,
-            pos_count,
             max_ - min_,
             mean,
             std,
-        ], dim=-1)
+            negative_frac,
+            positive_frac,
+            skewness,
+            kurtosis,
+        ], dim=-1)  # [B, 1, 9]
 
-        stats = stats.unsqueeze(1).expand(
-            -1, x.size(1), -1
-        )
-        mask = x != 0
-        stats = stats * mask
-        return self.project_stats(stats)
+        stats = stats.expand(-1, x.size(1), -1) * mask
+        return self.project_stats(stats) + self.residual_proj(stats)

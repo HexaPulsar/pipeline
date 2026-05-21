@@ -80,6 +80,7 @@ class LightcurveArgs:
     input_size:int =  1
     embedding_size:int =  128
     embedding_size_sub:int =  512
+    projections_inner_size:int = 64
     num_heads:int = 4
     num_encoders:int =  3
     Tmax:float =  1500.0
@@ -91,9 +92,9 @@ class LightcurveArgs:
     freeze_weights:bool = False
     metadata_num_features:int = 6
     features_num_features:int = 181
-    use_velocity:bool = False 
-    use_acceleration:bool = False 
-    use_stats :bool= False 
+    use_velocity:bool = False
+    use_acceleration:bool = False
+    use_stats :bool= False
     use_metadata:bool =False
     use_features:bool =False
     use_sequence_norm:bool = False

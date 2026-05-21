@@ -6,12 +6,12 @@ export CUDA_VISIBLE_DEVICES=0 #,1,2,3
 
 for SEED in {0..0}; do
 
-expname=fast
+expname=multimodaltest
 # Set experiment variables correctly
-export EXPERIMENT_TYPE='LC'
+export EXPERIMENT_TYPE='LC_MD'
 export DIR=LINEAR
 export EXPERIMENT_NAME=class_${expname}_${SEED}
-LEARNING_RATE=1e-3
+LEARNING_RATE=2e-4
 PROJECTIONS_INNER_SIZE=32
 
 export DIRECTORY="PRETRAIN"
@@ -19,15 +19,15 @@ export PATIENCE=50
 export EXPERIMENT_OUTPUT_PATH="./results/$DIRECTORY/LC/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
-export CHECKPOINT=/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/$DIRECTORY/LC/${expname}/
 
+export CHECKPOINT=/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/$DIRECTORY/LC/${expname}/
 # Ensure directories exist
 mkdir -p "$EXPERIMENT_OUTPUT_PATH"
 export HYDRA_FULL_ERROR=1
 # Run the Python script with Hydra
-export early_stopping='validation/LC/f1_macro'
+export early_stopping='validation/MIX/f1_macro'
 export early_stoppin_mode=max
-export checkpoint='validation/LC/f1_macro'
+export checkpoint='validation/MIX/f1_macro'
 export checkpoint_mode=max
 
 python training.py \
@@ -67,21 +67,21 @@ python training.py \
       ++ATATConfig.online_transforms.use_random_subsample=False\
       ++ATATConfig.online_transforms.p_=1\
         ++ATATConfig.learning_rate=$LEARNING_RATE\
-        ++ATATConfig.scheduler_type=""\
+        ++ATATConfig.scheduler_type=cosine\
         ++ATATConfig.scheduler_t_max=100\
         ++ATATConfig.lc.dropout=0.1\
         ++ATATConfig.tab.dropout=0.1\
           ++ATATConfig.tab.embedding_size=16\
-          ++ATATConfig.tab.embedding_size_sub=32\
+          ++ATATConfig.tab.embedding_size_sub=128\
           ++ATATConfig.tab.num_encoders=3\
           ++ATATConfig.lc.embedding_size=64\
-          ++ATATConfig.lc.embedding_size_sub=512\
+          ++ATATConfig.lc.embedding_size_sub=128\
           ++ATATConfig.lc.num_encoders=3\
           ++ATATConfig.callbacks.early_stopping.patience=$PATIENCE\
-          ++ATATConfig.callbacks.model_checkpoint.monitor='validation/LC/f1_macro'\
+          ++ATATConfig.callbacks.model_checkpoint.monitor='validation/MIX/f1_macro'\
           ++ATATConfig.datamodule.batch_size=128\
           ++ATATConfig.loggers.tensorboard.version=$VERSION\
-          ++ATATConfig.loggers.csv.version=$VERSION  ++ATATConfig.lc.checkpoint=$CHECKPOINT
+          ++ATATConfig.loggers.csv.version=$VERSION  #++ATATConfig.lc.checkpoint=$CHECKPOINT
   #++ATATConfig.tab.checkpoint=$CHECKPOINT
 done
   #++ATATConfig.lc.checkpoint='/home/mdelafuente/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/results/200/LC/just_roll_v2/'\

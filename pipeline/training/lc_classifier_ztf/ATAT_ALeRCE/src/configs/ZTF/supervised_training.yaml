@@ -55,7 +55,7 @@ ATATConfig:
     embedding_size_sub: 32
     num_heads: 4
     num_encoders: 3
-    length_size: 187
+    length_size: 6
     dropout: 0.05
     checkpoint: null
     sequence_norm: True

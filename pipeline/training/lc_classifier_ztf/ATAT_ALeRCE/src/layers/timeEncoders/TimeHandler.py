@@ -28,6 +28,7 @@ class TimeHandler(nn.Module):
         super(TimeHandler, self).__init__()
 
         self.embedding_size = embedding_size
+        self.band_embedding = nn.Embedding(num_bands, embedding_size)
         self.time_encoders = nn.ModuleList(
             [
                 EarlyFusionEncoder(
@@ -56,6 +57,7 @@ class TimeHandler(nn.Module):
     def forward(self, x, t, mask, metadata=None, features=None):
         x_mod = [
             self.time_encoders[i](x[..., i:i+1], t[..., i:i+1], metadata=metadata, features=features)
+            + self.band_embedding.weight[i]
             for i in range(x.shape[-1])
         ]
         return (

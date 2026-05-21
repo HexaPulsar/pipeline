@@ -9,16 +9,20 @@ def off_diagonal(x):
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
 class VICReg(nn.Module):
-    def __init__(self, inv_coeff,var_coeff,cov_coeff, batch_size):
+    def __init__(self, inv_coeff,var_coeff,cov_coeff, batch_size=None):
         super().__init__()
         self.inv = inv_coeff
         self.var = var_coeff
         self.cov = cov_coeff
         self.batch_size = batch_size
-        print('COEFFS: {} {} {}'.format(self.inv, self.var, self.cov))
+        if batch_size is not None:
+            print('COEFFS: {} {} {} (batch_size: {})'.format(self.inv, self.var, self.cov, batch_size))
+        else:
+            print('COEFFS: {} {} {} (batch_size: dynamic)'.format(self.inv, self.var, self.cov))
 
-    def calculate_cov_loss(self,embedding):
-        cov_ = (embedding.T @ embedding) / (self.batch_size - 1)
+    def calculate_cov_loss(self, embedding):
+        batch_size = embedding.size(0)
+        cov_ = (embedding.T @ embedding) / (batch_size - 1)
         return off_diagonal(cov_).pow_(2).sum().div(embedding.size(-1))
     @staticmethod
     def calculate_std_loss(embedding):
@@ -33,11 +37,9 @@ class VICReg(nn.Module):
 
         x = x - x.mean(dim=0)
         y = y - y.mean(dim=0)
-        corr_x = torch.corrcoef(x).mean(dim = 1).flatten()
-        corr_y = torch.corrcoef(y).mean(dim = 1).flatten()
 
-        loss_dict['CORR/emb_corr_post_norm_x'] = torch.corrcoef(x).mean(dim = 1).flatten()
-        loss_dict['CORR/emb_corr_post_norm_y'] = torch.corrcoef(y).mean(dim = 1).flatten()
+        corr_x = torch.corrcoef(x).mean(dim=1).flatten()
+        corr_y = torch.corrcoef(y).mean(dim=1).flatten()
 
         std_loss = self.calculate_std_loss(x) +  self.calculate_std_loss(y)
         cov_loss = self.calculate_cov_loss(x) + self.calculate_cov_loss(y)
@@ -50,6 +52,8 @@ class VICReg(nn.Module):
             loss_dict['weighted_inv'] = self.inv * repr_loss
             loss_dict['weighted_1mvar'] = self.var * std_loss
             loss_dict['weighted_cov'] = self.cov * cov_loss
+            loss_dict['CORR/emb_corr_post_norm_x'] = corr_x
+            loss_dict['CORR/emb_corr_post_norm_y'] = corr_y
             loss_dict['CORR/99_percentile_x'] = np.percentile(abs(corr_x).cpu().detach().numpy(), 99)
             loss_dict['CORR/99_percentile_y'] = np.percentile(abs(corr_y).cpu().detach().numpy(), 99)
 

@@ -6,11 +6,11 @@ export CUDA_VISIBLE_DEVICES=0 #,1,2,3
 
 # Set experiment variables correctly
 export EXPERIMENT_TYPE='LC'
-export EXPERIMENT_NAME='time_norm_v2'
+export EXPERIMENT_NAME='test_new_v4'
 export EXPERIMENT_OUTPUT_PATH="./results/PRETRAIN/$EXPERIMENT_TYPE/$EXPERIMENT_NAME/"
 export LOG_FILENAME="$EXPERIMENT_OUTPUT_PATH/$EXPERIMENT_NAME.log"
 export CONFIGS_PATH="/home/magdalena/rpos/pipeline/pipeline/training/lc_classifier_ztf/ATAT_ALeRCE/src/configs"
-LEARNING_RATE=1e-4
+LEARNING_RATE=2e-4
 WARMUP_STEPS=5000
 ETA_MIN_FACTOR=1e-2
 VERSION=0
@@ -62,7 +62,7 @@ python SSL_training.py hydra.run.dir=$EXPERIMENT_OUTPUT_PATH\
           ++ATATConfig.vicreg.inv_coeff=1\
           ++ATATConfig.vicreg.var_coeff=10\
           ++ATATConfig.vicreg.cov_coeff=1\
-          ++ATATConfig.vicreg.shape_projector_1='64-128-128'\
-          ++ATATConfig.vicreg.shape_projector_2='64-128-128'
+          ++ATATConfig.vicreg.shape_projector_1='64-32-32'\
+          ++ATATConfig.vicreg.shape_projector_2='64-32-32'
   #++ATATConfig.trainer.val_check_interval=0.2
 
